@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -34,7 +35,12 @@ public class LeagueService {
     }
 
     public List<StandingsEntryDto> getStandings(Long leagueId) {
-        return externalApiService.fetchStandings(leagueId);
+        League league = leagueRepository.findById(leagueId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "League not found: " + leagueId));
+        if (league.getExternalId() == null) {
+            return Collections.emptyList();
+        }
+        return externalApiService.fetchStandings(league.getExternalId());
     }
 
     private LeagueDto toDto(League league) {

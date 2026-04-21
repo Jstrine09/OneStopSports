@@ -3,11 +3,15 @@ package com.matchday.service;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.matchday.dto.MatchDto;
 import com.matchday.dto.StandingsEntryDto;
+import com.matchday.dto.TeamDto;
+import com.matchday.repository.LeagueRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
 
@@ -15,15 +19,18 @@ import java.util.List;
 public class ExternalApiService {
 
     private final RestClient restClient;
+    private final LeagueRepository leagueRepository;
 
     public ExternalApiService(
             @Value("${external-api.football-data.base-url}") String baseUrl,
-            @Value("${external-api.football-data.api-key}") String apiKey) {
+            @Value("${external-api.football-data.api-key}") String apiKey,
+            LeagueRepository leagueRepository) {
 
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("X-Auth-Token", apiKey)
                 .build();
+        this.leagueRepository = leagueRepository;
     }
 
     // ── API Response Records (mirrors football-data.org v4 JSON) ─────────────
@@ -32,7 +39,7 @@ public class ExternalApiService {
     public record ApiTeamsResponse(ApiCompetition competition, List<ApiTeam> teams) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ApiCompetition(String name, ApiArea area) {}
+    public record ApiCompetition(Integer id, String name, ApiArea area) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ApiArea(String name) {}
@@ -124,17 +131,80 @@ public class ExternalApiService {
 
     // ── DTO conversion helpers (used by LeagueService / MatchService) ─────────
 
-    public List<StandingsEntryDto> fetchStandings(Long leagueId) {
-        // TODO: map leagueId → competition ID using a lookup table or stored field,
-        //       then call fetchStandingsByCompetition() and convert entries to StandingsEntryDto.
-        // Tracked in: TASK-15
-        return Collections.emptyList();
+    public List<StandingsEntryDto> fetchStandings(Integer competitionId) {
+        ApiStandingsResponse response = fetchStandingsByCompetition(competitionId);
+        if (response == null || response.standings() == null) {
+            return Collections.emptyList();
+        }
+        // football-data.org returns TOTAL, HOME, and AWAY groups — we want TOTAL
+        return response.standings().stream()
+                .filter(group -> "TOTAL".equals(group.type()))
+                .findFirst()
+                .map(group -> group.table().stream()
+                        .map(this::toStandingsEntryDto)
+                        .toList())
+                .orElse(Collections.emptyList());
     }
 
     public List<MatchDto> fetchLiveMatchDtos() {
-        // TODO: call fetchLiveMatches() and map ApiMatch → MatchDto.
-        // Tracked in: TASK-16
-        return Collections.emptyList();
+        ApiMatchesResponse response = fetchLiveMatches();
+        if (response == null || response.matches() == null) {
+            return Collections.emptyList();
+        }
+        return response.matches().stream()
+                .map(this::toMatchDto)
+                .toList();
+    }
+
+    // ── Private mappers ───────────────────────────────────────────────────────
+
+    private MatchDto toMatchDto(ApiMatch m) {
+        TeamDto home = new TeamDto(
+                m.homeTeam().id(), m.homeTeam().name(), m.homeTeam().shortName(),
+                m.homeTeam().crest(), null, null, null);
+
+        TeamDto away = new TeamDto(
+                m.awayTeam().id(), m.awayTeam().name(), m.awayTeam().shortName(),
+                m.awayTeam().crest(), null, null, null);
+
+        Integer homeScore = (m.score() != null && m.score().fullTime() != null)
+                ? m.score().fullTime().home() : null;
+        Integer awayScore = (m.score() != null && m.score().fullTime() != null)
+                ? m.score().fullTime().away() : null;
+
+        LocalDateTime startTime = null;
+        if (m.utcDate() != null) {
+            try {
+                startTime = OffsetDateTime.parse(m.utcDate()).toLocalDateTime();
+            } catch (Exception ignored) { }
+        }
+
+        Long dbLeagueId = null;
+        if (m.competition() != null && m.competition().id() != null) {
+            dbLeagueId = leagueRepository.findByExternalId(m.competition().id())
+                    .map(league -> league.getId())
+                    .orElse(null);
+        }
+
+        return new MatchDto(m.id(), home, away, homeScore, awayScore,
+                m.status(), startTime, dbLeagueId);
+    }
+
+    private StandingsEntryDto toStandingsEntryDto(ApiStandingEntry entry) {
+        TeamDto team = new TeamDto(
+                entry.team().id(), entry.team().name(), entry.team().shortName(),
+                entry.team().crest(), null, null, null);
+
+        return new StandingsEntryDto(
+                entry.position(),
+                team,
+                entry.playedGames(),
+                entry.won(),
+                entry.draw(),   // API uses "draw", DTO uses "drawn"
+                entry.lost(),
+                entry.goalsFor(),
+                entry.goalsAgainst(),
+                entry.points());
     }
 
     // ── Scheduled refresh (every 30 seconds) ─────────────────────────────────
