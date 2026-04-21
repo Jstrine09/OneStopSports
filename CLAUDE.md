@@ -60,7 +60,9 @@ com.matchday
 
 ### Security (Spring Security 6)
 - `WebSecurityConfigurerAdapter` is **removed** in Spring Security 6 — use `SecurityFilterChain` bean with lambda DSL
-- Circular dependency (`SecurityConfig` ↔ `AuthService`) resolved by injecting `AuthenticationManager` via `AuthenticationConfiguration.getAuthenticationManager()` (lazy resolution)
+- **Circular dependency fix** — the cycle was `JwtAuthFilter → AuthService → PasswordEncoder (in SecurityConfig) → JwtAuthFilter`. Fixed two ways:
+  1. `PasswordEncoder` moved to its own `PasswordConfig.java` — keeps `AuthService` completely decoupled from `SecurityConfig`
+  2. `AuthenticationManager` injected with `@Lazy` in `AuthService` constructor (manual constructor, not `@RequiredArgsConstructor`) — defers resolution until first `login()` call
 - JWT: **jjwt 0.12.x API** — breaking changes from 0.11.x:
   - `Jwts.parser()` not `parserBuilder()`
   - `.verifyWith(key)` not `.setSigningKey(key)`

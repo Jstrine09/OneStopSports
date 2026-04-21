@@ -1,5 +1,6 @@
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/MatchdayApplication.java
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/config/DataLoader.java
+/Users/james/Projects/OneStopSports/src/main/java/com/matchday/config/PasswordConfig.java
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/config/RedisConfig.java
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/config/SecurityConfig.java
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/config/WebSocketConfig.java
