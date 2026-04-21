@@ -42,10 +42,10 @@ public class DataLoader implements CommandLineRunner {
     private final PlayerRepository   playerRepository;
 
     public DataLoader(ExternalApiService externalApiService,
-                      SportRepository sportRepository,
-                      LeagueRepository leagueRepository,
-                      TeamRepository teamRepository,
-                      PlayerRepository playerRepository) {
+                    SportRepository sportRepository,
+                    LeagueRepository leagueRepository,
+                    TeamRepository teamRepository,
+                    PlayerRepository playerRepository) {
         this.externalApiService = externalApiService;
         this.sportRepository    = sportRepository;
         this.leagueRepository   = leagueRepository;
@@ -64,7 +64,7 @@ public class DataLoader implements CommandLineRunner {
             seed();
         } catch (Exception e) {
             log.error("[DataLoader] Seeding failed — app will still start but DB will be empty. " +
-                      "Re-run to retry. Cause: {}", e.getMessage());
+                    "Re-run to retry. Cause: {}", e.getMessage());
         }
     }
 
