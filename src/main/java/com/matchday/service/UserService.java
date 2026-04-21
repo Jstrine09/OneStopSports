@@ -13,7 +13,6 @@ import com.matchday.repository.FavoriteTeamRepository;
 import com.matchday.repository.PlayerRepository;
 import com.matchday.repository.TeamRepository;
 import com.matchday.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -21,7 +20,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class UserService {
 
     private final UserRepository userRepository;
@@ -31,6 +29,22 @@ public class UserService {
     private final FavoritePlayerRepository favoritePlayerRepository;
     private final TeamService teamService;
     private final PlayerService playerService;
+
+    public UserService(UserRepository userRepository,
+                       TeamRepository teamRepository,
+                       PlayerRepository playerRepository,
+                       FavoriteTeamRepository favoriteTeamRepository,
+                       FavoritePlayerRepository favoritePlayerRepository,
+                       TeamService teamService,
+                       PlayerService playerService) {
+        this.userRepository = userRepository;
+        this.teamRepository = teamRepository;
+        this.playerRepository = playerRepository;
+        this.favoriteTeamRepository = favoriteTeamRepository;
+        this.favoritePlayerRepository = favoritePlayerRepository;
+        this.teamService = teamService;
+        this.playerService = playerService;
+    }
 
     public UserDto getCurrentUser(String username) {
         UserAccount user = findUser(username);
@@ -47,9 +61,7 @@ public class UserService {
 
     public void addFavoriteTeam(String username, Long teamId) {
         UserAccount user = findUser(username);
-        if (favoriteTeamRepository.existsByUserIdAndTeamId(user.getId(), teamId)) {
-            return;
-        }
+        if (favoriteTeamRepository.existsByUserIdAndTeamId(user.getId(), teamId)) return;
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team not found: " + teamId));
         favoriteTeamRepository.save(FavoriteTeam.builder().user(user).team(team).build());
@@ -70,9 +82,7 @@ public class UserService {
 
     public void addFavoritePlayer(String username, Long playerId) {
         UserAccount user = findUser(username);
-        if (favoritePlayerRepository.existsByUserIdAndPlayerId(user.getId(), playerId)) {
-            return;
-        }
+        if (favoritePlayerRepository.existsByUserIdAndPlayerId(user.getId(), playerId)) return;
         Player player = playerRepository.findById(playerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found: " + playerId));
         favoritePlayerRepository.save(FavoritePlayer.builder().user(user).player(player).build());

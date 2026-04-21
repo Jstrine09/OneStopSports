@@ -4,7 +4,6 @@ import com.matchday.dto.LeagueDto;
 import com.matchday.dto.StandingsEntryDto;
 import com.matchday.model.League;
 import com.matchday.repository.LeagueRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -12,11 +11,15 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class LeagueService {
 
     private final LeagueRepository leagueRepository;
     private final ExternalApiService externalApiService;
+
+    public LeagueService(LeagueRepository leagueRepository, ExternalApiService externalApiService) {
+        this.leagueRepository = leagueRepository;
+        this.externalApiService = externalApiService;
+    }
 
     public List<LeagueDto> getLeaguesBySport(Long sportId) {
         return leagueRepository.findBySportId(sportId).stream()

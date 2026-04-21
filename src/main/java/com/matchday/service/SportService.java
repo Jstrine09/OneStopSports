@@ -3,7 +3,6 @@ package com.matchday.service;
 import com.matchday.dto.SportDto;
 import com.matchday.model.Sport;
 import com.matchday.repository.SportRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -11,10 +10,13 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class SportService {
 
     private final SportRepository sportRepository;
+
+    public SportService(SportRepository sportRepository) {
+        this.sportRepository = sportRepository;
+    }
 
     public List<SportDto> getAllSports() {
         return sportRepository.findAll().stream()

@@ -4,19 +4,25 @@ import com.matchday.dto.PlayerDto;
 import com.matchday.dto.TeamDto;
 import com.matchday.service.PlayerService;
 import com.matchday.service.TeamService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/teams")
-@RequiredArgsConstructor
 public class TeamController {
 
     private final TeamService teamService;
     private final PlayerService playerService;
+
+    public TeamController(TeamService teamService, PlayerService playerService) {
+        this.teamService = teamService;
+        this.playerService = playerService;
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<TeamDto> getTeam(@PathVariable Long id) {

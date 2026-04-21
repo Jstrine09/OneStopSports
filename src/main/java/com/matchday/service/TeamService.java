@@ -3,7 +3,6 @@ package com.matchday.service;
 import com.matchday.dto.TeamDto;
 import com.matchday.model.Team;
 import com.matchday.repository.TeamRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -11,10 +10,13 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class TeamService {
 
     private final TeamRepository teamRepository;
+
+    public TeamService(TeamRepository teamRepository) {
+        this.teamRepository = teamRepository;
+    }
 
     public TeamDto getTeamById(Long id) {
         return teamRepository.findById(id)

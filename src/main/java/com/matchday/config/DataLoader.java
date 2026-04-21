@@ -12,38 +12,28 @@ import com.matchday.service.ExternalApiService;
 import com.matchday.service.ExternalApiService.ApiPlayer;
 import com.matchday.service.ExternalApiService.ApiTeam;
 import com.matchday.service.ExternalApiService.ApiTeamsResponse;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
 
-/**
- * Seeds the database with real football data from football-data.org on first startup.
- * Skips seeding if data already exists (idempotent).
- *
- * Ported and adapted from the OnesToManys project:
- *   - Added Sport as the top-level entity (MatchDay has Sport above League)
- *   - Stores dateOfBirth directly as LocalDate (vs computing age in OnesToManys)
- *   - Maps Club → Team, venue → stadium, shortName → shortName, crest → crestUrl
- */
-@Slf4j
 @Component
-@RequiredArgsConstructor
 public class DataLoader implements CommandLineRunner {
 
-    // football-data.org competition IDs
-    private static final int PL         = 2021; // Premier League
-    private static final int LA_LIGA    = 2014; // La Liga
-    private static final int BUNDESLIGA = 2002; // Bundesliga
-    private static final int UCL        = 2001; // UEFA Champions League
+    private static final Logger log = LoggerFactory.getLogger(DataLoader.class);
+
+    private static final int PL         = 2021;
+    private static final int LA_LIGA    = 2014;
+    private static final int BUNDESLIGA = 2002;
+    private static final int UCL        = 2001;
 
     private static final int[] COMPETITION_IDS = {PL, LA_LIGA, BUNDESLIGA};
 
-    private static final int MAX_TEAMS_PER_LEAGUE  = 20;
-    private static final int MAX_PLAYERS_PER_TEAM  = 30;
+    private static final int MAX_TEAMS_PER_LEAGUE = 20;
+    private static final int MAX_PLAYERS_PER_TEAM = 30;
 
     private final ExternalApiService externalApiService;
     private final SportRepository    sportRepository;
@@ -51,26 +41,35 @@ public class DataLoader implements CommandLineRunner {
     private final TeamRepository     teamRepository;
     private final PlayerRepository   playerRepository;
 
+    public DataLoader(ExternalApiService externalApiService,
+                      SportRepository sportRepository,
+                      LeagueRepository leagueRepository,
+                      TeamRepository teamRepository,
+                      PlayerRepository playerRepository) {
+        this.externalApiService = externalApiService;
+        this.sportRepository    = sportRepository;
+        this.leagueRepository   = leagueRepository;
+        this.teamRepository     = teamRepository;
+        this.playerRepository   = playerRepository;
+    }
+
     @Override
     public void run(String... args) {
-
         if (sportRepository.count() > 0) {
             log.info("[DataLoader] Database already seeded — skipping.");
             return;
         }
-
         log.info("[DataLoader] Seeding database from football-data.org...");
         try {
             seed();
         } catch (Exception e) {
             log.error("[DataLoader] Seeding failed — app will still start but DB will be empty. " +
-                      "Re-run the app to retry. Cause: {}", e.getMessage());
+                      "Re-run to retry. Cause: {}", e.getMessage());
         }
     }
 
     private void seed() throws InterruptedException {
 
-        // MatchDay adds a top-level Sport that OnesToManys didn't have
         Sport football = sportRepository.save(
                 Sport.builder()
                         .name("Football")
@@ -85,7 +84,6 @@ public class DataLoader implements CommandLineRunner {
 
             ApiTeamsResponse response = externalApiService.fetchTeamsByCompetition(competitionId);
 
-            // Resolve country (area can occasionally be null in the teams endpoint response)
             String country = (response.competition().area() != null)
                     ? response.competition().area().name()
                     : switch (competitionId) {
@@ -133,7 +131,7 @@ public class DataLoader implements CommandLineRunner {
                             try {
                                 dob = LocalDate.parse(apiPlayer.dateOfBirth());
                             } catch (Exception e) {
-                                log.warn("[DataLoader] Could not parse dateOfBirth '{}' for player {}",
+                                log.warn("[DataLoader] Could not parse dateOfBirth '{}' for {}",
                                         apiPlayer.dateOfBirth(), apiPlayer.name());
                             }
                         }
@@ -152,14 +150,11 @@ public class DataLoader implements CommandLineRunner {
                 }
             }
 
-            // Respect the football-data.org free tier: 10 req/min → wait ~6 s between competitions
             if (i < COMPETITION_IDS.length - 1) {
                 log.info("[DataLoader] Waiting 6 s (rate limit)...");
                 Thread.sleep(6_200);
             }
         }
-
         log.info("[DataLoader] Done! Database seeded with real football data.");
     }
 }
-
