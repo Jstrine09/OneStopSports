@@ -1,6 +1,7 @@
 package com.matchday.service;
 
 import com.matchday.dto.MatchDto;
+import com.matchday.repository.LeagueRepository;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -13,9 +14,11 @@ import java.util.Map;
 public class MatchService {
 
     private final ExternalApiService externalApiService;
+    private final LeagueRepository leagueRepository;
 
-    public MatchService(ExternalApiService externalApiService) {
+    public MatchService(ExternalApiService externalApiService, LeagueRepository leagueRepository) {
         this.externalApiService = externalApiService;
+        this.leagueRepository = leagueRepository;
     }
 
     @Cacheable("matches")
@@ -24,8 +27,11 @@ public class MatchService {
     }
 
     public List<MatchDto> getMatchesByLeagueAndDate(Long leagueId, LocalDate date) {
-        // TODO: map leagueId → competition ID, call externalApiService.fetchMatchesByCompetition()
-        return Collections.emptyList();
+        if (leagueId == null || date == null) return Collections.emptyList();
+        return leagueRepository.findById(leagueId)
+                .filter(l -> l.getExternalId() != null)
+                .map(l -> externalApiService.fetchMatchDtosByCompetition(l.getExternalId(), date))
+                .orElse(Collections.emptyList());
     }
 
     public MatchDto getMatchById(Long id) {

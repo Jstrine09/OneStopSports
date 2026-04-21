@@ -129,6 +129,29 @@ public class ExternalApiService {
                 .body(ApiMatchesResponse.class);
     }
 
+    /**
+     * Fetch matches for a competition on a specific calendar date, mapped to MatchDto.
+     */
+    public List<MatchDto> fetchMatchDtosByCompetition(int competitionId, LocalDate date) {
+        ApiMatchesResponse response = fetchMatchesByCompetitionAndDate(competitionId, date);
+        if (response == null || response.matches() == null) {
+            return Collections.emptyList();
+        }
+        return response.matches().stream()
+                .map(this::toMatchDto)
+                .toList();
+    }
+
+    private ApiMatchesResponse fetchMatchesByCompetitionAndDate(int competitionId, LocalDate date) {
+        return restClient.get()
+                .uri(b -> b.path("/competitions/{id}/matches")
+                           .queryParam("dateFrom", date)
+                           .queryParam("dateTo", date)
+                           .build(competitionId))
+                .retrieve()
+                .body(ApiMatchesResponse.class);
+    }
+
     // ── DTO conversion helpers (used by LeagueService / MatchService) ─────────
 
     public List<StandingsEntryDto> fetchStandings(Integer competitionId) {
