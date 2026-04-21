@@ -33,7 +33,7 @@ public class DataLoader implements CommandLineRunner {
     private static final int[] COMPETITION_IDS = {PL, LA_LIGA, BUNDESLIGA};
 
     private static final int MAX_TEAMS_PER_LEAGUE = 20;
-    private static final int MAX_PLAYERS_PER_TEAM = 30;
+    private static final int MAX_PLAYERS_PER_TEAM = 45;
 
     private final ExternalApiService externalApiService;
     private final SportRepository    sportRepository;
