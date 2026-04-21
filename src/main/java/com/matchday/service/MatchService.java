@@ -1,6 +1,7 @@
 package com.matchday.service;
 
 import com.matchday.dto.MatchDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -10,16 +11,19 @@ import java.util.List;
 import java.util.Map;
 
 @Service
+@RequiredArgsConstructor
 public class MatchService {
+
+    private final ExternalApiService externalApiService;
 
     @Cacheable("matches")
     public List<MatchDto> getLiveMatches() {
-        // TODO: delegate to ExternalApiService once integrated
-        return Collections.emptyList();
+        return externalApiService.fetchLiveMatchDtos();
     }
 
     public List<MatchDto> getMatchesByLeagueAndDate(Long leagueId, LocalDate date) {
-        // TODO: delegate to ExternalApiService once integrated
+        // TODO: map leagueId → competition ID, call externalApiService.fetchMatchesByCompetition()
+        //       and filter by date. Tracked in: TASK-16
         return Collections.emptyList();
     }
 
