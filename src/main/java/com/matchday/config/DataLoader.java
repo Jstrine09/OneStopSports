@@ -52,7 +52,7 @@ public class DataLoader implements CommandLineRunner {
     private final PlayerRepository   playerRepository;
 
     @Override
-    public void run(String... args) throws Exception {
+    public void run(String... args) {
 
         if (sportRepository.count() > 0) {
             log.info("[DataLoader] Database already seeded — skipping.");
@@ -60,6 +60,15 @@ public class DataLoader implements CommandLineRunner {
         }
 
         log.info("[DataLoader] Seeding database from football-data.org...");
+        try {
+            seed();
+        } catch (Exception e) {
+            log.error("[DataLoader] Seeding failed — app will still start but DB will be empty. " +
+                      "Re-run the app to retry. Cause: {}", e.getMessage());
+        }
+    }
+
+    private void seed() throws InterruptedException {
 
         // MatchDay adds a top-level Sport that OnesToManys didn't have
         Sport football = sportRepository.save(
@@ -153,3 +162,4 @@ public class DataLoader implements CommandLineRunner {
         log.info("[DataLoader] Done! Database seeded with real football data.");
     }
 }
+
