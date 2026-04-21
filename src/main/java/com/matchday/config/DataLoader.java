@@ -96,6 +96,7 @@ public class DataLoader implements CommandLineRunner {
             League league = leagueRepository.save(
                     League.builder()
                             .sport(football)
+                            .externalId(competitionId)
                             .name(response.competition().name())
                             .country(country)
                             .season("2024/25")

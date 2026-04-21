@@ -23,6 +23,9 @@ public class League {
     @JoinColumn(name = "sport_id", nullable = false)
     private Sport sport;
 
+    /** football-data.org competition ID — e.g. 2021 = Premier League */
+    private Integer externalId;
+
     @Column(nullable = false)
     private String name;
 

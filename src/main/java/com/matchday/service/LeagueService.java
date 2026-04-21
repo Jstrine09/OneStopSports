@@ -44,6 +44,7 @@ public class LeagueService {
                 league.getCountry(),
                 league.getLogoUrl(),
                 league.getSeason(),
-                league.getSport().getId());
+                league.getSport().getId(),
+                league.getExternalId());
     }
 }
