@@ -118,6 +118,17 @@ public class ExternalApiService {
     // ── API Calls ─────────────────────────────────────────────────────────────
 
     /**
+     * Fetch a single team by its football-data.org team ID (includes full squad).
+     * Used as a fallback when the competition teams endpoint returns an empty squad.
+     */
+    public ApiTeam fetchTeamById(Long teamId) {
+        return restClient.get()
+                .uri("/teams/{id}", teamId)
+                .retrieve()
+                .body(ApiTeam.class);
+    }
+
+    /**
      * Fetch all teams (with squad) for a competition.
      * e.g. PL=2021, La Liga=2014, Bundesliga=2002, UCL=2001
      */

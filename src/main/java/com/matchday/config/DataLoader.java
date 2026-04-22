@@ -28,12 +28,13 @@ public class DataLoader implements CommandLineRunner {
     private static final int PL         = 2021;
     private static final int LA_LIGA    = 2014;
     private static final int BUNDESLIGA = 2002;
+    private static final int SERIE_A    = 2019;
+    private static final int LIGUE_1    = 2015;
     private static final int UCL        = 2001;
 
-    private static final int[] COMPETITION_IDS = {PL, LA_LIGA, BUNDESLIGA};
+    private static final int[] COMPETITION_IDS = {PL, LA_LIGA, BUNDESLIGA, SERIE_A, LIGUE_1, UCL};
 
     private static final int MAX_TEAMS_PER_LEAGUE = 20;
-    private static final int MAX_PLAYERS_PER_TEAM = 45;
 
     private final ExternalApiService externalApiService;
     private final SportRepository    sportRepository;
@@ -55,8 +56,8 @@ public class DataLoader implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (sportRepository.count() > 0) {
-            log.info("[DataLoader] Database already seeded — skipping.");
+        if (leagueRepository.count() >= COMPETITION_IDS.length) {
+            log.info("[DataLoader] All {} leagues already seeded — skipping.", COMPETITION_IDS.length);
             return;
         }
         log.info("[DataLoader] Seeding database from football-data.org...");
@@ -70,17 +71,23 @@ public class DataLoader implements CommandLineRunner {
 
     private void seed() throws InterruptedException {
 
-        Sport football = sportRepository.save(
-                Sport.builder()
-                        .name("Football")
-                        .slug("football")
-                        .iconUrl("https://crests.football-data.org/FL.svg")
-                        .build());
+        Sport football = sportRepository.findBySlug("football")
+                .orElseGet(() -> sportRepository.save(
+                        Sport.builder()
+                                .name("Football")
+                                .slug("football")
+                                .iconUrl("https://crests.football-data.org/FL.svg")
+                                .build()));
         log.info("[DataLoader] Saved sport: {}", football.getName());
 
         for (int i = 0; i < COMPETITION_IDS.length; i++) {
             int competitionId = COMPETITION_IDS[i];
             log.info("[DataLoader] Fetching competition {}...", competitionId);
+
+            if (leagueRepository.findByExternalId(competitionId).isPresent()) {
+                log.info("[DataLoader] League {} already seeded, skipping.", competitionId);
+                continue;
+            }
 
             ApiTeamsResponse response = externalApiService.fetchTeamsByCompetition(competitionId);
 
@@ -90,6 +97,9 @@ public class DataLoader implements CommandLineRunner {
                         case PL         -> "England";
                         case LA_LIGA    -> "Spain";
                         case BUNDESLIGA -> "Germany";
+                        case SERIE_A    -> "Italy";
+                        case LIGUE_1    -> "France";
+                        case UCL        -> "Europe";
                         default         -> "Unknown";
                     };
 
@@ -120,13 +130,20 @@ public class DataLoader implements CommandLineRunner {
                                 .build());
                 log.info("[DataLoader]     Saved team: {}", team.getName());
 
-                if (apiTeam.squad() != null && !apiTeam.squad().isEmpty()) {
-                    List<ApiPlayer> squad = apiTeam.squad();
-                    int playerLimit = Math.min(MAX_PLAYERS_PER_TEAM, squad.size());
+                List<ApiPlayer> squad = apiTeam.squad();
+                if (squad == null || squad.isEmpty()) {
+                    log.info("[DataLoader]       No squad in competition response for {}, fetching individually...", team.getName());
+                    Thread.sleep(6_200);
+                    try {
+                        ApiTeam fullTeam = externalApiService.fetchTeamById(apiTeam.id());
+                        squad = (fullTeam != null) ? fullTeam.squad() : null;
+                    } catch (Exception e) {
+                        log.warn("[DataLoader]       Could not fetch team {}: {}", team.getName(), e.getMessage());
+                    }
+                }
 
-                    for (int k = 0; k < playerLimit; k++) {
-                        ApiPlayer apiPlayer = squad.get(k);
-
+                if (squad != null && !squad.isEmpty()) {
+                    for (ApiPlayer apiPlayer : squad) {
                         LocalDate dob = null;
                         if (apiPlayer.dateOfBirth() != null) {
                             try {
@@ -147,7 +164,7 @@ public class DataLoader implements CommandLineRunner {
                                         .dateOfBirth(dob)
                                         .build());
                     }
-                    log.info("[DataLoader]       Saved {} players for {}", playerLimit, team.getName());
+                    log.info("[DataLoader]       Saved {} players for {}", squad.size(), team.getName());
                 }
             }
 
