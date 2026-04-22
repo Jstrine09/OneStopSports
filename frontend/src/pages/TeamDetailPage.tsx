@@ -164,11 +164,6 @@ export default function TeamDetailPage() {
                       key={player.id}
                       className="flex items-center gap-3 rounded-lg bg-slate-800 px-3 py-2.5"
                     >
-                      {/* Jersey number */}
-                      <span className="w-6 text-right text-xs font-bold text-slate-500">
-                        {player.jerseyNumber ?? '—'}
-                      </span>
-
                       {/* Name + nationality */}
                       <div className="flex-1 overflow-hidden">
                         <Link
@@ -183,9 +178,9 @@ export default function TeamDetailPage() {
                         )}
                       </div>
 
-                      {/* Age */}
-                      <span className="text-xs text-slate-500">
-                        {calculateAge(player.dateOfBirth)}
+                      {/* Jersey number */}
+                      <span className="shrink-0 text-xs font-bold text-slate-400">
+                        {player.jerseyNumber != null ? `#${player.jerseyNumber}` : '—'}
                       </span>
 
                       {/* Favourite toggle for player */}
