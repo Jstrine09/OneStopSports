@@ -1,6 +1,9 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft } from 'lucide-react'
-import { getMatchState, type MatchDto } from '../types'
+import { getMatchState, type MatchDto, type MatchEventDto } from '../types'
+import { fetchMatchEvents } from '../api/matches'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 function formatKickoff(utc: string): string {
   return new Date(utc).toLocaleString([], {
@@ -18,10 +21,46 @@ function TeamCrest({ url, name }: { url: string | null; name: string }) {
   )
 }
 
+function eventIcon(type: string): string {
+  switch (type) {
+    case 'GOAL':            return '⚽'
+    case 'OWN_GOAL':        return '⚽'
+    case 'PENALTY':         return '⚽'
+    case 'YELLOW_CARD':     return '🟡'
+    case 'RED_CARD':        return '🟥'
+    case 'YELLOW_RED_CARD': return '🟥'
+    case 'SUBSTITUTION':    return '🔄'
+    default:                return '•'
+  }
+}
+
+function eventLabel(event: MatchEventDto): string {
+  switch (event.type) {
+    case 'OWN_GOAL':   return `${event.playerName ?? '?'} (OG)`
+    case 'PENALTY':    return `${event.playerName ?? '?'} (pen)`
+    case 'SUBSTITUTION':
+      return event.assistName
+        ? `↑ ${event.assistName}  ↓ ${event.playerName ?? '?'}`
+        : event.playerName ?? '?'
+    default:
+      return event.playerName ?? '?'
+  }
+}
+
 export default function MatchDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const match = location.state as MatchDto | null
+
+  const { data: events = [], isLoading: loadingEvents } = useQuery({
+    queryKey: ['match-events', match?.id],
+    queryFn: () => fetchMatchEvents(match!.id),
+    enabled: !!match,
+    staleTime: 60_000,
+  })
+
+  // Latest events first
+  const sortedEvents = [...events].reverse()
 
   if (!match) {
     return (
@@ -68,10 +107,9 @@ export default function MatchDetailPage() {
               </span>
             )}
 
-            {/* Status badge */}
-            {state === 'live'     && <span className="animate-pulse rounded bg-green-500 px-2 py-0.5 text-xs font-bold text-white">LIVE</span>}
-            {state === 'halftime' && <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">HALF TIME</span>}
-            {state === 'finished' && <span className="text-xs font-semibold text-slate-400">FULL TIME</span>}
+            {state === 'live'      && <span className="animate-pulse rounded bg-green-500 px-2 py-0.5 text-xs font-bold text-white">LIVE</span>}
+            {state === 'halftime'  && <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">HALF TIME</span>}
+            {state === 'finished'  && <span className="text-xs font-semibold text-slate-400">FULL TIME</span>}
             {state === 'scheduled' && match.startTime && (
               <span className="text-xs text-slate-400">{formatKickoff(match.startTime)}</span>
             )}
@@ -87,7 +125,59 @@ export default function MatchDetailPage() {
         </div>
       </div>
 
-      {/* Stats placeholder — backend stubs not yet implemented */}
+      {/* Match Events / Timeline */}
+      <div className="rounded-2xl bg-slate-800 px-4 py-5">
+        <h2 className="mb-3 text-sm font-semibold text-slate-300">Match Events</h2>
+
+        {loadingEvents ? (
+          <LoadingSpinner />
+        ) : sortedEvents.length === 0 ? (
+          <div className="flex flex-col items-center gap-1 py-4 text-slate-500">
+            <span className="text-2xl">📋</span>
+            <p className="text-xs">
+              {state === 'scheduled' ? 'Match not started yet' : 'No events available'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            {sortedEvents.map((event, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-700/50"
+              >
+                {/* Minute */}
+                <span className="w-10 shrink-0 text-right text-xs font-bold tabular-nums text-slate-400">
+                  {event.minute != null
+                    ? event.injuryMinute != null
+                      ? `${event.minute}+${event.injuryMinute}'`
+                      : `${event.minute}'`
+                    : '—'}
+                </span>
+
+                {/* Icon */}
+                <span className="text-base leading-none">{eventIcon(event.type)}</span>
+
+                {/* Description */}
+                <div className="flex-1 overflow-hidden">
+                  <p className="truncate text-sm font-medium">{eventLabel(event)}</p>
+                  {event.type === 'GOAL' && event.assistName && (
+                    <p className="truncate text-xs text-slate-400">Assist: {event.assistName}</p>
+                  )}
+                </div>
+
+                {/* Team name */}
+                {event.teamName && (
+                  <span className="shrink-0 max-w-[100px] truncate text-right text-xs text-slate-500">
+                    {event.teamName}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stats placeholder */}
       <div className="rounded-2xl bg-slate-800 px-4 py-5">
         <h2 className="mb-3 text-sm font-semibold text-slate-300">Match Stats</h2>
         <div className="flex flex-col items-center gap-1 py-4 text-slate-500">

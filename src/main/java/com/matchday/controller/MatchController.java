@@ -1,6 +1,7 @@
 package com.matchday.controller;
 
 import com.matchday.dto.MatchDto;
+import com.matchday.dto.MatchEventDto;
 import com.matchday.service.MatchService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -42,7 +43,7 @@ public class MatchController {
     }
 
     @GetMapping("/{id}/events")
-    public ResponseEntity<List<Object>> getMatchEvents(@PathVariable Long id) {
+    public ResponseEntity<List<MatchEventDto>> getMatchEvents(@PathVariable Long id) {
         return ResponseEntity.ok(matchService.getMatchEvents(id));
     }
 

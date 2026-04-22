@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchTeam, fetchTeamPlayers } from '../api/teams'
 import {
@@ -171,7 +171,13 @@ export default function TeamDetailPage() {
 
                       {/* Name + nationality */}
                       <div className="flex-1 overflow-hidden">
-                        <p className="truncate text-sm font-medium">{player.name}</p>
+                        <Link
+                          to={`/players/${player.id}`}
+                          state={player}
+                          className="truncate text-sm font-medium hover:text-blue-400 transition-colors"
+                        >
+                          {player.name}
+                        </Link>
                         {player.nationality && (
                           <p className="truncate text-xs text-slate-400">{player.nationality}</p>
                         )}

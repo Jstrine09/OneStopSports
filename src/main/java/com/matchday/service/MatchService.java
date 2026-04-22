@@ -1,6 +1,7 @@
 package com.matchday.service;
 
 import com.matchday.dto.MatchDto;
+import com.matchday.dto.MatchEventDto;
 import com.matchday.repository.LeagueRepository;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -38,8 +39,9 @@ public class MatchService {
         return null;
     }
 
-    public List<Object> getMatchEvents(Long matchId) {
-        return Collections.emptyList();
+    public List<MatchEventDto> getMatchEvents(Long matchId) {
+        if (matchId == null) return Collections.emptyList();
+        return externalApiService.fetchMatchEventDtos(matchId);
     }
 
     public Map<String, Object> getMatchStats(Long matchId) {

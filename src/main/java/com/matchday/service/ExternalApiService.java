@@ -2,6 +2,7 @@ package com.matchday.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.matchday.dto.MatchDto;
+import com.matchday.dto.MatchEventDto;
 import com.matchday.dto.StandingsEntryDto;
 import com.matchday.dto.TeamDto;
 import com.matchday.repository.LeagueRepository;
@@ -13,7 +14,9 @@ import org.springframework.web.client.RestClient;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -86,6 +89,31 @@ public class ExternalApiService {
     public record ApiStandingEntry(Integer position, ApiMatchTeam team, Integer playedGames,
                                    Integer won, Integer draw, Integer lost,
                                    Integer goalsFor, Integer goalsAgainst, Integer points) {}
+
+    // ── Match detail (includes events) ───────────────────────────────────────
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ApiMatchDetail(Long id, ApiMatchTeam homeTeam, ApiMatchTeam awayTeam,
+                                 ApiScore score, String status, String utcDate,
+                                 ApiCompetition competition,
+                                 List<ApiGoal> goals,
+                                 List<ApiBooking> bookings,
+                                 List<ApiSubstitution> substitutions) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ApiGoal(Integer minute, Integer injuryTime, String type,
+                          ApiMatchTeam team, ApiPlayerRef scorer, ApiPlayerRef assist) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ApiBooking(Integer minute, ApiMatchTeam team,
+                             ApiPlayerRef player, String card) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ApiSubstitution(Integer minute, ApiMatchTeam team,
+                                  ApiPlayerRef playerOut, ApiPlayerRef playerIn) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ApiPlayerRef(Long id, String name) {}
 
     // ── API Calls ─────────────────────────────────────────────────────────────
 
@@ -178,6 +206,62 @@ public class ExternalApiService {
         return response.matches().stream()
                 .map(this::toMatchDto)
                 .toList();
+    }
+
+    /**
+     * Fetch goals, bookings, and substitutions for a specific match,
+     * merged and sorted chronologically.
+     */
+    public List<MatchEventDto> fetchMatchEventDtos(Long matchId) {
+        ApiMatchDetail detail = restClient.get()
+                .uri("/matches/{id}", matchId)
+                .retrieve()
+                .body(ApiMatchDetail.class);
+
+        if (detail == null) return Collections.emptyList();
+
+        List<MatchEventDto> events = new ArrayList<>();
+
+        if (detail.goals() != null) {
+            for (ApiGoal g : detail.goals()) {
+                String type = "OWN_GOAL".equals(g.type()) ? "OWN_GOAL"
+                            : "PENALTY".equals(g.type()) ? "PENALTY" : "GOAL";
+                events.add(new MatchEventDto(
+                        type,
+                        g.minute(),
+                        g.injuryTime(),
+                        g.scorer() != null ? g.scorer().name() : null,
+                        g.assist()  != null ? g.assist().name()  : null,
+                        g.team()    != null ? g.team().name()    : null));
+            }
+        }
+
+        if (detail.bookings() != null) {
+            for (ApiBooking b : detail.bookings()) {
+                events.add(new MatchEventDto(
+                        b.card(),
+                        b.minute(),
+                        null,
+                        b.player() != null ? b.player().name() : null,
+                        null,
+                        b.team()   != null ? b.team().name()   : null));
+            }
+        }
+
+        if (detail.substitutions() != null) {
+            for (ApiSubstitution s : detail.substitutions()) {
+                events.add(new MatchEventDto(
+                        "SUBSTITUTION",
+                        s.minute(),
+                        null,
+                        s.playerOut() != null ? s.playerOut().name() : null,
+                        s.playerIn()  != null ? s.playerIn().name()  : null,
+                        s.team()      != null ? s.team().name()      : null));
+            }
+        }
+
+        events.sort(Comparator.comparingInt(e -> e.minute() != null ? e.minute() : 0));
+        return events;
     }
 
     // ── Private mappers ───────────────────────────────────────────────────────

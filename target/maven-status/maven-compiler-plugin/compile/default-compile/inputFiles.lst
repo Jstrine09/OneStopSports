@@ -17,6 +17,7 @@
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/dto/FavoriteTeamRequest.java
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/dto/LeagueDto.java
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/dto/MatchDto.java
+/Users/james/Projects/OneStopSports/src/main/java/com/matchday/dto/MatchEventDto.java
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/dto/PlayerDto.java
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/dto/RegisterRequest.java
 /Users/james/Projects/OneStopSports/src/main/java/com/matchday/dto/SportDto.java

@@ -9,6 +9,7 @@ import AuthPage from './pages/AuthPage'
 import ProfilePage from './pages/ProfilePage'
 import TeamDetailPage from './pages/TeamDetailPage'
 import MatchDetailPage from './pages/MatchDetailPage'
+import PlayerDetailPage from './pages/PlayerDetailPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,8 +32,9 @@ export default function App() {
               <Route path="leagues" element={<LeaguesPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="auth"       element={<AuthPage />}       />
-              <Route path="teams/:id" element={<TeamDetailPage />} />
-              <Route path="match/:id" element={<MatchDetailPage />} />
+              <Route path="teams/:id"   element={<TeamDetailPage />} />
+              <Route path="match/:id"   element={<MatchDetailPage />} />
+              <Route path="players/:id" element={<PlayerDetailPage />} />
               <Route path="*"         element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

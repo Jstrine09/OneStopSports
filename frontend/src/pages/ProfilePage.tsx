@@ -152,7 +152,13 @@ export default function ProfilePage() {
 
                 {/* Name + nationality */}
                 <div className="flex-1 overflow-hidden">
-                  <p className="truncate text-sm font-medium">{player.name}</p>
+                  <Link
+                    to={`/players/${player.id}`}
+                    state={player}
+                    className="truncate text-sm font-medium hover:text-blue-400 transition-colors"
+                  >
+                    {player.name}
+                  </Link>
                   <p className="truncate text-xs text-slate-400">
                     {[player.position, player.nationality].filter(Boolean).join(' · ')}
                   </p>

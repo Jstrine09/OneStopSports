@@ -87,6 +87,15 @@ export interface RegisterRequest {
   password: string
 }
 
+export interface MatchEventDto {
+  type: string            // "GOAL" | "OWN_GOAL" | "PENALTY" | "YELLOW_CARD" | "RED_CARD" | "YELLOW_RED_CARD" | "SUBSTITUTION"
+  minute: number | null
+  injuryMinute: number | null
+  playerName: string | null
+  assistName: string | null
+  teamName: string | null
+}
+
 // ── Match status helpers ───────────────────────────────────────────────────────
 
 export type MatchDisplayState = 'scheduled' | 'live' | 'halftime' | 'finished' | 'other'
