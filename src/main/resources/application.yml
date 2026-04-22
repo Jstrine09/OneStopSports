@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/matchday
+    url: jdbc:postgresql://localhost:5432/onestopsports
     username: postgres
     password: your_password
     driver-class-name: org.postgresql.Driver

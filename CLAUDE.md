@@ -1,7 +1,7 @@
-# MatchDay — Claude Code Context
+# OneStopSports — Claude Code Context
 
 ## Project Overview
-**MatchDay** is a full-stack sports app inspired by Fotmob. It surfaces live scores, league standings, match timelines, lineups, and player/team stats. Users can create accounts and save favourite teams and players.
+**OneStopSports** is a full-stack sports app inspired by Fotmob. It surfaces live scores, league standings, match timelines, lineups, and player/team stats. Users can create accounts and save favourite teams and players.
 
 **Repo:** `/Users/james/Projects/OneStopSports`
 **Related project (for reference):** `/Users/james/Projects/OnesToManys` — a simpler Spring Boot one-to-many demo that uses the same football-data.org API. Many patterns here were ported from it.
@@ -12,7 +12,7 @@
 | Layer | Technology |
 |---|---|
 | Backend | Java 21 + Spring Boot 3.4.4 |
-| Database | PostgreSQL (`matchday` DB) |
+| Database | PostgreSQL (`onestopsports` DB) |
 | Migrations | Flyway (3 migrations done) |
 | Cache | Redis (30s TTL on live matches) |
 | Auth | Spring Security 6 + JWT (jjwt 0.12.x) |
@@ -25,7 +25,7 @@
 
 ## Package Structure
 ```
-com.matchday
+com.onestopsports
 ├── MatchdayApplication.java        @SpringBootApplication @EnableCaching @EnableScheduling
 ├── config/
 │   ├── SecurityConfig.java
@@ -80,7 +80,7 @@ com.matchday
 - Seeds: 1 Sport (Football) → 3 Leagues (PL, La Liga, Bundesliga) → ~60 Teams → ~1000 Players
 - Competition IDs: `PL=2021`, `La Liga=2014`, `Bundesliga=2002`, `UCL=2001`
 - Ported from `/Users/james/Projects/OnesToManys/soccerapp/src/main/java/com/zipcode/soccerapp/config/DataLoader.java`
-- MatchDay adds `Sport` as an extra top level that OnesToManys didn't have
+- OneStopSports adds `Sport` as an extra top level that OnesToManys didn't have
 
 ### Build — Annotation Processor Ordering
 Lombok MUST come before MapStruct in `maven-compiler-plugin` annotationProcessorPaths, or MapStruct can't see Lombok-generated getters. Use `lombok-mapstruct-binding:0.2.0` as the middle entry.
@@ -161,7 +161,7 @@ DELETE /api/users/me/favorites/players/{playerId}
 ## Local Dev Setup
 
 ### Prerequisites
-- PostgreSQL running, database named `matchday`
+- PostgreSQL running, database named `onestopsports`
 - Redis running on `localhost:6379`
 - API key in `src/main/resources/application-local.yml`
 
@@ -227,7 +227,7 @@ curl -X POST http://localhost:8080/api/auth/register \
 ### Database & Seed
 - [ ] 31 Sign up / locate football-data.org API key
 - [ ] 32 Add key to `application-local.yml` ✅ done in this session
-- [ ] 33 Create local PostgreSQL database `matchday`
+- [ ] 33 Create local PostgreSQL database `onestopsports`
 - [ ] 34 `mvn spring-boot:run` — confirm Flyway migrations run
 - [ ] 35 Confirm DataLoader seeds 1 Sport, 3 Leagues, ~60 Teams, ~1000 Players
 - [ ] 36 Add `externalId` (Integer) field to `League.java`

@@ -2,15 +2,15 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: matchday-postgres
+    container_name: onestopsports-postgres
     environment:
-      POSTGRES_DB: matchday
+      POSTGRES_DB: onestopsports
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
       - "5432:5432"
     volumes:
-      - matchday_postgres_data:/var/lib/postgresql/data
+      - onestopsports_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -19,7 +19,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: matchday-redis
+    container_name: onestopsports-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -29,4 +29,4 @@ services:
       retries: 5
 
 volumes:
-  matchday_postgres_data:
+  onestopsports_postgres_data:

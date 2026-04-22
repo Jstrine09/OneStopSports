@@ -27,7 +27,7 @@ replay_pid*
 application-local.yml
 application-local.properties
 src/main/resources/application-local.yml
-MatchDay_Study_Guide.pdf
+OneStopSports_Study_Guide.pdf
 
 # Maven build output
 target/

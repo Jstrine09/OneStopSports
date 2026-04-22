@@ -11,11 +11,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.matchday</groupId>
-    <artifactId>matchday</artifactId>
+    <groupId>com.onestopsports</groupId>
+    <artifactId>onestopsports</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>matchday</name>
-    <description>MatchDay — sports scores, standings, lineups and live updates</description>
+    <name>onestopsports</name>
+    <description>OneStopSports — sports scores, standings, lineups and live updates</description>
 
     <properties>
         <java.version>21</java.version>
