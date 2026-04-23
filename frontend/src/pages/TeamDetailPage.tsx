@@ -41,6 +41,18 @@ export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
+
+  // window.history.state.idx is React Router's internal position counter.
+  // idx === 0 means this is the very first page loaded in the app (e.g. direct URL open),
+  // so there's nothing meaningful to go back to — navigate to /leagues as a safe default.
+  // idx > 0 means the user navigated here from somewhere, so go back normally.
+  const handleBack = () => {
+    if ((window.history.state?.idx ?? 0) > 0) {
+      navigate(-1)
+    } else {
+      navigate('/leagues', { replace: true })
+    }
+  }
   const queryClient = useQueryClient()
   const teamId = Number(id)
 
@@ -102,7 +114,7 @@ export default function TeamDetailPage() {
     <div className="space-y-4">
       {/* Back */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={handleBack}
         className="flex items-center gap-1 text-sm text-slate-400 hover:text-white"
       >
         <ChevronLeft size={16} /> Back

@@ -27,6 +27,19 @@ export default function PlayerDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { isAuthenticated } = useAuth()
+
+  // Go back one step if there's history, otherwise navigate to the player's team page.
+  // Passing player as a dependency so the closure captures the loaded player object.
+  const handleBack = (resolvedPlayer: typeof player) => {
+    if ((window.history.state?.idx ?? 0) > 0) {
+      navigate(-1)
+    } else if (resolvedPlayer?.teamId) {
+      // PlayerDto includes teamId so we can always land on the right team page
+      navigate(`/teams/${resolvedPlayer.teamId}`, { replace: true })
+    } else {
+      navigate('/leagues', { replace: true })
+    }
+  }
   const queryClient = useQueryClient()
   const playerId = Number(id)
 
@@ -67,7 +80,7 @@ export default function PlayerDetailPage() {
     return (
       <div className="py-16 text-center text-slate-400">
         <p>Player not found.</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-blue-400 underline">Go back</button>
+        <button onClick={() => handleBack(null)} className="mt-4 text-blue-400 underline">Go back</button>
       </div>
     )
   }
@@ -79,7 +92,7 @@ export default function PlayerDetailPage() {
     <div className="space-y-4">
       {/* Back */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => handleBack(player)}
         className="flex items-center gap-1 text-sm text-slate-400 hover:text-white"
       >
         <ChevronLeft size={16} /> Back

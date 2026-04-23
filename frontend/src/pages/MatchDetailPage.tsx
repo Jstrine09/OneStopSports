@@ -52,6 +52,14 @@ export default function MatchDetailPage() {
   const location = useLocation()
   const match = location.state as MatchDto | null
 
+  const handleBack = () => {
+    if ((window.history.state?.idx ?? 0) > 0) {
+      navigate(-1)
+    } else {
+      navigate('/', { replace: true })
+    }
+  }
+
   const { data: events = [], isLoading: loadingEvents } = useQuery({
     queryKey: ['match-events', match?.id],
     queryFn: () => fetchMatchEvents(match!.id),
@@ -66,7 +74,7 @@ export default function MatchDetailPage() {
     return (
       <div className="py-16 text-center text-slate-400">
         <p>Match not found.</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-blue-400 underline">Go back</button>
+        <button onClick={handleBack} className="mt-4 text-blue-400 underline">Go back</button>
       </div>
     )
   }
@@ -78,7 +86,7 @@ export default function MatchDetailPage() {
     <div className="space-y-4">
       {/* Back button */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={handleBack}
         className="flex items-center gap-1 text-sm text-slate-400 hover:text-white"
       >
         <ChevronLeft size={16} /> Back
