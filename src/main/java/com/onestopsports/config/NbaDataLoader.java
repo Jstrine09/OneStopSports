@@ -17,20 +17,26 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 // NbaDataLoader seeds the database with NBA teams and rosters on first startup.
 // It runs independently from the football DataLoader — the two don't know about each other.
 //
-// Data source: balldontlie.io v1 API (free tier, Bearer token auth)
-// Seeding order: Sport → League → Teams → Players
+// Data source: balldontlie.io v1 API (free tier, Bearer token auth, 60 req/min limit)
+// Seeding order: Sport → League → Teams → Players (with 1.1s sleep between team fetches)
 //
-// Why separate from DataLoader.java?
-// Keeping NBA seeding in its own class makes it easier to maintain, test, and extend
-// without touching the football seeding logic. Each sport owns its own loader.
+// Idempotency strategy: mirrors the football DataLoader
+//   - Skip entirely if all 30 teams are already in the DB
+//   - If partially seeded (e.g. from a previous 429), skip only the teams that already exist
+//   - Sport and League creation use find-or-create so re-runs don't create duplicates
 @Component
 public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner = runs once at startup
 
     private static final Logger log = LoggerFactory.getLogger(NbaDataLoader.class);
+
+    // There are exactly 30 NBA teams — we use this as our "fully seeded" marker
+    private static final int NBA_TEAM_COUNT = 30;
 
     private final NbaApiService    nbaApiService;
     private final SportRepository  sportRepository;
@@ -52,14 +58,19 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
 
     @Override
     public void run(String... args) {
-        // Skip seeding if the Basketball sport already exists AND has at least one league.
-        // This means seeding ran successfully before — no need to do it again.
-        boolean alreadySeeded = sportRepository.findBySlug("basketball")
-                .map(s -> !leagueRepository.findBySportId(s.getId()).isEmpty())
+        // Only consider fully seeded if all 30 teams exist.
+        // This handles the case where a previous run hit a 429 mid-way:
+        // sport + league might exist, but teams would be missing → we still re-run.
+        boolean fullySeeded = sportRepository.findBySlug("basketball")
+                .flatMap(s -> leagueRepository.findBySportId(s.getId())
+                        .stream()
+                        .filter(l -> "NBA".equals(l.getName()))
+                        .findFirst())
+                .map(l -> teamRepository.findByLeagueId(l.getId()).size() >= NBA_TEAM_COUNT)
                 .orElse(false);
 
-        if (alreadySeeded) {
-            log.info("[NbaDataLoader] NBA already seeded — skipping.");
+        if (fullySeeded) {
+            log.info("[NbaDataLoader] All {} NBA teams already seeded — skipping.", NBA_TEAM_COUNT);
             return;
         }
 
@@ -67,43 +78,45 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
         try {
             seed();
         } catch (Exception e) {
-            // If something goes wrong (API down, rate limited, etc.), log and move on.
-            // The app still starts — re-run to retry seeding.
-            log.error("[NbaDataLoader] Seeding failed — app will start but NBA data will be missing. " +
-                    "Re-run to retry. Cause: {}", e.getMessage());
+            // If something goes wrong (API down, 429, network issue), log and move on.
+            // The app still starts — re-run the app to continue from where it left off.
+            log.error("[NbaDataLoader] Seeding failed — app will start but NBA data may be incomplete. " +
+                    "Re-run to resume. Cause: {}", e.getMessage());
         }
     }
 
-    private void seed() {
+    private void seed() throws InterruptedException {
+
         // ── 1. Sport ──────────────────────────────────────────────────────────
-        // Find-or-create the Basketball sport. Using findBySlug first means this is
-        // safe to call even if Basketball was partially created in a previous failed run.
+        // Find-or-create the Basketball sport — idempotent, safe to re-run.
         Sport basketball = sportRepository.findBySlug("basketball")
                 .orElseGet(() -> sportRepository.save(
                         Sport.builder()
                                 .name("Basketball")
                                 .slug("basketball")
-                                // 🏀 icon hosted by Wikipedia Commons — no auth required
                                 .iconUrl("https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Basketball.png/240px-Basketball.png")
                                 .build()));
-        log.info("[NbaDataLoader] Saved sport: {}", basketball.getName());
+        log.info("[NbaDataLoader] Sport: {}", basketball.getName());
 
         // ── 2. League ─────────────────────────────────────────────────────────
-        // Create the NBA as a single league under Basketball.
-        // externalId is null — balldontlie doesn't use competition IDs like football-data.org.
+        // Find the NBA league if it already exists (from a previous partial run),
+        // or create it fresh. externalId is null — balldontlie has no competition ID.
         // Routing in MatchService uses the sport slug ("basketball") instead.
-        League nba = leagueRepository.save(
-                League.builder()
-                        .sport(basketball)
-                        .name("NBA")
-                        .country("United States")
-                        .season("2024-25")
-                        .externalId(null) // No external competition ID for basketball
-                        .build());
-        log.info("[NbaDataLoader] Saved league: {}", nba.getName());
+        League nba = leagueRepository.findBySportId(basketball.getId())
+                .stream()
+                .filter(l -> "NBA".equals(l.getName()))
+                .findFirst()
+                .orElseGet(() -> leagueRepository.save(
+                        League.builder()
+                                .sport(basketball)
+                                .name("NBA")
+                                .country("United States")
+                                .season("2024-25")
+                                .externalId(null) // No external competition ID for basketball
+                                .build()));
+        log.info("[NbaDataLoader] League: {}", nba.getName());
 
         // ── 3. Teams ──────────────────────────────────────────────────────────
-        // Fetch all 30 NBA teams from balldontlie — they come back in a single response
         NbaApiService.NbaTeamsResponse teamsResponse = nbaApiService.fetchAllTeams();
 
         if (teamsResponse == null || teamsResponse.data() == null) {
@@ -114,35 +127,50 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
         List<NbaTeam> apiTeams = teamsResponse.data();
         log.info("[NbaDataLoader] Fetched {} teams from balldontlie", apiTeams.size());
 
+        // Build a set of team names already in the DB — used to skip teams that were
+        // already seeded in a previous partial run (same pattern as football DataLoader's
+        // per-league skip via leagueRepository.findByExternalId)
+        Set<String> existingTeamNames = teamRepository.findByLeagueId(nba.getId())
+                .stream()
+                .map(Team::getName)
+                .collect(Collectors.toSet());
+
         for (NbaTeam apiTeam : apiTeams) {
-            // Save the team to the database
-            // Note: crestUrl and stadium are null — balldontlie free tier doesn't provide them
+
+            // Skip this team if it was already seeded in a previous run
+            if (existingTeamNames.contains(apiTeam.fullName())) {
+                log.info("[NbaDataLoader]   {} already seeded, skipping.", apiTeam.fullName());
+                continue;
+            }
+
+            // Save the team — crestUrl and stadium are null (not in free tier)
             Team team = teamRepository.save(
                     Team.builder()
                             .league(nba)
-                            .name(apiTeam.fullName())       // e.g. "Boston Celtics"
+                            .name(apiTeam.fullName())          // e.g. "Boston Celtics"
                             .shortName(apiTeam.abbreviation()) // e.g. "BOS"
-                            .country(apiTeam.city())        // e.g. "Boston" (closest to country we have)
-                            .crestUrl(null)                 // Not available in free tier
-                            .stadium(null)                  // Not available in free tier
+                            .country(apiTeam.city())           // e.g. "Boston"
+                            .crestUrl(null)                    // Not available in free tier
+                            .stadium(null)                     // Not available in free tier
                             .build());
             log.info("[NbaDataLoader]   Saved team: {}", team.getName());
 
             // ── 4. Players ────────────────────────────────────────────────────
-            // Fetch the full roster for this team — balldontlie paginates players,
-            // so fetchPlayersByTeam handles the cursor loop internally
+            // balldontlie free tier: 60 requests/minute (1/second).
+            // Sleep 1.1 seconds before each player fetch so we never exceed the limit.
+            // 30 teams × 1.1s = ~33 seconds total — a one-time cost on first boot.
+            Thread.sleep(7_000);
             List<NbaPlayer> players = nbaApiService.fetchPlayersByTeam(apiTeam.id());
 
             for (NbaPlayer apiPlayer : players) {
-                // Parse the jersey number — it's a String in balldontlie (e.g. "23")
-                // but our DB stores it as an Integer
+                // Jersey number is a String in balldontlie — parse to Integer for our DB
                 Integer jerseyNumber = null;
                 if (apiPlayer.jerseyNumber() != null && !apiPlayer.jerseyNumber().isBlank()) {
                     try {
                         jerseyNumber = Integer.parseInt(apiPlayer.jerseyNumber());
                     } catch (NumberFormatException ex) {
-                        // Some non-numeric jerseys exist — skip rather than crash
-                        log.warn("[NbaDataLoader] Could not parse jersey number '{}' for {}",
+                        // Some non-numeric jerseys exist (e.g. "00") — skip rather than crash
+                        log.warn("[NbaDataLoader] Could not parse jersey '{}' for {}",
                                 apiPlayer.jerseyNumber(), apiPlayer.firstName());
                     }
                 }
@@ -154,12 +182,12 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                         Player.builder()
                                 .team(team)
                                 .name(fullName)
-                                // Map the abbreviated position to the full name:
+                                // Map abbreviated position to full name:
                                 // "G" → "Guard", "F" → "Forward", "C" → "Center", etc.
                                 .position(mapPosition(apiPlayer.position()))
                                 .nationality(apiPlayer.country()) // e.g. "USA"
                                 .jerseyNumber(jerseyNumber)
-                                .dateOfBirth(null) // balldontlie free tier doesn't include DOB
+                                .dateOfBirth(null) // Not available in balldontlie free tier
                                 .build());
             }
 
@@ -170,8 +198,8 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
     }
 
     // Maps balldontlie's abbreviated position codes to the full position names
-    // stored in the database. These full names are used by the frontend to group
-    // players into sections on the team detail page.
+    // stored in the database. These full names match the POSITION_ORDER array in
+    // the frontend's TeamDetailPage, so players get grouped into labelled sections.
     private String mapPosition(String pos) {
         if (pos == null || pos.isBlank()) return null;
         return switch (pos) {
@@ -180,7 +208,7 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
             case "C"   -> "Center";
             case "G-F" -> "Guard-Forward";
             case "F-C" -> "Forward-Center";
-            default    -> pos; // Return as-is if it's an unexpected value
+            default    -> pos; // Return as-is for any unexpected value
         };
     }
 }

@@ -1,5 +1,6 @@
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/OneStopSportsApplication.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/config/DataLoader.java
+/Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/config/NbaDataLoader.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/config/PasswordConfig.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/config/RedisConfig.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/config/SecurityConfig.java
@@ -44,6 +45,7 @@
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/service/ExternalApiService.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/service/LeagueService.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/service/MatchService.java
+/Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/service/NbaApiService.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/service/PlayerService.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/service/SportService.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/service/TeamService.java
