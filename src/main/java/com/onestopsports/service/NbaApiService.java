@@ -11,7 +11,6 @@ import org.springframework.web.client.RestClient;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -136,42 +135,21 @@ public class NbaApiService {
      * teamId here is balldontlie's team ID (not our DB team ID).
      */
     public List<NbaPlayer> fetchPlayersByTeam(Long teamId) {
-        List<NbaPlayer> allPlayers = new ArrayList<>();
-        Integer cursor = null; // null = first page (no cursor yet)
+        // We only want the CURRENT active roster — not historical players.
+        // balldontlie returns ALL players ever associated with a team by default,
+        // which can be 500+ for historic franchises like the Lakers.
+        // Adding season=2024 limits the response to the 2024-25 season only,
+        // giving us 15-17 active players per team — always a single page, no cursor loop needed.
+        // This reduces total API requests from 150+ down to exactly 30 (one per team).
+        String uri = "/players?team_ids[]=" + teamId + "&per_page=100&season=2024";
 
-        do {
-            // Build the URL — ?team_ids[]=<id> is balldontlie's array parameter format
-            String uri = "/players?team_ids[]=" + teamId + "&per_page=100"
-                    + (cursor != null ? "&cursor=" + cursor : "");
+        NbaPlayersResponse page = restClient.get()
+                .uri(uri)
+                .retrieve()
+                .body(NbaPlayersResponse.class);
 
-            NbaPlayersResponse page = restClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .body(NbaPlayersResponse.class);
-
-            if (page == null || page.data() == null) break;
-
-            allPlayers.addAll(page.data());
-
-            // Get the cursor for the next page — null means we're on the last page
-            cursor = (page.meta() != null) ? page.meta().nextCursor() : null;
-
-            // If there are more pages, sleep before the next request.
-            // balldontlie returns historical players — franchises like the Lakers
-            // have 500+ all-time players across 5+ pages. Without this sleep,
-            // rapid-fire page requests trigger a 429 even with a slow outer loop.
-            if (cursor != null) {
-                try {
-                    Thread.sleep(2_000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt(); // Restore the interrupted status
-                    break;
-                }
-            }
-
-        } while (cursor != null); // Keep looping until there are no more pages
-
-        return allPlayers;
+        if (page == null || page.data() == null) return Collections.emptyList();
+        return page.data();
     }
 
     /**

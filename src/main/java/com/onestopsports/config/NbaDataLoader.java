@@ -156,9 +156,10 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
             log.info("[NbaDataLoader]   Saved team: {}", team.getName());
 
             // ── 4. Players ────────────────────────────────────────────────────
-            // Sleep 7 seconds before each team's player fetch.
-            // If the team has more than 100 players (possible with historical data),
-            // NbaApiService.fetchPlayersByTeam() will also sleep 2s between each page.
+            // Sleep 7 seconds before each player fetch.
+            // fetchPlayersByTeam() now only fetches the current season (2024-25),
+            // so it makes exactly 1 request per team — no cursor pagination, no bursts.
+            // Total API calls: 1 (teams list) + 30 (one per team) = 31 requests.
             Thread.sleep(7_000);
             List<NbaPlayer> players = nbaApiService.fetchPlayersByTeam(apiTeam.id());
 
