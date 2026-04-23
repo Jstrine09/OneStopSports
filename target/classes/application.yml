@@ -28,6 +28,9 @@ external-api:
   football-data:
     base-url: https://api.football-data.org/v4
     api-key: YOUR_API_KEY_HERE  # override in application-local.yml
+  nba:
+    base-url: https://api.balldontlie.io/v1
+    api-key: YOUR_NBA_KEY_HERE  # override in application-local.yml — get your free key at balldontlie.io
 
 jwt:
   secret: bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u

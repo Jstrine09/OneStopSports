@@ -6,10 +6,12 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+// Same idea as FavoriteTeam — records which players a user has favourited.
+// Each row means "this user has starred this player".
 @Entity
 @Table(
     name = "favorite_player",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "player_id"})
+    uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "player_id"}) // Prevents duplicate favourites
 )
 @Getter
 @Setter
@@ -22,15 +24,17 @@ public class FavoritePlayer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // The user who favourited the player
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private UserAccount user;
 
+    // The player that was favourited
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "player_id", nullable = false)
     private Player player;
 
     @CreationTimestamp
     @Column(updatable = false)
-    private LocalDateTime createdAt;
+    private LocalDateTime createdAt; // When the user starred this player
 }

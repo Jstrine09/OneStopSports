@@ -13,20 +13,21 @@
 |---|---|
 | Backend | Java 21 + Spring Boot 3.4.4 |
 | Database | PostgreSQL (`onestopsports` DB) |
-| Migrations | Flyway (3 migrations done) |
+| Migrations | Flyway (4 migrations — all applied) |
 | Cache | Redis (30s TTL on live matches) |
 | Auth | Spring Security 6 + JWT (jjwt 0.12.x) |
-| Real-time | Spring WebSocket (STOMP) |
+| Real-time | Spring WebSocket (STOMP — config done, push not yet wired) |
 | External API | football-data.org v4 via `RestClient` |
 | DTO mapping | Java 21 records + MapStruct |
-| Frontend | React (not yet started — see backlog) |
+| Frontend | React 18 + TypeScript 5.5 + Vite 5.4 + Tailwind 3.4 + React Query v5 |
+| Infra | Docker Compose (postgres:16-alpine + redis:7-alpine) |
 
 ---
 
 ## Package Structure
 ```
 com.onestopsports
-├── MatchdayApplication.java        @SpringBootApplication @EnableCaching @EnableScheduling
+├── OneStopSportsApplication.java   @SpringBootApplication @EnableCaching @EnableScheduling
 ├── config/
 │   ├── SecurityConfig.java
 │   ├── RedisConfig.java
@@ -76,9 +77,9 @@ com.onestopsports
 - football-data.org free tier rate limit: 10 req/min → `DataLoader` sleeps 6.2s between competitions
 
 ### Data Seeding (DataLoader)
-- `DataLoader implements CommandLineRunner` — runs on every startup, skips if `sportRepository.count() > 0`
-- Seeds: 1 Sport (Football) → 3 Leagues (PL, La Liga, Bundesliga) → ~60 Teams → ~1000 Players
-- Competition IDs: `PL=2021`, `La Liga=2014`, `Bundesliga=2002`, `UCL=2001`
+- `DataLoader implements CommandLineRunner` — runs on every startup, skips if `leagueRepository.count() >= COMPETITION_IDS.length`
+- Seeds: 1 Sport (Football) → 6 Leagues → up to 20 Teams each → full squads (~1000+ Players)
+- Competition IDs: `PL=2021`, `La Liga=2014`, `Bundesliga=2002`, `Serie A=2019`, `Ligue 1=2015`, `UCL=2001`
 - Ported from `/Users/james/Projects/OnesToManys/soccerapp/src/main/java/com/zipcode/soccerapp/config/DataLoader.java`
 - OneStopSports adds `Sport` as an extra top level that OnesToManys didn't have
 
@@ -112,14 +113,13 @@ ApiStandingEntry(position, team, playedGames, won, draw, lost, goalsFor, goalsAg
 
 ---
 
-## Flyway Migrations (completed)
-| File | Tables created |
+## Flyway Migrations (all applied)
+| File | What it does |
 |---|---|
-| `V1__create_sport_league.sql` | `sport`, `league` |
-| `V2__create_team_player.sql` | `team`, `player` |
-| `V3__create_user_favorites.sql` | `user_account`, `favorite_team`, `favorite_player` |
-
-**Next migration needed:** `V4__add_league_external_id.sql` — adds `external_id INTEGER` to `league` table so we can map DB league IDs to football-data.org competition IDs.
+| `V1__create_sport_league.sql` | Creates `sport`, `league` tables |
+| `V2__create_team_player.sql` | Creates `team`, `player` tables |
+| `V3__create_user_favorites.sql` | Creates `user_account`, `favorite_team`, `favorite_player` tables |
+| `V4__add_league_external_id.sql` | Adds `external_id INTEGER` to `league` — bridges DB IDs to football-data.org competition IDs |
 
 ---
 
@@ -192,75 +192,48 @@ curl -X POST http://localhost:8080/api/auth/register \
 
 ## Current Status
 
-### ✅ Fully scaffolded and implemented
-- All 7 JPA entities
-- All 7 repositories
-- All 12 DTOs
-- JWT security layer
-- Spring Security 6 config
-- Redis + WebSocket config
+### ✅ Fully implemented
+- All 7 JPA entities, 7 repositories, 12 DTOs
+- JWT security layer + Spring Security 6 config
+- Redis config + WebSocket config
 - `AuthService` (register + login)
-- `UserService` (favorites CRUD)
+- `UserService` (favorites CRUD — teams + players)
 - `SportService`, `LeagueService`, `TeamService`, `PlayerService` (full DB-backed)
-- All 7 REST controllers
-- `ExternalApiService` — real `RestClient` impl with all response records
-- `DataLoader` — seeds real data from football-data.org on first boot
-- 3 Flyway migrations
+- `MatchService`: `getLiveMatches()`, `getMatchesByLeagueAndDate()`, `getMatchEvents()`
+- `ExternalApiService` — all API records, all mappers (`toMatchDto`, `toStandingsEntryDto`), all fetch methods wired
+- All 7 REST controllers — all endpoints wired and returning real data
+- `DataLoader` — seeds 6 leagues, 20 teams each, full squads from football-data.org
+- All 4 Flyway migrations applied
+- `docker-compose.yml` — postgres:16-alpine + redis:7-alpine with healthchecks
+- React frontend — 8 pages, 4 components, JWT Axios interceptor, React Query, Tailwind, responsive layout
 
-### 🔲 Stubbed (returns empty — needs wiring)
-- `MatchService.getMatchesByLeagueAndDate()` — needs `League.externalId` lookup
-- `ExternalApiService.fetchStandings()` — needs `ApiStandingEntry → StandingsEntryDto` mapper
-- `ExternalApiService.fetchLiveMatchDtos()` — needs `ApiMatch → MatchDto` mapper
-- `ExternalApiService.refreshLiveMatchCache()` — needs `SimpMessagingTemplate` push
+### 🔲 Stubbed (returns null/empty)
+- `MatchService.getMatchById()` — returns `null` (needs `/matches/{id}` fetch added to `ExternalApiService`)
+- `MatchService.getMatchStats()` — returns `Map.of()` (stats not in football-data.org free tier)
+- `MatchService.getMatchLineups()` — returns `Map.of()` (lineups not in football-data.org free tier)
 
 ### 🔲 Not started
-- React frontend (Vite + TypeScript + Tailwind + React Query + Recharts)
-- `GlobalExceptionHandler`
-- Swagger/OpenAPI
-- `docker-compose.yml`
-- `V4__add_league_external_id.sql`
+- `ExternalApiService.refreshLiveMatchCache()` — has TODO comment (TASK-17); needs `SimpMessagingTemplate` injection, score-change detection, and push to `/topic/matches/live`
+- `GlobalExceptionHandler` — no global error handler yet
+- Swagger/OpenAPI — not configured
+- Dockerfile for the Spring Boot app (Docker Compose for infra exists, but the app itself isn't containerised)
 
 ---
 
-## Kanban — Next Sprint (tasks 31–53)
+## Remaining Tasks
 
-### Database & Seed
-- [ ] 31 Sign up / locate football-data.org API key
-- [ ] 32 Add key to `application-local.yml` ✅ done in this session
-- [ ] 33 Create local PostgreSQL database `onestopsports`
-- [ ] 34 `mvn spring-boot:run` — confirm Flyway migrations run
-- [ ] 35 Confirm DataLoader seeds 1 Sport, 3 Leagues, ~60 Teams, ~1000 Players
-- [ ] 36 Add `externalId` (Integer) field to `League.java`
-- [ ] 37 Write `V4__add_league_external_id.sql`
-- [ ] 38 Update `DataLoader` to store `competitionId` as `league.externalId`
-- [ ] 39 Add `findByExternalId(Integer)` to `LeagueRepository`
-- [ ] 40 Update `LeagueDto` to include `externalId`
+### Match Detail
+- [ ] Add `fetchMatchById(Long id)` to `ExternalApiService` (calls `/matches/{id}`)
+- [ ] Wire `MatchService.getMatchById()` to use it
+- [ ] Test `GET /api/matches/{id}`
 
-### Live Match Integration
-- [ ] 41 Write `ApiMatch → MatchDto` mapper in `ExternalApiService`
-- [ ] 42 Implement `fetchLiveMatchDtos()`
-- [ ] 43 Test `GET /api/matches/live`
-- [ ] 44 Write `ApiStandingEntry → StandingsEntryDto` mapper
-- [ ] 45 Implement `LeagueService.getStandings()` via `externalId`
-- [ ] 46 Test `GET /api/leagues/{id}/standings`
-- [ ] 47 Implement date filtering for matches
-- [ ] 48 Implement `getMatchesByLeagueAndDate()` end-to-end
-- [ ] 49 Test `GET /api/matches?league=1&date=2025-04-21`
+### WebSocket Live Push (TASK-17)
+- [ ] Inject `SimpMessagingTemplate` into `ExternalApiService`
+- [ ] Implement score-change detection in `refreshLiveMatchCache()`
+- [ ] Push diffs to `/topic/matches/live`
+- [ ] Test with Postman WebSocket client
 
-### WebSocket
-- [ ] 50 Inject `SimpMessagingTemplate` into `ExternalApiService`
-- [ ] 51 Implement score-change detection in `refreshLiveMatchCache()`
-- [ ] 52 Push to `/topic/matches/live`
-- [ ] 53 Test with Postman WebSocket client
-
----
-
-## UI Screens (designed, not yet built)
-| Screen | Description |
-|---|---|
-| Home feed | Match cards grouped by league, pill filters (All / Live / EPL / La Liga / UCL) |
-| Standings | League table with UCL / UEL / Relegation colour coding |
-| Match timeline | Reverse-chronological event list (goals, cards, subs) |
-| Match stats | Side-by-side bar charts (shots, possession, passes, discipline) |
-| Lineup | Top-down pitch SVG with both formations plotted |
-| My Teams | User profile, favourited teams, season stats |
+### Polish
+- [ ] `GlobalExceptionHandler` — consistent JSON error responses
+- [ ] Swagger/OpenAPI — auto-generated API docs
+- [ ] Dockerfile for the Spring Boot app + add `app` service to `docker-compose.yml`

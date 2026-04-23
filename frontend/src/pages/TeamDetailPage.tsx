@@ -10,8 +10,16 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { ChevronLeft, MapPin, Globe, Heart } from 'lucide-react'
 import type { PlayerDto } from '../types'
 
-// Position groups — flexible so non-football sports fall into 'Other'
-const POSITION_ORDER = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward', 'Other']
+// Position groups — covers both football and basketball.
+// Any position that doesn't match one of these falls into the 'Other' bucket.
+const POSITION_ORDER = [
+  // Football positions
+  'Goalkeeper', 'Defender', 'Midfielder', 'Forward',
+  // Basketball positions (mapped from balldontlie abbreviations in NbaDataLoader)
+  'Guard', 'Center', 'Guard-Forward', 'Forward-Center',
+  // Catch-all for anything else
+  'Other',
+]
 
 function groupByPosition(players: PlayerDto[]): Record<string, PlayerDto[]> {
   return players.reduce<Record<string, PlayerDto[]>>((acc, player) => {

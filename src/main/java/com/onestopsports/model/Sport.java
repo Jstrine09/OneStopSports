@@ -6,28 +6,31 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "sport")
-@Getter
-@Setter
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+// A Sport is the top-level category — e.g. "Football", "Basketball".
+// Everything else (leagues, teams, players) belongs to a sport.
+// Currently only Football is seeded, but the architecture supports adding more.
+@Entity                 // Marks this as a database table row
+@Table(name = "sport")  // Maps to the "sport" table in PostgreSQL
+@Getter                 // Lombok: auto-generates all getters (getSport(), etc.)
+@Setter                 // Lombok: auto-generates all setters
+@Builder                // Lombok: allows the builder pattern — Sport.builder().name("Football").build()
+@NoArgsConstructor      // Lombok: generates a no-args constructor (required by JPA)
+@AllArgsConstructor     // Lombok: generates a constructor with all fields (used by @Builder)
 public class Sport {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.IDENTITY) // DB auto-increments the ID (1, 2, 3...)
     private Long id;
 
-    @Column(nullable = false)
-    private String name;
+    @Column(nullable = false) // This column cannot be NULL in the database
+    private String name;      // e.g. "Football"
 
-    @Column(unique = true, nullable = false)
-    private String slug;
+    @Column(unique = true, nullable = false) // URL-friendly identifier, must be unique
+    private String slug;                     // e.g. "football"
 
-    private String iconUrl;
+    private String iconUrl; // URL to the sport's icon image
 
-    @CreationTimestamp
-    @Column(updatable = false)
+    @CreationTimestamp              // Hibernate automatically sets this to the current time when created
+    @Column(updatable = false)      // Once set, this value can never be updated
     private LocalDateTime createdAt;
 }

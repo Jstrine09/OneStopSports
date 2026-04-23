@@ -11,38 +11,67 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Collections;
 import java.util.List;
 
+// Handles business logic for Leagues.
+// For standings, it delegates to the appropriate external API:
+//   - Football leagues  → ExternalApiService (football-data.org)
+//   - Basketball leagues → NbaApiService (balldontlie.io)
+// Standings aren't stored in our database — they're always fetched live.
 @Service
 public class LeagueService {
 
-    private final LeagueRepository leagueRepository;
-    private final ExternalApiService externalApiService;
+    private final LeagueRepository   leagueRepository;
+    private final ExternalApiService externalApiService; // Football API
+    private final NbaApiService      nbaApiService;      // NBA API
 
-    public LeagueService(LeagueRepository leagueRepository, ExternalApiService externalApiService) {
-        this.leagueRepository = leagueRepository;
+    public LeagueService(LeagueRepository leagueRepository,
+                         ExternalApiService externalApiService,
+                         NbaApiService nbaApiService) {
+        this.leagueRepository   = leagueRepository;
         this.externalApiService = externalApiService;
+        this.nbaApiService      = nbaApiService;
     }
 
+    // Returns all leagues that belong to a given sport.
+    // Called by GET /api/sports/{slug}/leagues
     public List<LeagueDto> getLeaguesBySport(Long sportId) {
         return leagueRepository.findBySportId(sportId).stream()
                 .map(this::toDto)
                 .toList();
     }
 
+    // Returns a single league by its database ID, or throws 404 if it doesn't exist.
     public LeagueDto getLeagueById(Long id) {
         return leagueRepository.findById(id)
                 .map(this::toDto)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "League not found: " + id));
     }
 
+    // Returns the current standings table for a league.
+    // Routes to the correct API based on the league's sport:
+    //   - "basketball" → NbaApiService.fetchStandings()
+    //   - default (football) → ExternalApiService.fetchStandings() using the competition's externalId
     public List<StandingsEntryDto> getStandings(Long leagueId) {
         League league = leagueRepository.findById(leagueId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "League not found: " + leagueId));
+
+        // league.getSport() is lazy — Spring Boot's Open Session In View keeps the
+        // Hibernate session alive for the duration of the HTTP request, so this is safe
+        String sportSlug = league.getSport().getSlug();
+
+        if ("basketball".equals(sportSlug)) {
+            // NBA doesn't use externalId — the sport slug is enough to know which API to call
+            return nbaApiService.fetchStandings(league.getId());
+        }
+
+        // Football path — requires the football-data.org competition ID
         if (league.getExternalId() == null) {
             return Collections.emptyList();
         }
         return externalApiService.fetchStandings(league.getExternalId());
     }
 
+    // Converts a League database entity to a LeagueDto for the frontend.
+    // Note: league.getSport().getId() triggers a lazy load of the Sport — that's expected here.
     private LeagueDto toDto(League league) {
         return new LeagueDto(
                 league.getId(),
