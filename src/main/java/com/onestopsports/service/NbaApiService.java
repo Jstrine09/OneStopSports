@@ -156,6 +156,19 @@ public class NbaApiService {
             // Get the cursor for the next page — null means we're on the last page
             cursor = (page.meta() != null) ? page.meta().nextCursor() : null;
 
+            // If there are more pages, sleep before the next request.
+            // balldontlie returns historical players — franchises like the Lakers
+            // have 500+ all-time players across 5+ pages. Without this sleep,
+            // rapid-fire page requests trigger a 429 even with a slow outer loop.
+            if (cursor != null) {
+                try {
+                    Thread.sleep(2_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt(); // Restore the interrupted status
+                    break;
+                }
+            }
+
         } while (cursor != null); // Keep looping until there are no more pages
 
         return allPlayers;

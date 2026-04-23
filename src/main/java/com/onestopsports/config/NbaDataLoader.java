@@ -156,9 +156,9 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
             log.info("[NbaDataLoader]   Saved team: {}", team.getName());
 
             // ── 4. Players ────────────────────────────────────────────────────
-            // balldontlie free tier: 60 requests/minute (1/second).
-            // Sleep 1.1 seconds before each player fetch so we never exceed the limit.
-            // 30 teams × 1.1s = ~33 seconds total — a one-time cost on first boot.
+            // Sleep 7 seconds before each team's player fetch.
+            // If the team has more than 100 players (possible with historical data),
+            // NbaApiService.fetchPlayersByTeam() will also sleep 2s between each page.
             Thread.sleep(7_000);
             List<NbaPlayer> players = nbaApiService.fetchPlayersByTeam(apiTeam.id());
 
