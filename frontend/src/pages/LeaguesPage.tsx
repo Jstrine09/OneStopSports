@@ -155,7 +155,18 @@ export default function LeaguesPage() {
 
       {/* Tab content */}
       {activeTab === 'standings' ? (
-        loadingStandings ? <LoadingSpinner /> : <StandingsTable entries={standings} />
+        loadingStandings ? <LoadingSpinner /> : (
+          // showZones controls whether row shading + left border + legend appear.
+          // We show them only for domestic football leagues — the Champions League has no
+          // relegation/promotion zones, and basketball uses a completely different ranking system.
+          <StandingsTable
+            entries={standings}
+            showZones={
+              sportSlug === 'football' &&
+              !activeLeague?.name?.toLowerCase().includes('champions')
+            }
+          />
+        )
       ) : (
         loadingTeams ? (
           <LoadingSpinner />
