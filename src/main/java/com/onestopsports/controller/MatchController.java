@@ -46,8 +46,9 @@ public class MatchController {
     }
 
     // GET /api/matches/{id}
-    // Returns details for a single match.
-    // NOTE: Currently returns null — not yet implemented.
+    // Returns the full detail for a single match — teams, score, status, kick-off time.
+    // Used as a fallback when someone opens a match URL directly rather than tapping
+    // a match card (where the data is already passed via router state in the frontend).
     @GetMapping("/{id}")
     public ResponseEntity<MatchDto> getMatch(@PathVariable Long id) {
         return ResponseEntity.ok(matchService.getMatchById(id));

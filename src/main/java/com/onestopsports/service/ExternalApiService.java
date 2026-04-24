@@ -312,6 +312,27 @@ public class ExternalApiService {
         return events;
     }
 
+    /**
+     * Fetches a single match by its football-data.org match ID and returns it as a MatchDto.
+     * Returns null if the API returns nothing (e.g. unknown ID).
+     *
+     * We already call GET /matches/{id} in fetchMatchEventDtos() to get the event timeline.
+     * This method reuses the same endpoint but converts the response to a MatchDto instead,
+     * so MatchService.getMatchById() has a real result to return.
+     */
+    public MatchDto fetchMatchById(Long matchId) {
+        // GET /matches/{id} returns the full ApiMatchDetail which has all the same
+        // base fields as ApiMatch (id, teams, score, status, utcDate, competition)
+        // plus the events lists we parse separately in fetchMatchEventDtos.
+        ApiMatchDetail detail = restClient.get()
+                .uri("/matches/{id}", matchId)
+                .retrieve()
+                .body(ApiMatchDetail.class);
+
+        if (detail == null) return null;
+        return toMatchDtoFromDetail(detail);
+    }
+
     // ── Private Mapper Methods ────────────────────────────────────────────────
 
     // Converts a raw API match object into the MatchDto the frontend expects.
@@ -351,6 +372,47 @@ public class ExternalApiService {
 
         return new MatchDto(m.id(), home, away, homeScore, awayScore,
                 m.status(), startTime, dbLeagueId);
+    }
+
+    // Converts an ApiMatchDetail (returned by GET /matches/{id}) into a MatchDto.
+    // ApiMatchDetail has exactly the same base fields as ApiMatch — id, homeTeam, awayTeam,
+    // score, status, utcDate, competition — so the conversion logic is identical to toMatchDto().
+    // The only difference is that ApiMatchDetail also carries event lists (goals, bookings,
+    // substitutions) which we don't need here — those are handled by fetchMatchEventDtos().
+    private MatchDto toMatchDtoFromDetail(ApiMatchDetail detail) {
+        TeamDto home = new TeamDto(
+                detail.homeTeam().id(), detail.homeTeam().name(), detail.homeTeam().shortName(),
+                detail.homeTeam().crest(), null, null, null);
+
+        TeamDto away = new TeamDto(
+                detail.awayTeam().id(), detail.awayTeam().name(), detail.awayTeam().shortName(),
+                detail.awayTeam().crest(), null, null, null);
+
+        // Score is null for scheduled matches — guard against NPE before reading the goals
+        Integer homeScore = (detail.score() != null && detail.score().fullTime() != null)
+                ? detail.score().fullTime().home() : null;
+        Integer awayScore = (detail.score() != null && detail.score().fullTime() != null)
+                ? detail.score().fullTime().away() : null;
+
+        // Parse the UTC ISO string into a LocalDateTime for the frontend
+        LocalDateTime startTime = null;
+        if (detail.utcDate() != null) {
+            try {
+                startTime = OffsetDateTime.parse(detail.utcDate()).toLocalDateTime();
+            } catch (Exception ignored) { }
+        }
+
+        // Map the football-data.org competition ID to our internal DB league ID
+        // so the frontend can link back to the correct league page
+        Long dbLeagueId = null;
+        if (detail.competition() != null && detail.competition().id() != null) {
+            dbLeagueId = leagueRepository.findByExternalId(detail.competition().id())
+                    .map(league -> league.getId())
+                    .orElse(null);
+        }
+
+        return new MatchDto(detail.id(), home, away, homeScore, awayScore,
+                detail.status(), startTime, dbLeagueId);
     }
 
     // Converts one row of standings data from the API into a StandingsEntryDto.
