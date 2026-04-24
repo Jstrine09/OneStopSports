@@ -38,3 +38,13 @@ jwt:
 
 server:
   port: 8080
+
+# Swagger UI is served at http://localhost:8080/swagger-ui/index.html
+# The raw OpenAPI JSON spec is at http://localhost:8080/v3/api-docs
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html          # /swagger-ui.html redirects to /swagger-ui/index.html
+    operations-sorter: alpha        # Sort endpoints alphabetically so they're easy to scan
+    tags-sorter: alpha              # Sort controller groups alphabetically too
+  api-docs:
+    path: /v3/api-docs              # Where the raw JSON spec lives (used by external tools like Postman)

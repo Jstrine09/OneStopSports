@@ -69,10 +69,14 @@ public class MatchService {
         }).orElse(Collections.emptyList());
     }
 
-    // Returns a single match by its ID.
-    // TODO: not yet implemented — needs fetchMatchById() added to ExternalApiService.
+    // Returns a single match by its football-data.org match ID.
+    // Used when someone opens a match detail page directly via URL (/matches/123)
+    // rather than navigating from the scores list, where the match data was already
+    // passed through router state and this method wouldn't be needed.
+    // Returns null if the ID doesn't exist or the API returns nothing.
     public MatchDto getMatchById(Long id) {
-        return null;
+        if (id == null) return null;
+        return externalApiService.fetchMatchById(id);
     }
 
     // Returns all events (goals, cards, substitutions) for a specific match.
