@@ -135,13 +135,13 @@ public class NbaApiService {
      * teamId here is balldontlie's team ID (not our DB team ID).
      */
     public List<NbaPlayer> fetchPlayersByTeam(Long teamId) {
-        // We only want the CURRENT active roster — not historical players.
-        // balldontlie returns ALL players ever associated with a team by default,
-        // which can be 500+ for historic franchises like the Lakers.
-        // Adding season=2024 limits the response to the 2024-25 season only,
-        // giving us 15-17 active players per team — always a single page, no cursor loop needed.
-        // This reduces total API requests from 150+ down to exactly 30 (one per team).
-        String uri = "/players?team_ids[]=" + teamId + "&per_page=100&season=2024";
+        // Fetch only the first 25 players for this team.
+        // NBA active rosters are 15 players + up to 2 two-way contracts = 17 max,
+        // so per_page=25 captures the full current roster with a small buffer.
+        // Note: the /players endpoint does NOT support a season filter — balldontlie
+        // returns players sorted by most recent association, so the first page
+        // gives us current-season players without pulling in decades of history.
+        String uri = "/players?team_ids[]=" + teamId + "&per_page=25";
 
         NbaPlayersResponse page = restClient.get()
                 .uri(uri)
