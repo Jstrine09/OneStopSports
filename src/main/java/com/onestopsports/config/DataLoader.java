@@ -87,12 +87,14 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
 
     private void seed() throws InterruptedException {
 
-        // Find-or-create the Football sport — idempotent so it doesn't crash if Football already exists
-        // (which it will when we're only adding new leagues to an existing database)
+        // Find-or-create the Futbol sport — named "Futbol" (not "Football") to distinguish it
+        // from American Football (NFL) which will be added as a separate sport.
+        // The slug stays "football" so existing API routes (/api/sports/football/leagues) keep working.
+        // Idempotent: safe to call on every startup — skips creation if already present.
         Sport football = sportRepository.findBySlug("football")
                 .orElseGet(() -> sportRepository.save(
                         Sport.builder()
-                                .name("Football")
+                                .name("Futbol")
                                 .slug("football")
                                 .iconUrl("https://crests.football-data.org/FL.svg")
                                 .build()));

@@ -1,4 +1,4 @@
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchTeam, fetchTeamPlayers } from '../api/teams'
 import {
@@ -40,17 +40,30 @@ function calculateAge(dob: string | null): string {
 export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const { isAuthenticated } = useAuth()
 
-  // window.history.state.idx is React Router's internal position counter.
-  // idx === 0 means this is the very first page loaded in the app (e.g. direct URL open),
-  // so there's nothing meaningful to go back to — navigate to /leagues as a safe default.
-  // idx > 0 means the user navigated here from somewhere, so go back normally.
+  // When the Leagues page links to a team, it passes the active sport + league as router state.
+  // e.g. { fromLeagues: true, sportSlug: 'basketball', leagueId: 7 }
+  // We read that here so the Back button can return to exactly the right sport and tab.
+  const fromState = location.state as { fromLeagues?: boolean; sportSlug?: string; leagueId?: number } | null
+
   const handleBack = () => {
-    if ((window.history.state?.idx ?? 0) > 0) {
+    if (fromState?.fromLeagues && fromState.sportSlug) {
+      // The user came from the Leagues → Teams tab.
+      // Build the URL manually so we land back on the correct sport, league, AND tab=teams.
+      // Without this, the Leagues page would remount with its default state (football, standings).
+      const params = new URLSearchParams({ tab: 'teams', sport: fromState.sportSlug })
+      if (fromState.leagueId) params.set('league', String(fromState.leagueId))
+      navigate(`/leagues?${params.toString()}`)
+    } else if ((window.history.state?.idx ?? 0) > 0) {
+      // window.history.state.idx is React Router's internal page counter.
+      // If it's greater than 0, the user navigated here from somewhere — go back normally.
       navigate(-1)
     } else {
-      navigate('/leagues', { replace: true })
+      // idx === 0 means this was the first page loaded (e.g. direct URL / bookmark).
+      // There's nothing to go back to, so send them to Leagues as a safe landing page.
+      navigate('/leagues')
     }
   }
   const queryClient = useQueryClient()
