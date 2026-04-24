@@ -48,6 +48,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/**").permitAll()  // All GET requests are public (browsing the app)
                         .requestMatchers("/api/auth/**").permitAll()              // Login and register are always public
                         .requestMatchers("/ws/**").permitAll()                   // WebSocket endpoint is public
+                        // Swagger UI assets and the raw OpenAPI JSON spec must be public —
+                        // without this, Spring Security returns 401 and the UI never loads.
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/users/me/**").authenticated()     // Profile / favourites require login
                         .anyRequest().authenticated()                            // Everything else requires login
                 )
