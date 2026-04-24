@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    /* Prevent text size inflate on orientation change on iOS */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-900 text-white;
+    /* Remove default iOS tap highlight */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Smooth scrolling everywhere */
+  * {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  /* Padding that accounts for iPhone home indicator */
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  /* Hidden scrollbar but still scrollable */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

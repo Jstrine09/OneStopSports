@@ -22,3 +22,12 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Local config overrides — contain secrets, never commit
+application-local.yml
+application-local.properties
+src/main/resources/application-local.yml
+OneStopSports_Study_Guide.pdf
+
+# Maven build output
+target/
