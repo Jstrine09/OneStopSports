@@ -11,6 +11,7 @@
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/controller/LeagueController.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/controller/MatchController.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/controller/PlayerController.java
+/Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/controller/SearchController.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/controller/SportController.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/controller/TeamController.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/controller/UserController.java
@@ -24,6 +25,7 @@
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/dto/MatchEventDto.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/dto/PlayerDto.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/dto/RegisterRequest.java
+/Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/dto/SearchResultDto.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/dto/SportDto.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/dto/StandingsEntryDto.java
 /Users/james/Projects/OneStopSports/src/main/java/com/onestopsports/dto/TeamDto.java

@@ -5,9 +5,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.StandingsEntryDto;
 import com.onestopsports.dto.TeamDto;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -25,6 +28,8 @@ import java.util.List;
 // - Pagination: cursor-based (meta.next_cursor) instead of page numbers
 @Service
 public class NbaApiService {
+
+    private static final Logger log = LoggerFactory.getLogger(NbaApiService.class);
 
     // The pre-configured HTTP client — has the balldontlie base URL and Bearer token baked in
     private final RestClient restClient;
@@ -182,22 +187,33 @@ public class NbaApiService {
      * If we're before October, the current season hasn't started yet, so we use last year.
      */
     public List<StandingsEntryDto> fetchStandings(Long dbLeagueId) {
-        // Determine which season year to use
+        // Determine which season year to use.
+        // The NBA season straddles two calendar years (e.g. 2024-25 = season 2024).
+        // Before October → current season hasn't started → use last year's season.
+        // After October  → new season is underway → use this year.
         LocalDate today = LocalDate.now();
         int season = today.getMonthValue() < 10 ? today.getYear() - 1 : today.getYear();
 
-        NbaStandingsResponse response = restClient.get()
-                .uri("/standings?season=" + season)
-                .retrieve()
-                .body(NbaStandingsResponse.class);
+        try {
+            NbaStandingsResponse response = restClient.get()
+                    .uri("/standings?season=" + season)
+                    .retrieve()
+                    .body(NbaStandingsResponse.class);
 
-        if (response == null || response.data() == null) return Collections.emptyList();
+            if (response == null || response.data() == null) return Collections.emptyList();
 
-        // Sort by overall league rank before returning
-        return response.data().stream()
-                .sorted(Comparator.comparingInt(e -> e.overallRank() != null ? e.overallRank() : 999))
-                .map(e -> toStandingsEntryDto(e, dbLeagueId))
-                .toList();
+            // Sort by overall league rank before returning
+            return response.data().stream()
+                    .sorted(Comparator.comparingInt(e -> e.overallRank() != null ? e.overallRank() : 999))
+                    .map(e -> toStandingsEntryDto(e, dbLeagueId))
+                    .toList();
+
+        } catch (RestClientException e) {
+            // Log the actual balldontlie error so we can diagnose season/API issues.
+            // Return empty list rather than crashing — frontend shows "No standings available".
+            log.warn("[NbaApiService] fetchStandings failed for season={}: {}", season, e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     // ── Private Mapper Methods ────────────────────────────────────────────────

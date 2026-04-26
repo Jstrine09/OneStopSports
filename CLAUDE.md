@@ -36,9 +36,9 @@ com.onestopsports
 │   ├── DataLoader.java             Seeds football DB from football-data.org on first boot
 │   └── NbaDataLoader.java          Seeds NBA teams + rosters from balldontlie.io on first boot
 ├── controller/
-│   ├── Sport, League, Team, Player, Match, Auth, User controllers
+│   ├── Sport, League, Team, Player, Match, Auth, User, Search controllers
 │   └── GlobalExceptionHandler.java @RestControllerAdvice — consistent JSON error responses
-├── dto/                            13 Java records (includes ErrorResponseDto)
+├── dto/                            14 Java records (includes ErrorResponseDto, SearchResultDto)
 ├── model/                          7 JPA entities
 ├── repository/                     7 JpaRepository interfaces
 ├── security/
@@ -46,7 +46,7 @@ com.onestopsports
 │   └── JwtAuthFilter.java
 └── service/
     ├── Sport, League, Team, Player, Match, Auth, User services
-    ├── ExternalApiService.java     Football API + WebSocket live push scheduler
+    ├── ExternalApiService.java     Football API — teams, matches, standings, events (pure football, no scheduler)
     └── NbaApiService.java          NBA API (balldontlie.io) — teams, rosters, scores, standings
 ```
 
@@ -104,13 +104,26 @@ com.onestopsports
 - NBA teams have no crestUrl or stadium (not on free tier) — frontend handles null gracefully with abbreviation fallback
 
 ### WebSocket Live Push
-- `ExternalApiService.refreshLiveMatchCache()` runs every 30s via `@Scheduled(fixedDelay = 30_000)`
+- `MatchService.refreshLiveMatchCache()` runs every 30s via `@Scheduled(fixedDelay = 30_000)` — scheduler moved from `ExternalApiService` to `MatchService` because `MatchService` owns the combined "all sports" live feed
+- Fetches football live matches via `ExternalApiService.fetchLiveMatchDtos()` AND NBA live games via `fetchNbaLiveMatches()` (today's games filtered to `status=LIVE`)
 - Maintains `previousSnapshot: Map<Long, String>` (matchId → "homeScore:awayScore:status")
 - Only pushes when something changes — avoids flooding clients on quiet ticks
 - On change: writes fresh data into Redis via `cacheManager.getCache("matches").put(SimpleKey.EMPTY, current)` AND broadcasts via `messagingTemplate.convertAndSend("/topic/matches/live", current)`
-- Frontend: `useLiveScores` hook (`@stomp/stompjs` + SockJS) subscribes to `/topic/matches/live`, calls `queryClient.setQueryData(["matches","live"], matches)` for instant re-render
+- `LeagueRepository.findBySport_Slug("basketball")` — new derived query used to find basketball leagues without a second round-trip through SportRepository
+- Frontend: `useLiveScores` hook (`@stomp/stompjs`) subscribes to `/topic/matches/live`, calls `queryClient.setQueryData(["matches","live"], matches)` for instant re-render
 - Vite proxy has `ws: true` on `/ws` so WebSocket connections are forwarded to the backend in dev
 - REST polling on LivePage reduced to 60s as a fallback — WebSocket is the primary update path
+- `getMatchState("LIVE")` added to frontend `types/index.ts` — NBA in-progress games use "LIVE" status (not football's "IN_PLAY"), needed for green score highlighting in MatchCard
+
+### Redis / Jackson
+- `RedisConfig` uses a custom `ObjectMapper` with `JavaTimeModule` + `DefaultTyping.EVERYTHING` — the no-arg `GenericJackson2JsonRedisSerializer` uses a bare ObjectMapper that cannot handle `LocalDateTime`, causing 500 when any live match with a `startTime` is cached
+- `WebSocketConfig` overrides `configureMessageConverters` to inject Spring Boot's auto-configured `ObjectMapper` — same root cause: the default STOMP converter also creates a bare ObjectMapper
+
+### Global Search
+- `GET /api/search?q={query}` (min 2 chars) — returns `SearchResultDto(teams, players)` — up to 8 teams + 10 players
+- `TeamRepository.findByNameContainingIgnoreCase` + `PlayerRepository.findByNameContainingIgnoreCase` — Spring Data derived queries generate `LIKE %query%` SQL
+- `SearchController` + `SearchResultDto` (new DTO) + `searchTeams`/`searchPlayers` in existing services
+- Frontend: `SearchPage` at `/search` with React Query (`enabled: q.length >= 2`), Search nav item added to both `Sidebar` and `BottomNav`
 
 ### Swagger / OpenAPI
 - `springdoc-openapi-starter-webmvc-ui:2.8.5` — auto-generates docs from `@RestController` classes
@@ -184,7 +197,8 @@ GET  /api/teams/{id}
 GET  /api/teams/{id}/players
 GET  /api/players/{id}
 GET  /api/matches?league={id}&date={date}
-GET  /api/matches/live                       @Cacheable("matches") — also pushed via WebSocket
+GET  /api/matches/live                       @Cacheable("matches") — football + NBA combined; also pushed via WebSocket
+GET  /api/search?q={query}                   Global search — returns teams + players (min 2 chars, max 8 teams + 10 players)
 GET  /api/matches/{id}
 GET  /api/matches/{id}/events
 GET  /api/matches/{id}/stats                 Returns Map.of() — not in free tier
@@ -268,8 +282,8 @@ http://localhost:8080/swagger-ui/index.html
 - `AuthControllerTest` (7 @WebMvcTest slice tests — all passing)
 - `UserService` (favorites CRUD — teams + players)
 - `SportService`, `LeagueService`, `TeamService`, `PlayerService` (full DB-backed)
-- `MatchService`: `getLiveMatches()`, `getMatchesByLeagueAndDate()`, `getMatchEvents()`, `getMatchById()`
-- `ExternalApiService` — all football API records, mappers, fetch methods, WebSocket live push scheduler
+- `MatchService`: `getLiveMatches()` (football + NBA combined), `getMatchesByLeagueAndDate()`, `getMatchEvents()`, `getMatchById()`, `refreshLiveMatchCache()` scheduler
+- `ExternalApiService` — all football API records, mappers, fetch methods (scheduler moved to MatchService)
 - `NbaApiService` — all NBA API records, cursor pagination, `fetchGameDtosByDate`, `fetchStandings`
 - `NbaDataLoader` — seeds Basketball sport, NBA league, all 30 teams + rosters
 - All 7 REST controllers — all endpoints wired
@@ -278,9 +292,11 @@ http://localhost:8080/swagger-ui/index.html
 - Swagger/OpenAPI at `/swagger-ui/index.html`
 - `docker-compose.yml` — postgres:16-alpine + redis:7-alpine with healthchecks
 - `.env.example` at project root
-- React frontend — 8 pages, 4 components + `useLiveScores` WebSocket hook, JWT Axios interceptor, React Query, Tailwind, responsive layout
+- React frontend — 9 pages, 4 components + `useLiveScores` WebSocket hook, JWT Axios interceptor, React Query, Tailwind, responsive layout
 - Standings table — color zone indicators (`showZones` prop, no shading for UCL / basketball)
 - Multi-sport frontend: Basketball leagues + teams visible alongside Futbol
+- `SearchPage` at `/search` — global team + player search, debounced via React Query `enabled`, Search in both nav bars
+- Live page shows both football and NBA in-progress games
 
 ### 🔲 Stubbed (returns empty — free tier limitation)
 - `MatchService.getMatchStats()` — returns `Map.of()` (match stats not in football-data.org free tier)
@@ -296,3 +312,4 @@ http://localhost:8080/swagger-ui/index.html
 ### Polish / Nice-to-have
 - [ ] Dockerfile for the Spring Boot app + add `app` service to `docker-compose.yml`
 - [ ] NFL (American Football) sport — next sport to add after NBA pattern is established
+- [ ] Pre-existing TypeScript errors: `PlayerDetailPage.tsx(83)` null type mismatch, `TeamDetailPage.tsx(33)` unused `calculateAge`

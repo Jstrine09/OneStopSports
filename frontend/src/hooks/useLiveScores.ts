@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { Client } from '@stomp/stompjs'
-import SockJS from 'sockjs-client'
 import type { MatchDto } from '../types'
 
 // useLiveScores connects to the backend's WebSocket endpoint and subscribes to
@@ -12,7 +11,7 @@ import type { MatchDto } from '../types'
 //
 // How it works end-to-end:
 // 1. Backend scheduler (ExternalApiService.refreshLiveMatchCache) runs every 30s
-// 2. It fetches live matches, compares them to the previous snapshot
+// 2. It fetches live matches and compares them to the previous snapshot
 // 3. If any score or status changed, it calls messagingTemplate.convertAndSend(...)
 // 4. Spring's STOMP broker broadcasts the message to all subscribers
 // 5. This hook receives it and calls the onUpdate callback
@@ -20,12 +19,19 @@ import type { MatchDto } from '../types'
 // 7. React re-renders the score cards instantly — no polling needed
 export function useLiveScores(onUpdate: (matches: MatchDto[]) => void) {
   useEffect(() => {
-    // Create the STOMP client.
-    // webSocketFactory uses SockJS so the connection works even if the browser
-    // doesn't support native WebSockets (SockJS falls back to long-polling).
-    // The URL /ws is proxied by Vite in dev → http://localhost:8080/ws
+    // Derive the WebSocket URL from the current browser location so this works
+    // in both development (localhost:3000 → proxied by Vite to localhost:8080)
+    // and production (same host, just different protocol: https → wss).
+    // We use a plain ws:// URL — no SockJS needed, all modern browsers support
+    // native WebSocket and @stomp/stompjs works with it out of the box.
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const brokerURL = `${wsProtocol}//${window.location.host}/ws`
+
+    // Create the STOMP client with a native WebSocket URL.
+    // brokerURL tells @stomp/stompjs to connect directly via WebSocket,
+    // without any SockJS handshake overhead.
     const client = new Client({
-      webSocketFactory: () => new SockJS('/ws'), // SockJS handles the HTTP→WS upgrade
+      brokerURL,
 
       // Reconnect automatically if the connection drops (network blip, server restart, etc.)
       // reconnectDelay is in milliseconds — 5 s is a sensible default
@@ -41,15 +47,14 @@ export function useLiveScores(onUpdate: (matches: MatchDto[]) => void) {
             const matches: MatchDto[] = JSON.parse(message.body)
             onUpdate(matches)
           } catch {
-            // Malformed message — ignore and wait for the next tick
+            // Malformed message — log and wait for the next tick
             console.warn('[useLiveScores] Could not parse WebSocket message:', message.body)
           }
         })
       },
 
       onStompError: (frame) => {
-        // Log STOMP-level errors (e.g. authentication failure on a protected broker)
-        // so they're visible in the browser console during debugging
+        // Log STOMP-level errors so they're visible in the browser console during debugging
         console.error('[useLiveScores] STOMP error:', frame.headers['message'])
       },
     })

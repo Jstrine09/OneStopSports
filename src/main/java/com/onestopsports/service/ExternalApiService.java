@@ -6,14 +6,7 @@ import com.onestopsports.dto.MatchEventDto;
 import com.onestopsports.dto.StandingsEntryDto;
 import com.onestopsports.dto.TeamDto;
 import com.onestopsports.repository.LeagueRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.interceptor.SimpleKey;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -24,9 +17,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 // This service is the only part of the app that talks to the football-data.org API.
 // Everything else (matches, standings, events) goes through here.
@@ -34,10 +24,11 @@ import java.util.stream.Collectors;
 //
 // API base URL: https://api.football-data.org/v4
 // Rate limit on the free tier: 10 requests per minute
+//
+// The live-score refresh scheduler used to live here but was moved to MatchService,
+// which owns the combined "all sports" live feed (football + NBA).
 @Service
 public class ExternalApiService {
-
-    private static final Logger log = LoggerFactory.getLogger(ExternalApiService.class);
 
     // The pre-configured HTTP client — has the base URL and API key baked in
     private final RestClient restClient;
@@ -45,36 +36,19 @@ public class ExternalApiService {
     // Used to convert football-data.org competition IDs into our internal DB league IDs
     private final LeagueRepository leagueRepository;
 
-    // Pushes messages to all connected WebSocket clients subscribed to /topic/matches/live
-    private final SimpMessagingTemplate messagingTemplate;
-
-    // Used to manually update the Redis "matches" cache entry after a score change,
-    // so the next REST call to GET /matches/live returns fresh data without an extra API call
-    private final CacheManager cacheManager;
-
-    // Tracks the last-seen score state for every live match.
-    // Key = match ID, Value = "homeScore:awayScore:status" snapshot string.
-    // If any entry differs between ticks, we know a score or status has changed.
-    // ConcurrentHashMap is thread-safe — the @Scheduled method runs on a background thread.
-    private volatile Map<Long, String> previousSnapshot = new ConcurrentHashMap<>();
-
     // Values are injected from application-local.yml (the file that's gitignored for security)
     public ExternalApiService(
             @Value("${external-api.football-data.base-url}") String baseUrl,
             @Value("${external-api.football-data.api-key}") String apiKey,
-            LeagueRepository leagueRepository,
-            SimpMessagingTemplate messagingTemplate,
-            CacheManager cacheManager) {
+            LeagueRepository leagueRepository) {
 
         // Build the RestClient once at startup with the base URL and auth header pre-set.
         // Every API call will automatically include "X-Auth-Token: <your key>".
-        this.restClient = RestClient.builder()
+        this.restClient       = RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("X-Auth-Token", apiKey)
                 .build();
-        this.leagueRepository   = leagueRepository;
-        this.messagingTemplate  = messagingTemplate;
-        this.cacheManager       = cacheManager;
+        this.leagueRepository = leagueRepository;
     }
 
     // ── API Response Records ──────────────────────────────────────────────────
@@ -462,50 +436,4 @@ public class ExternalApiService {
                 entry.points());
     }
 
-    // ── Scheduled Tasks ───────────────────────────────────────────────────────
-
-    // Runs every 30 seconds on a background thread (Spring's task scheduler).
-    // Fetches the current live matches from football-data.org, compares them to the
-    // last known state, and — if anything changed — pushes the updated list to all
-    // connected WebSocket clients and refreshes the Redis cache.
-    //
-    // Why compare before pushing?
-    // Pushing on every tick would flood clients even when nothing has changed.
-    // We only push when a score or match status actually changes.
-    @Scheduled(fixedDelay = 30_000)
-    public void refreshLiveMatchCache() {
-        try {
-            List<MatchDto> current = fetchLiveMatchDtos();
-
-            // Build a snapshot: matchId → "homeScore:awayScore:status"
-            // Null scores (scheduled matches) are represented as "null" in the string
-            Map<Long, String> snapshot = current.stream()
-                    .collect(Collectors.toMap(
-                            MatchDto::id,
-                            m -> m.homeScore() + ":" + m.awayScore() + ":" + m.status()));
-
-            // Only act if something actually changed since the last check
-            if (!snapshot.equals(previousSnapshot)) {
-                previousSnapshot = snapshot; // Update our reference point for next tick
-
-                // Write the fresh match list directly into the Redis cache.
-                // SimpleKey.EMPTY is the key Spring uses for @Cacheable methods with no arguments —
-                // i.e. MatchService.getLiveMatches(). This avoids an extra API call on the next REST request.
-                Cache cache = cacheManager.getCache("matches");
-                if (cache != null) {
-                    cache.put(SimpleKey.EMPTY, current);
-                }
-
-                // Broadcast the updated match list to every client subscribed to this topic.
-                // Spring's STOMP broker serialises the list to JSON automatically.
-                messagingTemplate.convertAndSend("/topic/matches/live", current);
-                log.info("[refreshLiveMatchCache] Score change detected — pushed {} live matches via WebSocket",
-                        current.size());
-            }
-        } catch (Exception e) {
-            // Don't let a transient API failure crash the scheduler thread.
-            // The next tick will retry automatically.
-            log.warn("[refreshLiveMatchCache] Failed to refresh: {}", e.getMessage());
-        }
-    }
 }
