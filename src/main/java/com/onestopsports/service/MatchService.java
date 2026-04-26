@@ -3,6 +3,7 @@ package com.onestopsports.service;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.MatchEventDto;
 import com.onestopsports.model.League;
+import com.onestopsports.service.NflApiService;
 import com.onestopsports.repository.LeagueRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +39,7 @@ public class MatchService {
 
     private final ExternalApiService externalApiService;
     private final NbaApiService      nbaApiService;
+    private final NflApiService      nflApiService;
     private final LeagueRepository   leagueRepository; // Used to look up a league before calling the right API
 
     // Pushes score updates to all connected WebSocket clients subscribed to /topic/matches/live
@@ -55,30 +57,32 @@ public class MatchService {
 
     public MatchService(ExternalApiService externalApiService,
                         NbaApiService nbaApiService,
+                        NflApiService nflApiService,
                         LeagueRepository leagueRepository,
                         SimpMessagingTemplate messagingTemplate,
                         CacheManager cacheManager) {
         this.externalApiService = externalApiService;
         this.nbaApiService      = nbaApiService;
+        this.nflApiService      = nflApiService;
         this.leagueRepository   = leagueRepository;
         this.messagingTemplate  = messagingTemplate;
         this.cacheManager       = cacheManager;
     }
 
-    // Returns all currently live matches across ALL sports (football + NBA).
+    // Returns all currently live matches across ALL sports (football + NBA + NFL).
     // @Cacheable("matches") means the first call fetches from the APIs and stores the result in Redis.
     // Subsequent calls within 30 seconds return the cached result without hitting the APIs again.
     @Cacheable("matches")
     public List<MatchDto> getLiveMatches() {
-        // Football live matches from football-data.org
+        // Football (soccer) live matches from football-data.org
         List<MatchDto> football = externalApiService.fetchLiveMatchDtos();
 
-        // NBA live matches — today's games filtered to those currently in progress
-        List<MatchDto> nba = fetchNbaLiveMatches();
+        // NBA + NFL — today's games for each sport, filtered to currently in-progress
+        List<MatchDto> otherSports = fetchNonFootballLiveMatches();
 
-        // Combine both sports into one list for the frontend
+        // Combine all sports into one list for the frontend
         List<MatchDto> all = new ArrayList<>(football);
-        all.addAll(nba);
+        all.addAll(otherSports);
         return all;
     }
 
@@ -102,8 +106,11 @@ public class MatchService {
                 case "basketball" ->
                     // NBA: pass our DB league ID so returned MatchDtos can link back to this league
                     nbaApiService.fetchGameDtosByDate(date, league.getId());
+                case "american-football" ->
+                    // NFL: ESPN scoreboard uses YYYYMMDD date format — handled inside NflApiService
+                    nflApiService.fetchGameDtosByDate(date, league.getId());
                 default ->
-                    // Football: needs the football-data.org competition ID
+                    // Football (soccer): needs the football-data.org competition ID
                     league.getExternalId() != null
                         ? externalApiService.fetchMatchDtosByCompetition(league.getExternalId(), date)
                         : Collections.<MatchDto>emptyList();
@@ -152,13 +159,13 @@ public class MatchService {
     @Scheduled(fixedDelay = 30_000)
     public void refreshLiveMatchCache() {
         try {
-            // Fetch live matches from both sports
-            List<MatchDto> footballLive = externalApiService.fetchLiveMatchDtos();
-            List<MatchDto> nbaLive      = fetchNbaLiveMatches();
+            // Fetch live matches from all sports
+            List<MatchDto> footballLive   = externalApiService.fetchLiveMatchDtos();
+            List<MatchDto> otherSportsLive = fetchNonFootballLiveMatches();
 
             // Combine into one list
             List<MatchDto> current = new ArrayList<>(footballLive);
-            current.addAll(nbaLive);
+            current.addAll(otherSportsLive);
 
             // Build a snapshot: matchId → "homeScore:awayScore:status"
             // Null scores (scheduled matches) are represented as "null" in the string.
@@ -184,7 +191,7 @@ public class MatchService {
                 // Spring's STOMP broker serialises the list to JSON automatically.
                 messagingTemplate.convertAndSend("/topic/matches/live", current);
                 log.info("[refreshLiveMatchCache] Score change detected — pushed {} live match(es) via WebSocket " +
-                        "(football={}, nba={})", current.size(), footballLive.size(), nbaLive.size());
+                        "(football={}, other={})", current.size(), footballLive.size(), otherSportsLive.size());
             }
         } catch (Exception e) {
             // Don't let a transient API failure kill the scheduler thread.
@@ -195,23 +202,27 @@ public class MatchService {
 
     // ── Private Helpers ───────────────────────────────────────────────────────
 
-    // Fetches today's NBA games and returns only the ones that are currently live.
-    // Looks up every "basketball" league in the DB so it works even if more
-    // basketball leagues are added in the future (e.g. EuroLeague).
-    private List<MatchDto> fetchNbaLiveMatches() {
+    // Fetches today's games across all non-football sports and returns only the live ones.
+    // Currently covers NBA (basketball) and NFL (american-football).
+    // Adding a new sport just requires adding another block here with the correct slug + service.
+    private List<MatchDto> fetchNonFootballLiveMatches() {
         List<MatchDto> liveGames = new ArrayList<>();
 
-        // leagueRepository.findBySport_Slug generates a JOIN query — no lazy-loading issues
-        List<League> basketballLeagues = leagueRepository.findBySport_Slug("basketball");
+        // NBA — filter balldontlie games to those currently in progress
+        // leagueRepository.findBySport_Slug generates a SQL JOIN — no Hibernate lazy-load issues
+        leagueRepository.findBySport_Slug("basketball").forEach(league ->
+                nbaApiService.fetchGameDtosByDate(LocalDate.now(), league.getId())
+                        .stream()
+                        .filter(m -> "LIVE".equals(m.status()))
+                        .forEach(liveGames::add));
 
-        for (League league : basketballLeagues) {
-            // Fetch all of today's games for this league, then keep only the live ones.
-            // NbaApiService.mapStatus() returns "LIVE" for in-progress games.
-            nbaApiService.fetchGameDtosByDate(LocalDate.now(), league.getId())
-                    .stream()
-                    .filter(m -> "LIVE".equals(m.status()))
-                    .forEach(liveGames::add);
-        }
+        // NFL — filter ESPN scoreboard games to those currently in progress
+        // In the off-season (Apr–Aug) this returns an empty list, which is expected
+        leagueRepository.findBySport_Slug("american-football").forEach(league ->
+                nflApiService.fetchGameDtosByDate(LocalDate.now(), league.getId())
+                        .stream()
+                        .filter(m -> "LIVE".equals(m.status()))
+                        .forEach(liveGames::add));
 
         return liveGames;
     }

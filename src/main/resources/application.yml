@@ -31,6 +31,10 @@ external-api:
   nba:
     base-url: https://api.balldontlie.io/v1
     api-key: YOUR_NBA_KEY_HERE  # override in application-local.yml — get your free key at balldontlie.io
+  nfl:
+    # ESPN's unofficial public API — no API key required.
+    # This is an undocumented but widely-used endpoint. It's stable but not officially supported.
+    base-url: https://site.api.espn.com/apis/site/v2/sports/football/nfl
 
 jwt:
   secret: bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u

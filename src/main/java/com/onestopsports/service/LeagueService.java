@@ -13,6 +13,13 @@ import java.util.List;
 
 // Handles business logic for Leagues.
 // For standings, it delegates to the appropriate external API:
+//   - Football leagues       → ExternalApiService (football-data.org)
+//   - Basketball leagues     → NbaApiService (balldontlie.io)
+//   - American football (NFL) → NflApiService (ESPN unofficial API)
+// Standings aren't stored in our database — they're always fetched live.
+
+// Handles business logic for Leagues.
+// For standings, it delegates to the appropriate external API:
 //   - Football leagues  → ExternalApiService (football-data.org)
 //   - Basketball leagues → NbaApiService (balldontlie.io)
 // Standings aren't stored in our database — they're always fetched live.
@@ -20,15 +27,18 @@ import java.util.List;
 public class LeagueService {
 
     private final LeagueRepository   leagueRepository;
-    private final ExternalApiService externalApiService; // Football API
+    private final ExternalApiService externalApiService; // Football (soccer) API
     private final NbaApiService      nbaApiService;      // NBA API
+    private final NflApiService      nflApiService;      // NFL API (ESPN)
 
     public LeagueService(LeagueRepository leagueRepository,
                          ExternalApiService externalApiService,
-                         NbaApiService nbaApiService) {
+                         NbaApiService nbaApiService,
+                         NflApiService nflApiService) {
         this.leagueRepository   = leagueRepository;
         this.externalApiService = externalApiService;
         this.nbaApiService      = nbaApiService;
+        this.nflApiService      = nflApiService;
     }
 
     // Returns all leagues that belong to a given sport.
@@ -59,11 +69,16 @@ public class LeagueService {
         String sportSlug = league.getSport().getSlug();
 
         if ("basketball".equals(sportSlug)) {
-            // NBA doesn't use externalId — the sport slug is enough to know which API to call
+            // NBA: balldontlie standings (returns empty on free tier — that's expected)
             return nbaApiService.fetchStandings(league.getId());
         }
 
-        // Football path — requires the football-data.org competition ID
+        if ("american-football".equals(sportSlug)) {
+            // NFL: ESPN standings — returns empty in the off-season (May–August)
+            return nflApiService.fetchStandings(league.getId());
+        }
+
+        // Football (soccer) path — requires the football-data.org competition ID
         if (league.getExternalId() == null) {
             return Collections.emptyList();
         }

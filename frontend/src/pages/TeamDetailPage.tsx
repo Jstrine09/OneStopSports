@@ -10,13 +10,22 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { ChevronLeft, MapPin, Globe, Heart } from 'lucide-react'
 import type { PlayerDto } from '../types'
 
-// Position groups — covers both football and basketball.
+// Position groups — covers football (soccer), basketball, and American football (NFL).
 // Any position that doesn't match one of these falls into the 'Other' bucket.
 const POSITION_ORDER = [
-  // Football positions
+  // Football (soccer)
   'Goalkeeper', 'Defender', 'Midfielder', 'Forward',
-  // Basketball positions (mapped from balldontlie abbreviations in NbaDataLoader)
-  'Guard', 'Center', 'Guard-Forward', 'Forward-Center',
+  // Basketball (mapped from balldontlie abbreviations in NbaDataLoader)
+  'Guard', 'Guard-Forward', 'Forward-Center', 'Center',
+  // NFL offense
+  'Quarterback', 'Running Back', 'Fullback', 'Wide Receiver', 'Tight End',
+  'Offensive Tackle', 'Offensive Guard',
+  // NFL defense
+  'Defensive End', 'Defensive Tackle', 'Linebacker',
+  'Outside Linebacker', 'Inside Linebacker', 'Middle Linebacker',
+  'Cornerback', 'Safety', 'Free Safety', 'Strong Safety',
+  // NFL special teams
+  'Kicker', 'Punter', 'Long Snapper',
   // Catch-all for anything else
   'Other',
 ]
