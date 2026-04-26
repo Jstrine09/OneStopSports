@@ -17,7 +17,7 @@
 | Cache | Redis (30s TTL on live matches) |
 | Auth | Spring Security 6 + JWT (jjwt 0.12.x) |
 | Real-time | Spring WebSocket (STOMP) — fully wired; server pushes score changes to `/topic/matches/live` |
-| External APIs | football-data.org v4 (football) + balldontlie.io v1 (NBA) via `RestClient` |
+| External APIs | football-data.org v4 (football) + ESPN unofficial API (NBA + NFL) via `RestClient` |
 | DTO mapping | Java 21 records + MapStruct |
 | Frontend | React 18 + TypeScript 5.5 + Vite 5.4 + Tailwind 3.4 + React Query v5 + @stomp/stompjs |
 | Infra | Docker Compose (postgres:16-alpine + redis:7-alpine) |
@@ -34,7 +34,7 @@ com.onestopsports
 │   ├── WebSocketConfig.java
 │   ├── OpenApiConfig.java          Swagger/OpenAPI setup — JWT Bearer auth scheme for Swagger UI
 │   ├── DataLoader.java             Seeds football DB from football-data.org on first boot
-│   └── NbaDataLoader.java          Seeds NBA teams + rosters from balldontlie.io on first boot
+│   └── NbaDataLoader.java          Seeds NBA teams + rosters from ESPN on first boot (migrates balldontlie logos)
 ├── controller/
 │   ├── Sport, League, Team, Player, Match, Auth, User, Search controllers
 │   └── GlobalExceptionHandler.java @RestControllerAdvice — consistent JSON error responses
@@ -47,7 +47,7 @@ com.onestopsports
 └── service/
     ├── Sport, League, Team, Player, Match, Auth, User services
     ├── ExternalApiService.java     Football API — teams, matches, standings, events (pure football, no scheduler)
-    └── NbaApiService.java          NBA API (balldontlie.io) — teams, rosters, scores, standings
+    └── NbaApiService.java          NBA API (ESPN) — teams with logos, rosters, scores, standings
 ```
 
 ---
@@ -87,7 +87,7 @@ com.onestopsports
 - Uses `RestClient` (Spring 6, synchronous) — **not** `WebClient`
 - API keys live in `application-local.yml` (gitignored) — never in `application.yml`
 - **Football** (football-data.org): `X-Auth-Token` header auth, 10 req/min free tier → `DataLoader` sleeps 6.2s between competitions
-- **NBA** (balldontlie.io): `Authorization: Bearer <key>` header auth, cursor-based pagination (`meta.next_cursor`)
+- **NBA** (ESPN unofficial): no API key needed — same public ESPN API as NFL; uses two base URLs (main + standings subdomain)
 
 ### Multi-Sport Routing
 - DB schema is sport-agnostic: `sport → league → team → player`
@@ -98,10 +98,14 @@ com.onestopsports
 
 ### NBA Data
 - `NbaDataLoader` seeds: 1 Sport (Basketball) → 1 League (NBA) → 30 Teams → full rosters
-- Skip condition: checks if all 30 teams already exist — partial seeds resume from where they left off
-- `NbaApiService` inner records mirror balldontlie's JSON: `NbaTeam`, `NbaPlayer`, `NbaGame`, `NbaStandingEntry`
-- Position mapping: `"G"→"Guard"`, `"F"→"Forward"`, `"C"→"Center"`, `"G-F"→"Guard-Forward"`, `"F-C"→"Forward-Center"`
-- NBA teams have no crestUrl or stadium (not on free tier) — frontend handles null gracefully with abbreviation fallback
+- Skip condition: all 30 teams exist AND at least one has a crestUrl (ESPN-sourced) — if crestUrls are all null (old balldontlie data), re-runs to update logos
+- Migration: on first boot after switching from balldontlie, loader updates all 30 teams' `crestUrl` fields with ESPN CDN URLs; existing players are not re-seeded
+- `NbaApiService` inner records mirror ESPN's JSON: `EspnTeam`, `EspnAthlete`, `EspnEvent`, `EspnStandingsEntry` — same pattern as `NflApiService`
+- NBA ESPN roster: `athletes` is a flat array (unlike NFL which groups by offense/defense/specialTeam)
+- Positions are already full names from ESPN ("Center", "Guard", "Forward") — no abbreviation-to-full mapping needed
+- NBA teams now have `crestUrl` from ESPN CDN (e.g. `https://a.espncdn.com/i/teamlogos/nba/500/bos.png`)
+- `dateOfBirth` is populated from ESPN (ISO-8601 string parsed to `LocalDate`) — NBA players now have DOB
+- Standings use `site.web.api.espn.com/apis/v2` (different subdomain from main API) — separate `standingsClient` RestClient in `NbaApiService`
 
 ### WebSocket Live Push
 - `MatchService.refreshLiveMatchCache()` runs every 30s via `@Scheduled(fixedDelay = 30_000)` — scheduler moved from `ExternalApiService` to `MatchService` because `MatchService` owns the combined "all sports" live feed
@@ -165,10 +169,12 @@ ApiStandingsResponse, ApiStandingGroup, ApiStandingEntry
 ApiMatchDetail, ApiGoal, ApiBooking, ApiSubstitution, ApiPlayerRef
 ```
 
-**NBA (`NbaApiService`):**
+**NBA (`NbaApiService`) — ESPN-based:**
 ```
-NbaTeamsResponse, NbaTeam, NbaPlayersResponse, NbaMeta, NbaPlayer
-NbaGamesResponse, NbaGame, NbaStandingsResponse, NbaStandingEntry
+EspnTeamsResponse, EspnSport, EspnLeague, EspnTeamEntry, EspnTeam, EspnLogo
+EspnRosterResponse, EspnAthlete, EspnAthletePosition, EspnBirthPlace
+EspnScoreboardResponse, EspnEvent, EspnEventStatus, EspnStatusType, EspnCompetition, EspnCompetitor, EspnCompTeam
+EspnStandingsResponse, EspnConference, EspnStandingsSection, EspnStandingsEntry, EspnStandingsTeam, EspnStat
 ```
 
 ---
@@ -284,8 +290,8 @@ http://localhost:8080/swagger-ui/index.html
 - `SportService`, `LeagueService`, `TeamService`, `PlayerService` (full DB-backed)
 - `MatchService`: `getLiveMatches()` (football + NBA combined), `getMatchesByLeagueAndDate()`, `getMatchEvents()`, `getMatchById()`, `refreshLiveMatchCache()` scheduler
 - `ExternalApiService` — all football API records, mappers, fetch methods (scheduler moved to MatchService)
-- `NbaApiService` — all NBA API records, cursor pagination, `fetchGameDtosByDate`, `fetchStandings`
-- `NbaDataLoader` — seeds Basketball sport, NBA league, all 30 teams + rosters
+- `NbaApiService` — ESPN-based (switched from balldontlie): all NBA ESPN records, `fetchGameDtosByDate`, `fetchStandings` (no API key); two RestClient instances (main + standings subdomain)
+- `NbaDataLoader` — seeds Basketball sport, NBA league, all 30 teams (with ESPN logo URLs) + rosters; auto-migrates old balldontlie-seeded teams with missing crestUrls
 - All 7 REST controllers — all endpoints wired
 - `DataLoader` — seeds 6 Futbol leagues, 20 teams each, full squads from football-data.org
 - All 5 Flyway migrations applied

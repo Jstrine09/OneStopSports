@@ -9,33 +9,41 @@ import com.onestopsports.repository.PlayerRepository;
 import com.onestopsports.repository.SportRepository;
 import com.onestopsports.repository.TeamRepository;
 import com.onestopsports.service.NbaApiService;
-import com.onestopsports.service.NbaApiService.NbaPlayer;
-import com.onestopsports.service.NbaApiService.NbaTeam;
+import com.onestopsports.service.NbaApiService.EspnAthlete;
+import com.onestopsports.service.NbaApiService.EspnTeam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 // NbaDataLoader seeds the database with NBA teams and rosters on first startup.
-// It runs independently from the football DataLoader — the two don't know about each other.
+// It runs independently from the football DataLoader and NflDataLoader — they don't coordinate.
 //
-// Data source: balldontlie.io v1 API (free tier, Bearer token auth, 60 req/min limit)
-// Seeding order: Sport → League → Teams → Players (with 1.1s sleep between team fetches)
+// Data source: ESPN's unofficial public NBA API (no API key required)
+// Endpoint pattern: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/...
 //
-// Idempotency strategy: mirrors the football DataLoader
-//   - Skip entirely if all 30 teams are already in the DB
-//   - If partially seeded (e.g. from a previous 429), skip only the teams that already exist
+// Seeding order:
+//   1. Sport ("Basketball", slug "basketball")
+//   2. League ("NBA")
+//   3. 30 teams (with crest logo URLs from ESPN's CDN)
+//   4. Roster for each team (~15 active players each — ESPN returns current roster only)
+//
+// Idempotency strategy:
+//   - "Fully seeded" = all 30 teams exist AND at least one has a crest URL (ESPN data)
+//   - If teams exist but have no crest URL (old balldontlie seed), re-run to update logos
+//   - Per-team skip: existing teams get their crest URL updated if missing, then move on
 //   - Sport and League creation use find-or-create so re-runs don't create duplicates
 @Component
 public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner = runs once at startup
 
     private static final Logger log = LoggerFactory.getLogger(NbaDataLoader.class);
 
-    // There are exactly 30 NBA teams — we use this as our "fully seeded" marker
+    // There are exactly 30 NBA teams — used as the "fully seeded" marker
     private static final int NBA_TEAM_COUNT = 30;
 
     private final NbaApiService    nbaApiService;
@@ -58,27 +66,32 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
 
     @Override
     public void run(String... args) {
-        // Only consider fully seeded if all 30 teams exist.
-        // This handles the case where a previous run hit a 429 mid-way:
-        // sport + league might exist, but teams would be missing → we still re-run.
+        // "Fully seeded" means: 30 teams exist AND they have crest URLs (sourced from ESPN).
+        // This check also catches the case where teams were seeded from the old balldontlie
+        // API (which had no logos) — if no team has a crest URL, we re-run to populate them.
         boolean fullySeeded = sportRepository.findBySlug("basketball")
                 .flatMap(s -> leagueRepository.findBySportId(s.getId())
                         .stream()
                         .filter(l -> "NBA".equals(l.getName()))
                         .findFirst())
-                .map(l -> teamRepository.findByLeagueId(l.getId()).size() >= NBA_TEAM_COUNT)
+                .map(l -> {
+                    List<Team> teams = teamRepository.findByLeagueId(l.getId());
+                    // All 30 teams exist and at least one has an ESPN logo URL = done
+                    return teams.size() >= NBA_TEAM_COUNT
+                            && teams.stream().anyMatch(t -> t.getCrestUrl() != null);
+                })
                 .orElse(false);
 
         if (fullySeeded) {
-            log.info("[NbaDataLoader] All {} NBA teams already seeded — skipping.", NBA_TEAM_COUNT);
+            log.info("[NbaDataLoader] All {} NBA teams already seeded with logos — skipping.", NBA_TEAM_COUNT);
             return;
         }
 
-        log.info("[NbaDataLoader] Seeding NBA data from balldontlie.io...");
+        log.info("[NbaDataLoader] Seeding NBA data from ESPN...");
         try {
             seed();
         } catch (Exception e) {
-            // If something goes wrong (API down, 429, network issue), log and move on.
+            // If something goes wrong (network error, ESPN API change), log and move on.
             // The app still starts — re-run the app to continue from where it left off.
             log.error("[NbaDataLoader] Seeding failed — app will start but NBA data may be incomplete. " +
                     "Re-run to resume. Cause: {}", e.getMessage());
@@ -99,8 +112,8 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
         log.info("[NbaDataLoader] Sport: {}", basketball.getName());
 
         // ── 2. League ─────────────────────────────────────────────────────────
-        // Find the NBA league if it already exists (from a previous partial run),
-        // or create it fresh. externalId is null — balldontlie has no competition ID.
+        // Find the NBA league if it already exists (from a previous run),
+        // or create it fresh. externalId is null — ESPN has no competition ID.
         // Routing in MatchService uses the sport slug ("basketball") instead.
         League nba = leagueRepository.findBySportId(basketball.getId())
                 .stream()
@@ -112,82 +125,120 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                                 .name("NBA")
                                 .country("United States")
                                 .season("2024-25")
-                                .externalId(null) // No external competition ID for basketball
+                                .externalId(null) // No external competition ID — routing by sport slug
                                 .build()));
         log.info("[NbaDataLoader] League: {}", nba.getName());
 
         // ── 3. Teams ──────────────────────────────────────────────────────────
-        NbaApiService.NbaTeamsResponse teamsResponse = nbaApiService.fetchAllTeams();
+        // ESPN returns teams nested under: sports[0].leagues[0].teams[*].team
+        NbaApiService.EspnTeamsResponse teamsResponse = nbaApiService.fetchAllTeams();
 
-        if (teamsResponse == null || teamsResponse.data() == null) {
-            log.warn("[NbaDataLoader] No teams returned from API — aborting.");
+        if (teamsResponse == null || teamsResponse.sports() == null || teamsResponse.sports().isEmpty()) {
+            log.warn("[NbaDataLoader] No teams returned from ESPN — aborting.");
             return;
         }
 
-        List<NbaTeam> apiTeams = teamsResponse.data();
-        log.info("[NbaDataLoader] Fetched {} teams from balldontlie", apiTeams.size());
+        // Navigate down the nested ESPN response to get the flat team list
+        List<NbaApiService.EspnLeague> leagues = teamsResponse.sports().get(0).leagues();
+        if (leagues == null || leagues.isEmpty()) {
+            log.warn("[NbaDataLoader] No leagues in ESPN response — aborting.");
+            return;
+        }
 
-        // Build a set of team names already in the DB — used to skip teams that were
-        // already seeded in a previous partial run (same pattern as football DataLoader's
-        // per-league skip via leagueRepository.findByExternalId)
-        Set<String> existingTeamNames = teamRepository.findByLeagueId(nba.getId())
+        // Extract the list of EspnTeam objects from the wrapper entries
+        List<EspnTeam> apiTeams = leagues.get(0).teams()
                 .stream()
-                .map(Team::getName)
-                .collect(Collectors.toSet());
+                .map(entry -> entry.team()) // Each entry is { "team": {...} } — unwrap
+                .filter(team -> team != null)
+                .toList();
 
-        for (NbaTeam apiTeam : apiTeams) {
+        log.info("[NbaDataLoader] Fetched {} teams from ESPN", apiTeams.size());
 
-            // Skip this team if it was already seeded in a previous run
-            if (existingTeamNames.contains(apiTeam.fullName())) {
-                log.info("[NbaDataLoader]   {} already seeded, skipping.", apiTeam.fullName());
-                continue;
+        // Build a map of team name → Team entity so we can look up existing teams quickly
+        // when updating crest URLs for teams previously seeded from balldontlie
+        java.util.Map<String, Team> existingTeamsByName = teamRepository.findByLeagueId(nba.getId())
+                .stream()
+                .collect(Collectors.toMap(Team::getName, t -> t));
+
+        for (EspnTeam apiTeam : apiTeams) {
+
+            // Get the first logo URL (default light-mode version)
+            String crestUrl = (apiTeam.logos() != null && !apiTeam.logos().isEmpty())
+                    ? apiTeam.logos().get(0).href()
+                    : null;
+
+            if (existingTeamsByName.containsKey(apiTeam.displayName())) {
+                // This team was already seeded (possibly from the old balldontlie run).
+                // Update its crest URL if it was previously null — this is the migration
+                // step that gives old balldontlie-seeded teams their ESPN logos.
+                Team existing = existingTeamsByName.get(apiTeam.displayName());
+                if (existing.getCrestUrl() == null && crestUrl != null) {
+                    existing.setCrestUrl(crestUrl);
+                    teamRepository.save(existing);
+                    log.info("[NbaDataLoader]   Updated crest URL for {}", existing.getName());
+                } else {
+                    log.info("[NbaDataLoader]   {} already seeded, skipping.", apiTeam.displayName());
+                }
+                continue; // Skip re-seeding players for existing teams
             }
 
-            // Save the team — crestUrl and stadium are null (not in free tier)
+            // New team (not in DB yet) — save it with the ESPN logo
             Team team = teamRepository.save(
                     Team.builder()
                             .league(nba)
-                            .name(apiTeam.fullName())          // e.g. "Boston Celtics"
+                            .name(apiTeam.displayName())   // e.g. "Boston Celtics"
                             .shortName(apiTeam.abbreviation()) // e.g. "BOS"
-                            .country(apiTeam.city())           // e.g. "Boston"
-                            .crestUrl(null)                    // Not available in free tier
-                            .stadium(null)                     // Not available in free tier
+                            .country(apiTeam.location())   // e.g. "Boston"
+                            .crestUrl(crestUrl)             // ESPN CDN logo URL — now available!
+                            .stadium(null)                  // Not provided by ESPN teams endpoint
                             .build());
             log.info("[NbaDataLoader]   Saved team: {}", team.getName());
 
             // ── 4. Players ────────────────────────────────────────────────────
-            // Sleep 7 seconds before each player fetch to respect balldontlie's rate limit.
-            // fetchPlayersByTeam() fetches at most 25 players (per_page=25) — one request,
-            // no cursor loop. Total API calls: 1 (teams list) + 30 (players) = 31 requests.
-            Thread.sleep(7_000);
-            List<NbaPlayer> players = nbaApiService.fetchPlayersByTeam(apiTeam.id());
+            // Brief courtesy sleep between roster fetches — ESPN has no stated rate limit
+            // but we don't want to hammer their servers. 500ms × 30 teams ≈ 15s total.
+            Thread.sleep(500);
 
-            for (NbaPlayer apiPlayer : players) {
-                // Jersey number is a String in balldontlie — parse to Integer for our DB
+            // fetchPlayersByTeam returns the flat athletes array — no grouping to flatten
+            List<EspnAthlete> players = nbaApiService.fetchPlayersByTeam(apiTeam.id());
+
+            for (EspnAthlete athlete : players) {
+                // Jersey number is a String from ESPN — parse to Integer for our DB
                 Integer jerseyNumber = null;
-                if (apiPlayer.jerseyNumber() != null && !apiPlayer.jerseyNumber().isBlank()) {
+                if (athlete.jersey() != null && !athlete.jersey().isBlank()) {
                     try {
-                        jerseyNumber = Integer.parseInt(apiPlayer.jerseyNumber());
+                        jerseyNumber = Integer.parseInt(athlete.jersey());
                     } catch (NumberFormatException ex) {
-                        // Some non-numeric jerseys exist (e.g. "00") — skip rather than crash
-                        log.warn("[NbaDataLoader] Could not parse jersey '{}' for {}",
-                                apiPlayer.jerseyNumber(), apiPlayer.firstName());
+                        // Non-numeric jersey (e.g. "00") — skip rather than crash
                     }
                 }
 
-                // Combine first and last name into a single display name
-                String fullName = (apiPlayer.firstName() + " " + apiPlayer.lastName()).trim();
+                // ESPN provides positions as full names ("Center", "Guard", "Forward")
+                // so no mapping step is needed — store directly in the DB
+                String positionName = (athlete.position() != null) ? athlete.position().name() : null;
+
+                // Nationality proxy: birthPlace.country ("USA", "Australia", "France", etc.)
+                String country = (athlete.birthPlace() != null) ? athlete.birthPlace().country() : null;
+
+                // ESPN provides date of birth as ISO-8601 string — e.g. "1984-12-30T07:00Z"
+                // Parse the date part only (first 10 characters) for the LocalDate field
+                LocalDate dateOfBirth = null;
+                if (athlete.dateOfBirth() != null && athlete.dateOfBirth().length() >= 10) {
+                    try {
+                        dateOfBirth = LocalDate.parse(athlete.dateOfBirth().substring(0, 10));
+                    } catch (Exception ignored) {
+                        // Malformed date — leave null
+                    }
+                }
 
                 playerRepository.save(
                         Player.builder()
                                 .team(team)
-                                .name(fullName)
-                                // Map abbreviated position to full name:
-                                // "G" → "Guard", "F" → "Forward", "C" → "Center", etc.
-                                .position(mapPosition(apiPlayer.position()))
-                                .nationality(apiPlayer.country()) // e.g. "USA"
-                                .jerseyNumber(jerseyNumber)
-                                .dateOfBirth(null) // Not available in balldontlie free tier
+                                .name(athlete.fullName())  // e.g. "LeBron James"
+                                .position(positionName)    // e.g. "Center" (full name from ESPN)
+                                .nationality(country)      // e.g. "USA"
+                                .jerseyNumber(jerseyNumber) // e.g. 23
+                                .dateOfBirth(dateOfBirth)  // e.g. 1984-12-30 (ESPN provides this)
                                 .build());
             }
 
@@ -195,20 +246,5 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
         }
 
         log.info("[NbaDataLoader] Done! NBA seeded with {} teams.", apiTeams.size());
-    }
-
-    // Maps balldontlie's abbreviated position codes to the full position names
-    // stored in the database. These full names match the POSITION_ORDER array in
-    // the frontend's TeamDetailPage, so players get grouped into labelled sections.
-    private String mapPosition(String pos) {
-        if (pos == null || pos.isBlank()) return null;
-        return switch (pos) {
-            case "G"   -> "Guard";
-            case "F"   -> "Forward";
-            case "C"   -> "Center";
-            case "G-F" -> "Guard-Forward";
-            case "F-C" -> "Forward-Center";
-            default    -> pos; // Return as-is for any unexpected value
-        };
     }
 }
