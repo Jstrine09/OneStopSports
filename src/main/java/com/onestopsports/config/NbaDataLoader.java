@@ -130,7 +130,7 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                                 .sport(basketball)
                                 .name("NBA")
                                 .country("United States")
-                                .season("2024-25")
+                                .season("2025-26")
                                 .externalId(null) // No external competition ID — routing by sport slug
                                 .build()));
         log.info("[NbaDataLoader] League: {}", nba.getName());
