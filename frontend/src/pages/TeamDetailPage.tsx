@@ -103,22 +103,34 @@ export default function TeamDetailPage() {
 
   const toggleTeamFav = async () => {
     if (!isAuthenticated) { navigate('/auth'); return }
-    if (isTeamFav) {
-      await removeFavoriteTeam(teamId)
-    } else {
-      await addFavoriteTeam(teamId)
+    try {
+      if (isTeamFav) {
+        await removeFavoriteTeam(teamId)
+      } else {
+        await addFavoriteTeam(teamId)
+      }
+      // Refresh the favourites list so the heart updates to reflect the new state
+      queryClient.invalidateQueries({ queryKey: ['favorites', 'teams'] })
+    } catch (err) {
+      // If the request fails (e.g. expired token, server error), log it so it's
+      // visible in the browser console instead of silently doing nothing
+      console.error('[TeamDetailPage] toggleTeamFav failed:', err)
     }
-    queryClient.invalidateQueries({ queryKey: ['favorites', 'teams'] })
   }
 
   const togglePlayerFav = async (playerId: number) => {
     if (!isAuthenticated) { navigate('/auth'); return }
-    if (favPlayerIds.has(playerId)) {
-      await removeFavoritePlayer(playerId)
-    } else {
-      await addFavoritePlayer(playerId)
+    try {
+      if (favPlayerIds.has(playerId)) {
+        await removeFavoritePlayer(playerId)
+      } else {
+        await addFavoritePlayer(playerId)
+      }
+      // Refresh the favourites list so the heart updates to reflect the new state
+      queryClient.invalidateQueries({ queryKey: ['favorites', 'players'] })
+    } catch (err) {
+      console.error('[TeamDetailPage] togglePlayerFav failed:', err)
     }
-    queryClient.invalidateQueries({ queryKey: ['favorites', 'players'] })
   }
 
   const grouped = groupByPosition(players)

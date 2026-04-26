@@ -11,6 +11,13 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      // Proxy WebSocket connections so the frontend can reach /ws without CORS issues.
+      // SockJS starts with HTTP then upgrades to WebSocket — both need to be forwarded.
+      '/ws': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        ws: true, // Enable WebSocket (ws://) proxying in addition to HTTP
+      },
     },
   },
 })
