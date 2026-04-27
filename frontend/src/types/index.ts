@@ -103,6 +103,7 @@ export type MatchDisplayState = 'scheduled' | 'live' | 'halftime' | 'finished' |
 export function getMatchState(status: string): MatchDisplayState {
   switch (status) {
     case 'IN_PLAY':   return 'live'
+    case 'LIVE':      return 'live'     // NBA status — NbaApiService.mapStatus() returns "LIVE"
     case 'PAUSED':    return 'halftime'
     case 'FINISHED':  return 'finished'
     case 'AWARDED':   return 'finished'

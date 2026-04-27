@@ -80,7 +80,7 @@ export default function PlayerDetailPage() {
     return (
       <div className="py-16 text-center text-slate-400">
         <p>Player not found.</p>
-        <button onClick={() => handleBack(null)} className="mt-4 text-blue-400 underline">Go back</button>
+        <button onClick={() => handleBack(undefined)} className="mt-4 text-blue-400 underline">Go back</button>
       </div>
     )
   }

@@ -29,8 +29,14 @@ external-api:
     base-url: https://api.football-data.org/v4
     api-key: YOUR_API_KEY_HERE  # override in application-local.yml
   nba:
-    base-url: https://api.balldontlie.io/v1
-    api-key: YOUR_NBA_KEY_HERE  # override in application-local.yml — get your free key at balldontlie.io
+    # ESPN's unofficial public NBA API — no API key required (same provider as NFL)
+    base-url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba
+    # Standings live on a different ESPN subdomain with richer data
+    standings-url: https://site.web.api.espn.com/apis/v2/sports/basketball/nba
+  nfl:
+    # ESPN's unofficial public API — no API key required.
+    # This is an undocumented but widely-used endpoint. It's stable but not officially supported.
+    base-url: https://site.api.espn.com/apis/site/v2/sports/football/nfl
 
 jwt:
   secret: bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u

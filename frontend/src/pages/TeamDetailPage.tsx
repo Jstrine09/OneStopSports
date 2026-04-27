@@ -10,13 +10,22 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { ChevronLeft, MapPin, Globe, Heart } from 'lucide-react'
 import type { PlayerDto } from '../types'
 
-// Position groups — covers both football and basketball.
+// Position groups — covers football (soccer), basketball, and American football (NFL).
 // Any position that doesn't match one of these falls into the 'Other' bucket.
 const POSITION_ORDER = [
-  // Football positions
+  // Football (soccer)
   'Goalkeeper', 'Defender', 'Midfielder', 'Forward',
-  // Basketball positions (mapped from balldontlie abbreviations in NbaDataLoader)
-  'Guard', 'Center', 'Guard-Forward', 'Forward-Center',
+  // Basketball (mapped from balldontlie abbreviations in NbaDataLoader)
+  'Guard', 'Guard-Forward', 'Forward-Center', 'Center',
+  // NFL offense
+  'Quarterback', 'Running Back', 'Fullback', 'Wide Receiver', 'Tight End',
+  'Offensive Tackle', 'Offensive Guard',
+  // NFL defense
+  'Defensive End', 'Defensive Tackle', 'Linebacker',
+  'Outside Linebacker', 'Inside Linebacker', 'Middle Linebacker',
+  'Cornerback', 'Safety', 'Free Safety', 'Strong Safety',
+  // NFL special teams
+  'Kicker', 'Punter', 'Long Snapper',
   // Catch-all for anything else
   'Other',
 ]
@@ -30,12 +39,6 @@ function groupByPosition(players: PlayerDto[]): Record<string, PlayerDto[]> {
   }, {})
 }
 
-function calculateAge(dob: string | null): string {
-  if (!dob) return '—'
-  const birth = new Date(dob)
-  const age = Math.floor((Date.now() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-  return `${age}`
-}
 
 export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -103,22 +106,34 @@ export default function TeamDetailPage() {
 
   const toggleTeamFav = async () => {
     if (!isAuthenticated) { navigate('/auth'); return }
-    if (isTeamFav) {
-      await removeFavoriteTeam(teamId)
-    } else {
-      await addFavoriteTeam(teamId)
+    try {
+      if (isTeamFav) {
+        await removeFavoriteTeam(teamId)
+      } else {
+        await addFavoriteTeam(teamId)
+      }
+      // Refresh the favourites list so the heart updates to reflect the new state
+      queryClient.invalidateQueries({ queryKey: ['favorites', 'teams'] })
+    } catch (err) {
+      // If the request fails (e.g. expired token, server error), log it so it's
+      // visible in the browser console instead of silently doing nothing
+      console.error('[TeamDetailPage] toggleTeamFav failed:', err)
     }
-    queryClient.invalidateQueries({ queryKey: ['favorites', 'teams'] })
   }
 
   const togglePlayerFav = async (playerId: number) => {
     if (!isAuthenticated) { navigate('/auth'); return }
-    if (favPlayerIds.has(playerId)) {
-      await removeFavoritePlayer(playerId)
-    } else {
-      await addFavoritePlayer(playerId)
+    try {
+      if (favPlayerIds.has(playerId)) {
+        await removeFavoritePlayer(playerId)
+      } else {
+        await addFavoritePlayer(playerId)
+      }
+      // Refresh the favourites list so the heart updates to reflect the new state
+      queryClient.invalidateQueries({ queryKey: ['favorites', 'players'] })
+    } catch (err) {
+      console.error('[TeamDetailPage] togglePlayerFav failed:', err)
     }
-    queryClient.invalidateQueries({ queryKey: ['favorites', 'players'] })
   }
 
   const grouped = groupByPosition(players)

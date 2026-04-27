@@ -13,6 +13,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.stream.Collectors;
 
@@ -71,6 +72,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(ErrorResponseDto.of(403, "Forbidden", "You don't have permission to access this resource"));
+    }
+
+    // ── Passthrough — ResponseStatusException ────────────────────────────────
+    // ResponseStatusException is Spring's own way of attaching an HTTP status to an exception.
+    // UserService uses it e.g. new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found").
+    // Without this handler, our generic Exception catch-all would intercept it and return 500.
+    // Here we read the status code the exception already carries and pass it straight through.
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponseDto> handleResponseStatus(ResponseStatusException ex) {
+        int status = ex.getStatusCode().value();
+        // getReason() is the short message set on the exception — e.g. "User not found: james"
+        String message = ex.getReason() != null ? ex.getReason() : ex.getMessage();
+        return ResponseEntity
+                .status(ex.getStatusCode())
+                .body(ErrorResponseDto.of(status, HttpStatus.resolve(status) != null
+                        ? HttpStatus.resolve(status).getReasonPhrase() : "Error", message));
     }
 
     // ── 409 Conflict — unique constraint violation ────────────────────────────

@@ -1,16 +1,30 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchLiveMatches } from '../api/matches'
+import { useLiveScores } from '../hooks/useLiveScores'
 import MatchCard from '../components/MatchCard'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { Radio } from 'lucide-react'
+import type { MatchDto } from '../types'
 
 export default function LivePage() {
+  const queryClient = useQueryClient()
+
+  // Initial load + fallback polling via REST (every 60 s).
+  // The WebSocket push below is the primary update mechanism — polling is a safety net
+  // in case the WebSocket connection drops and auto-reconnect hasn't fired yet.
   const { data: matches = [], isLoading } = useQuery({
     queryKey: ['matches', 'live'],
     queryFn: fetchLiveMatches,
-    // Refetch every 30 s to stay current
-    refetchInterval: 30_000,
-    staleTime: 15_000,
+    refetchInterval: 60_000, // Reduced from 30 s — WebSocket handles real-time updates
+    staleTime: 30_000,
+  })
+
+  // Subscribe to WebSocket pushes from the backend.
+  // When a score changes, the server sends the full updated match list.
+  // We write it directly into React Query's cache so MatchCards re-render instantly
+  // without waiting for the next polling cycle.
+  useLiveScores((updatedMatches: MatchDto[]) => {
+    queryClient.setQueryData(['matches', 'live'], updatedMatches)
   })
 
   return (

@@ -13,13 +13,13 @@
 |---|---|
 | Backend | Java 21 + Spring Boot 3.4.4 |
 | Database | PostgreSQL (`onestopsports` DB) |
-| Migrations | Flyway (4 migrations — all applied) |
+| Migrations | Flyway (5 migrations — all applied) |
 | Cache | Redis (30s TTL on live matches) |
 | Auth | Spring Security 6 + JWT (jjwt 0.12.x) |
-| Real-time | Spring WebSocket (STOMP — config done, push not yet wired) |
-| External API | football-data.org v4 via `RestClient` |
+| Real-time | Spring WebSocket (STOMP) — fully wired; server pushes score changes to `/topic/matches/live` |
+| External APIs | football-data.org v4 (football) + ESPN unofficial API (NBA + NFL) via `RestClient` |
 | DTO mapping | Java 21 records + MapStruct |
-| Frontend | React 18 + TypeScript 5.5 + Vite 5.4 + Tailwind 3.4 + React Query v5 |
+| Frontend | React 18 + TypeScript 5.5 + Vite 5.4 + Tailwind 3.4 + React Query v5 + @stomp/stompjs |
 | Infra | Docker Compose (postgres:16-alpine + redis:7-alpine) |
 
 ---
@@ -32,15 +32,22 @@ com.onestopsports
 │   ├── SecurityConfig.java
 │   ├── RedisConfig.java
 │   ├── WebSocketConfig.java
-│   └── DataLoader.java             Seeds DB from football-data.org on first boot
-├── controller/                     Sport, League, Team, Player, Match, Auth, User
-├── dto/                            12 Java records
+│   ├── OpenApiConfig.java          Swagger/OpenAPI setup — JWT Bearer auth scheme for Swagger UI
+│   ├── DataLoader.java             Seeds football DB from football-data.org on first boot
+│   └── NbaDataLoader.java          Seeds NBA teams + rosters from ESPN on first boot (migrates balldontlie logos)
+├── controller/
+│   ├── Sport, League, Team, Player, Match, Auth, User, Search controllers
+│   └── GlobalExceptionHandler.java @RestControllerAdvice — consistent JSON error responses
+├── dto/                            14 Java records (includes ErrorResponseDto, SearchResultDto)
 ├── model/                          7 JPA entities
 ├── repository/                     7 JpaRepository interfaces
 ├── security/
 │   ├── JwtUtil.java
 │   └── JwtAuthFilter.java
-└── service/                        Sport, League, Team, Player, Match, Auth, User, ExternalApi
+└── service/
+    ├── Sport, League, Team, Player, Match, Auth, User services
+    ├── ExternalApiService.java     Football API — teams, matches, standings, events (pure football, no scheduler)
+    └── NbaApiService.java          NBA API (ESPN) — teams with logos, rosters, scores, standings
 ```
 
 ---
@@ -70,18 +77,69 @@ com.onestopsports
   - `.parseSignedClaims(token)` not `.parseClaimsJws(token)`
 - JWT secret in `application.yml` is Base64-encoded
 
-### External API
-- Uses `RestClient` (Spring 6, synchronous) — **not** `WebClient` (ported from OnesToManys)
-- `WebClient.Builder` is still in `pom.xml` as a dep but not used for the API service
-- API key lives in `application-local.yml` (gitignored) — never in `application.yml`
-- football-data.org free tier rate limit: 10 req/min → `DataLoader` sleeps 6.2s between competitions
+### GlobalExceptionHandler
+- `@RestControllerAdvice` class — catches exceptions thrown anywhere in the controller layer
+- Returns consistent `ErrorResponseDto(status, error, message, timestamp)` JSON for all errors
+- **Critical:** `ResponseStatusException` MUST have its own `@ExceptionHandler` BEFORE the generic `Exception` catch-all — otherwise the catch-all intercepts it and returns 500 instead of the correct status
+- Handles: `MethodArgumentNotValidException` (400), `HttpMessageNotReadableException` (400), `ResponseStatusException` (passthrough), `BadCredentialsException` (401), `AccessDeniedException` (403), `DataIntegrityViolationException` (409), `Exception` (500)
 
-### Data Seeding (DataLoader)
+### External APIs
+- Uses `RestClient` (Spring 6, synchronous) — **not** `WebClient`
+- API keys live in `application-local.yml` (gitignored) — never in `application.yml`
+- **Football** (football-data.org): `X-Auth-Token` header auth, 10 req/min free tier → `DataLoader` sleeps 6.2s between competitions
+- **NBA** (ESPN unofficial): no API key needed — same public ESPN API as NFL; uses two base URLs (main + standings subdomain)
+
+### Multi-Sport Routing
+- DB schema is sport-agnostic: `sport → league → team → player`
+- `MatchService.getMatchesByLeagueAndDate()` and `LeagueService.getStandings()` check `league.getSport().getSlug()` and route to the correct API:
+  - `"basketball"` → `NbaApiService`
+  - default → `ExternalApiService` (football)
+- Both methods are `@Transactional(readOnly = true)` so the lazy `league.getSport()` relationship loads within a Hibernate session
+
+### NBA Data
+- `NbaDataLoader` seeds: 1 Sport (Basketball) → 1 League (NBA) → 30 Teams → full rosters
+- Skip condition: all 30 teams exist AND at least one has a crestUrl (ESPN-sourced) — if crestUrls are all null (old balldontlie data), re-runs to update logos
+- Migration: on first boot after switching from balldontlie, loader updates all 30 teams' `crestUrl` fields with ESPN CDN URLs; existing players are not re-seeded
+- `NbaApiService` inner records mirror ESPN's JSON: `EspnTeam`, `EspnAthlete`, `EspnEvent`, `EspnStandingsEntry` — same pattern as `NflApiService`
+- NBA ESPN roster: `athletes` is a flat array (unlike NFL which groups by offense/defense/specialTeam)
+- Positions are already full names from ESPN ("Center", "Guard", "Forward") — no abbreviation-to-full mapping needed
+- NBA teams now have `crestUrl` from ESPN CDN (e.g. `https://a.espncdn.com/i/teamlogos/nba/500/bos.png`)
+- `dateOfBirth` is populated from ESPN (ISO-8601 string parsed to `LocalDate`) — NBA players now have DOB
+- Standings use `site.web.api.espn.com/apis/v2` (different subdomain from main API) — separate `standingsClient` RestClient in `NbaApiService`
+
+### WebSocket Live Push
+- `MatchService.refreshLiveMatchCache()` runs every 30s via `@Scheduled(fixedDelay = 30_000)` — scheduler moved from `ExternalApiService` to `MatchService` because `MatchService` owns the combined "all sports" live feed
+- Fetches football live matches via `ExternalApiService.fetchLiveMatchDtos()` AND NBA live games via `fetchNbaLiveMatches()` (today's games filtered to `status=LIVE`)
+- Maintains `previousSnapshot: Map<Long, String>` (matchId → "homeScore:awayScore:status")
+- Only pushes when something changes — avoids flooding clients on quiet ticks
+- On change: writes fresh data into Redis via `cacheManager.getCache("matches").put(SimpleKey.EMPTY, current)` AND broadcasts via `messagingTemplate.convertAndSend("/topic/matches/live", current)`
+- `LeagueRepository.findBySport_Slug("basketball")` — new derived query used to find basketball leagues without a second round-trip through SportRepository
+- Frontend: `useLiveScores` hook (`@stomp/stompjs`) subscribes to `/topic/matches/live`, calls `queryClient.setQueryData(["matches","live"], matches)` for instant re-render
+- Vite proxy has `ws: true` on `/ws` so WebSocket connections are forwarded to the backend in dev
+- REST polling on LivePage reduced to 60s as a fallback — WebSocket is the primary update path
+- `getMatchState("LIVE")` added to frontend `types/index.ts` — NBA in-progress games use "LIVE" status (not football's "IN_PLAY"), needed for green score highlighting in MatchCard
+
+### Redis / Jackson
+- `RedisConfig` uses a custom `ObjectMapper` with `JavaTimeModule` + `DefaultTyping.EVERYTHING` — the no-arg `GenericJackson2JsonRedisSerializer` uses a bare ObjectMapper that cannot handle `LocalDateTime`, causing 500 when any live match with a `startTime` is cached
+- `WebSocketConfig` overrides `configureMessageConverters` to inject Spring Boot's auto-configured `ObjectMapper` — same root cause: the default STOMP converter also creates a bare ObjectMapper
+
+### Global Search
+- `GET /api/search?q={query}` (min 2 chars) — returns `SearchResultDto(teams, players)` — up to 8 teams + 10 players
+- `TeamRepository.findByNameContainingIgnoreCase` + `PlayerRepository.findByNameContainingIgnoreCase` — Spring Data derived queries generate `LIKE %query%` SQL
+- `SearchController` + `SearchResultDto` (new DTO) + `searchTeams`/`searchPlayers` in existing services
+- Frontend: `SearchPage` at `/search` with React Query (`enabled: q.length >= 2`), Search nav item added to both `Sidebar` and `BottomNav`
+
+### Swagger / OpenAPI
+- `springdoc-openapi-starter-webmvc-ui:2.8.5` — auto-generates docs from `@RestController` classes
+- Available at `http://localhost:8080/swagger-ui/index.html`
+- `OpenApiConfig.java` adds app title + JWT Bearer auth scheme so locked endpoints can be tested from the UI
+- `SecurityConfig` permits `/swagger-ui/**` and `/v3/api-docs/**` without authentication
+
+### Data Seeding (DataLoader — Football)
 - `DataLoader implements CommandLineRunner` — runs on every startup, skips if `leagueRepository.count() >= COMPETITION_IDS.length`
-- Seeds: 1 Sport (Football) → 6 Leagues → up to 20 Teams each → full squads (~1000+ Players)
+- Seeds: 1 Sport (Futbol) → 6 Leagues → up to 20 Teams each → full squads (~1000+ Players)
 - Competition IDs: `PL=2021`, `La Liga=2014`, `Bundesliga=2002`, `Serie A=2019`, `Ligue 1=2015`, `UCL=2001`
-- Ported from `/Users/james/Projects/OnesToManys/soccerapp/src/main/java/com/zipcode/soccerapp/config/DataLoader.java`
-- OneStopSports adds `Sport` as an extra top level that OnesToManys didn't have
+- Sport name is "Futbol" (not "Football") to distinguish from upcoming NFL addition — slug stays `"football"` so URLs are unaffected
 
 ### Build — Annotation Processor Ordering
 Lombok MUST come before MapStruct in `maven-compiler-plugin` annotationProcessorPaths, or MapStruct can't see Lombok-generated getters. Use `lombok-mapstruct-binding:0.2.0` as the middle entry.
@@ -89,26 +147,34 @@ Lombok MUST come before MapStruct in `maven-compiler-plugin` annotationProcessor
 ### Redis
 - `GenericJackson2JsonRedisSerializer` used (stores type info in JSON for correct deserialisation)
 - Default 30s TTL set programmatically in `RedisConfig` — overrides `application.yml` when using a custom `RedisCacheManager` bean
+- Cache key for the no-arg `getLiveMatches()` method is `SimpleKey.EMPTY` — used when manually updating the cache from `refreshLiveMatchCache()`
+
+### Testing
+- **`AuthServiceTest`** — pure unit tests with `@ExtendWith(MockitoExtension.class)`, no Spring context
+- **`AuthControllerTest`** — `@WebMvcTest` slice tests
+  - `@WebMvcTest` only scans web-tier beans — `@Configuration` classes like `SecurityConfig` are NOT auto-scanned. Requires `@Import(SecurityConfig.class)` or Spring's default "deny all" fires and every request returns 401
+  - `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class` prevents duplicate `UserDetailsService` bean crash
+  - `spring-security-test` dependency required for `csrf()` / `SecurityMockMvcRequestPostProcessors`
 
 ---
 
 ## API Response Records
-All nested inside `ExternalApiService.java`:
+All nested inside `ExternalApiService.java` (football) and `NbaApiService.java` (NBA):
+
+**Football (`ExternalApiService`):**
 ```
-ApiTeamsResponse(competition, teams)
-ApiCompetition(name, area)
-ApiArea(name)
-ApiTeam(id, name, shortName, venue, founded, crest, coach, squad)
-ApiCoach(name)
-ApiPlayer(id, name, position, shirtNumber, nationality, dateOfBirth)
-ApiMatchesResponse(matches)
-ApiMatch(id, homeTeam, awayTeam, score, status, utcDate, competition)
-ApiMatchTeam(id, name, shortName, crest)
-ApiScore(fullTime)
-ApiFullTime(home, away)
-ApiStandingsResponse(competition, standings)
-ApiStandingGroup(type, table)
-ApiStandingEntry(position, team, playedGames, won, draw, lost, goalsFor, goalsAgainst, points)
+ApiTeamsResponse, ApiCompetition, ApiArea, ApiTeam, ApiCoach, ApiPlayer
+ApiMatchesResponse, ApiMatch, ApiMatchTeam, ApiScore, ApiFullTime
+ApiStandingsResponse, ApiStandingGroup, ApiStandingEntry
+ApiMatchDetail, ApiGoal, ApiBooking, ApiSubstitution, ApiPlayerRef
+```
+
+**NBA (`NbaApiService`) — ESPN-based:**
+```
+EspnTeamsResponse, EspnSport, EspnLeague, EspnTeamEntry, EspnTeam, EspnLogo
+EspnRosterResponse, EspnAthlete, EspnAthletePosition, EspnBirthPlace
+EspnScoreboardResponse, EspnEvent, EspnEventStatus, EspnStatusType, EspnCompetition, EspnCompetitor, EspnCompTeam
+EspnStandingsResponse, EspnConference, EspnStandingsSection, EspnStandingsEntry, EspnStandingsTeam, EspnStat
 ```
 
 ---
@@ -120,6 +186,7 @@ ApiStandingEntry(position, team, playedGames, won, draw, lost, goalsFor, goalsAg
 | `V2__create_team_player.sql` | Creates `team`, `player` tables |
 | `V3__create_user_favorites.sql` | Creates `user_account`, `favorite_team`, `favorite_player` tables |
 | `V4__add_league_external_id.sql` | Adds `external_id INTEGER` to `league` — bridges DB IDs to football-data.org competition IDs |
+| `V5__rename_football_to_futbol.sql` | Renames sport name "Football" → "Futbol" in DB; slug unchanged |
 
 ---
 
@@ -136,11 +203,12 @@ GET  /api/teams/{id}
 GET  /api/teams/{id}/players
 GET  /api/players/{id}
 GET  /api/matches?league={id}&date={date}
-GET  /api/matches/live                       @Cacheable("matches")
+GET  /api/matches/live                       @Cacheable("matches") — football + NBA combined; also pushed via WebSocket
+GET  /api/search?q={query}                   Global search — returns teams + players (min 2 chars, max 8 teams + 10 players)
 GET  /api/matches/{id}
 GET  /api/matches/{id}/events
-GET  /api/matches/{id}/stats
-GET  /api/matches/{id}/lineups
+GET  /api/matches/{id}/stats                 Returns Map.of() — not in free tier
+GET  /api/matches/{id}/lineups               Returns Map.of() — not in free tier
 POST /api/auth/register
 POST /api/auth/login
 ```
@@ -156,18 +224,47 @@ POST   /api/users/me/favorites/players
 DELETE /api/users/me/favorites/players/{playerId}
 ```
 
+### WebSocket
+```
+CONNECT  /ws              SockJS endpoint (STOMP over WebSocket)
+SUBSCRIBE /topic/matches/live   Server pushes full live match list whenever a score changes
+```
+
 ---
 
 ## Local Dev Setup
 
-### Prerequisites
-- PostgreSQL running, database named `onestopsports`
-- Redis running on `localhost:6379`
-- API key in `src/main/resources/application-local.yml`
+### Option A — Maven (fastest for active development)
+Postgres + Redis via Docker, app runs on the host via Maven.
 
-### Run
 ```bash
+# 1. Start infra only
+docker-compose up -d postgres redis
+
+# 2. Add secrets to application-local.yml
+cp .env.example src/main/resources/application-local.yml
+# edit application-local.yml — add football-data api-key and jwt.secret
+
+# 3. Run backend
 mvn spring-boot:run -Dspring-boot.run.profiles=local
+
+# 4. Run frontend
+cd frontend && npm run dev
+```
+
+### Option B — Full Docker Compose (prod-like, no local Java/Maven needed)
+Everything in containers — app + Postgres + Redis.
+
+```bash
+# 1. Create .env from the example
+cp .env.example .env
+# edit .env — set FOOTBALL_DATA_API_KEY and JWT_SECRET
+
+# 2. Build and start everything
+docker-compose up --build
+
+# On first boot the data loaders seed the DB (~2 min for all three sports).
+# The app is ready at http://localhost:8080 once "Started OneStopSportsApplication" appears.
 ```
 
 ### Test (H2 in-memory, no Postgres/Redis needed)
@@ -179,13 +276,12 @@ mvn test
 ```bash
 curl http://localhost:8080/api/sports
 curl http://localhost:8080/api/sports/football/leagues
+curl http://localhost:8080/api/sports/basketball/leagues
 ```
 
-### Register a user
-```bash
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"james","email":"test@test.com","password":"password1"}'
+### Swagger UI
+```
+http://localhost:8080/swagger-ui/index.html
 ```
 
 ---
@@ -193,47 +289,45 @@ curl -X POST http://localhost:8080/api/auth/register \
 ## Current Status
 
 ### ✅ Fully implemented
-- All 7 JPA entities, 7 repositories, 12 DTOs
+- All 7 JPA entities, 7 repositories, 13 DTOs
 - JWT security layer + Spring Security 6 config
 - Redis config + WebSocket config
-- `AuthService` (register + login)
+- `GlobalExceptionHandler` — consistent JSON error responses for all error types
+- `AuthService` (register + login) + `AuthServiceTest` (6 unit tests)
+- `AuthControllerTest` (7 @WebMvcTest slice tests — all passing)
 - `UserService` (favorites CRUD — teams + players)
 - `SportService`, `LeagueService`, `TeamService`, `PlayerService` (full DB-backed)
-- `MatchService`: `getLiveMatches()`, `getMatchesByLeagueAndDate()`, `getMatchEvents()`
-- `ExternalApiService` — all API records, all mappers (`toMatchDto`, `toStandingsEntryDto`), all fetch methods wired
-- All 7 REST controllers — all endpoints wired and returning real data
-- `DataLoader` — seeds 6 leagues, 20 teams each, full squads from football-data.org
-- All 4 Flyway migrations applied
+- `MatchService`: `getLiveMatches()` (football + NBA combined), `getMatchesByLeagueAndDate()`, `getMatchEvents()`, `getMatchById()`, `refreshLiveMatchCache()` scheduler
+- `ExternalApiService` — all football API records, mappers, fetch methods (scheduler moved to MatchService)
+- `NbaApiService` — ESPN-based (switched from balldontlie): all NBA ESPN records, `fetchGameDtosByDate`, `fetchStandings` (no API key); two RestClient instances (main + standings subdomain)
+- `NbaDataLoader` — seeds Basketball sport, NBA league, all 30 teams (with ESPN logo URLs) + rosters; auto-migrates old balldontlie-seeded teams with missing crestUrls
+- All 7 REST controllers — all endpoints wired
+- `DataLoader` — seeds 6 Futbol leagues, 20 teams each, full squads from football-data.org
+- All 5 Flyway migrations applied
+- Swagger/OpenAPI at `/swagger-ui/index.html`
 - `docker-compose.yml` — postgres:16-alpine + redis:7-alpine with healthchecks
-- React frontend — 8 pages, 4 components, JWT Axios interceptor, React Query, Tailwind, responsive layout
+- `.env.example` at project root
+- React frontend — 9 pages, 4 components + `useLiveScores` WebSocket hook, JWT Axios interceptor, React Query, Tailwind, responsive layout
+- Standings table — color zone indicators (`showZones` prop, no shading for UCL / basketball)
+- Multi-sport frontend: Basketball leagues + teams visible alongside Futbol
+- `SearchPage` at `/search` — global team + player search, debounced via React Query `enabled`, Search in both nav bars
+- Live page shows both football and NBA in-progress games
 
-### 🔲 Stubbed (returns null/empty)
-- `MatchService.getMatchById()` — returns `null` (needs `/matches/{id}` fetch added to `ExternalApiService`)
-- `MatchService.getMatchStats()` — returns `Map.of()` (stats not in football-data.org free tier)
+### 🔲 Stubbed (returns empty — free tier limitation)
+- `MatchService.getMatchStats()` — returns `Map.of()` (match stats not in football-data.org free tier)
 - `MatchService.getMatchLineups()` — returns `Map.of()` (lineups not in football-data.org free tier)
 
-### 🔲 Not started
-- `ExternalApiService.refreshLiveMatchCache()` — has TODO comment (TASK-17); needs `SimpMessagingTemplate` injection, score-change detection, and push to `/topic/matches/live`
-- `GlobalExceptionHandler` — no global error handler yet
-- Swagger/OpenAPI — not configured
-- Dockerfile for the Spring Boot app (Docker Compose for infra exists, but the app itself isn't containerised)
+### ✅ Also implemented
+- `Dockerfile` — multi-stage build (Maven builder + JRE runtime); final image has no JDK or source code
+- `application-docker.yml` — Docker Spring profile; points datasource to `postgres` service, Redis to `redis` service, reads secrets from env vars
+- `docker-compose.yml` — full stack: postgres + redis + app, with `depends_on: service_healthy` so app waits for DB before starting
+- `.env.example` updated — documents both local dev (Option A) and full Docker Compose (Option B) workflows
+- TypeScript errors fixed: `PlayerDetailPage.tsx` null→undefined, `TeamDetailPage.tsx` unused `calculateAge` removed
 
 ---
 
 ## Remaining Tasks
 
-### Match Detail
-- [ ] Add `fetchMatchById(Long id)` to `ExternalApiService` (calls `/matches/{id}`)
-- [ ] Wire `MatchService.getMatchById()` to use it
-- [ ] Test `GET /api/matches/{id}`
-
-### WebSocket Live Push (TASK-17)
-- [ ] Inject `SimpMessagingTemplate` into `ExternalApiService`
-- [ ] Implement score-change detection in `refreshLiveMatchCache()`
-- [ ] Push diffs to `/topic/matches/live`
-- [ ] Test with Postman WebSocket client
-
-### Polish
-- [ ] `GlobalExceptionHandler` — consistent JSON error responses
-- [ ] Swagger/OpenAPI — auto-generated API docs
-- [ ] Dockerfile for the Spring Boot app + add `app` service to `docker-compose.yml`
+### Polish / Nice-to-have
+- [ ] Push notifications for favourite teams
+- [ ] More test coverage — `MatchService`, `NbaApiService`, `NflApiService` have no tests

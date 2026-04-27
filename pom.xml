@@ -113,12 +113,17 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
+            <scope>test</scope> <!-- Includes JUnit 5, Mockito, AssertJ, MockMvc -->
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope> <!-- Provides csrf(), @WithMockUser, etc. for Spring Security tests -->
         </dependency>
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <scope>test</scope>
+            <scope>test</scope> <!-- In-memory database used instead of Postgres when running tests -->
         </dependency>
     </dependencies>
 

@@ -36,6 +36,17 @@ public class PlayerService {
                 .toList();
     }
 
+    // Returns players whose name contains the query string (case-insensitive).
+    // Capped at 10 results so the search results page stays readable.
+    // Called by GET /api/search?q=...
+    public List<PlayerDto> searchPlayers(String query) {
+        return playerRepository.findByNameContainingIgnoreCase(query)
+                .stream()
+                .limit(10)
+                .map(this::toDto)
+                .toList();
+    }
+
     // Package-private so UserService can reuse this converter for favourite player data.
     PlayerDto toDto(Player player) {
         return new PlayerDto(

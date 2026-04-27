@@ -36,6 +36,17 @@ public class TeamService {
                 .toList();
     }
 
+    // Returns teams whose name contains the query string (case-insensitive).
+    // Capped at 8 results so the search dropdown stays compact.
+    // Called by GET /api/search?q=...
+    public List<TeamDto> searchTeams(String query) {
+        return teamRepository.findByNameContainingIgnoreCase(query)
+                .stream()
+                .limit(8)
+                .map(this::toDto)
+                .toList();
+    }
+
     // Package-private (no access modifier) so UserService can also use it
     // to convert FavoriteTeam entities into TeamDtos without duplicating logic.
     TeamDto toDto(Team team) {

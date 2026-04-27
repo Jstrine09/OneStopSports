@@ -10,6 +10,14 @@ spring:
     database-platform: org.hibernate.dialect.H2Dialect
   flyway:
     enabled: false
+  # Disable Redis and use a no-op in-memory cache so @SpringBootTest can start
+  # without a running Redis instance. All cache operations become no-ops (passthrough).
+  cache:
+    type: none
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
   data:
     redis:
       host: localhost

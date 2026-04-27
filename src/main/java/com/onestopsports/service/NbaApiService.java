@@ -1,283 +1,466 @@
 package com.onestopsports.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.StandingsEntryDto;
 import com.onestopsports.dto.TeamDto;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
-// This service is the NBA equivalent of ExternalApiService.
-// It talks exclusively to balldontlie.io (https://api.balldontlie.io/v1),
-// the free NBA API that gives us teams, rosters, game scores, and standings.
+// This service talks to ESPN's unofficial public NBA API — no API key required.
 //
-// Key difference from the football API:
-// - Auth: Bearer token in the Authorization header (not X-Auth-Token)
-// - URLs use array-style parameters: ?dates[]=YYYY-MM-DD, ?team_ids[]=123
-// - Pagination: cursor-based (meta.next_cursor) instead of page numbers
+// Two base URLs are used because standings live on a different ESPN host:
+//   Main API:      https://site.api.espn.com/apis/site/v2/sports/basketball/nba
+//   Standings API: https://site.web.api.espn.com/apis/v2/sports/basketball/nba
+//
+// Previously this service used balldontlie.io. We switched to ESPN because:
+//   - ESPN provides team logos on the free tier (balldontlie doesn't)
+//   - ESPN standings work without a paid subscription (balldontlie standings require paid)
+//   - Same ESPN pattern as NflApiService — more consistent codebase
+//
+// Key differences from NflApiService (our other ESPN service):
+//   - Roster response: athletes is a FLAT array, not grouped by offense/defense/specialTeam
+//   - Scoreboard teams have a single "logo" string, not a "logos" array
+//   - Standings are split by conference (East/West), not conference+division like NFL
 @Service
 public class NbaApiService {
 
-    // The pre-configured HTTP client — has the balldontlie base URL and Bearer token baked in
+    private static final Logger log = LoggerFactory.getLogger(NbaApiService.class);
+
+    // Main ESPN API client — used for teams, rosters, and scoreboard
     private final RestClient restClient;
 
-    // Values injected from application-local.yml (gitignored for security)
+    // Separate client for the standings endpoint which lives on a different ESPN subdomain
+    private final RestClient standingsClient;
+
+    // Both base URLs are injected from application.yml so they can be overridden in tests.
+    // No API key is needed — ESPN's unofficial API is publicly accessible.
+    // @Autowired is required here because we also have a package-private test constructor below —
+    // Spring needs to know which constructor to use for production dependency injection.
+    @org.springframework.beans.factory.annotation.Autowired
     public NbaApiService(
             @Value("${external-api.nba.base-url}") String baseUrl,
-            @Value("${external-api.nba.api-key}") String apiKey) {
+            @Value("${external-api.nba.standings-url}") String standingsUrl) {
+        // No Authorization header needed — ESPN API is publicly accessible
+        this.restClient       = RestClient.builder().baseUrl(baseUrl).build();
+        this.standingsClient  = RestClient.builder().baseUrl(standingsUrl).build();
+    }
 
-        // Build the RestClient once at startup.
-        // "Authorization: Bearer <key>" is the auth format balldontlie expects.
-        this.restClient = RestClient.builder()
-                .baseUrl(baseUrl)
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .build();
+    // Package-private test constructor — accepts pre-built RestClient instances.
+    // Used by NbaApiServiceTest so we can inject mock clients without starting a real HTTP server.
+    // Never called by Spring — only by unit tests in the same package.
+    NbaApiService(RestClient restClient, RestClient standingsClient) {
+        this.restClient      = restClient;
+        this.standingsClient = standingsClient;
     }
 
     // ── API Response Records ──────────────────────────────────────────────────
-    // These inner records mirror the JSON structure balldontlie.io returns.
-    // @JsonIgnoreProperties(ignoreUnknown = true) means extra fields in the API
+    // These inner records mirror ESPN's JSON response structure.
+    // @JsonIgnoreProperties(ignoreUnknown = true) means extra fields in ESPN's
     // response won't crash the app — we just ignore what we don't need.
-    // @JsonProperty is needed wherever the JSON field name uses snake_case
-    // but we want a camelCase Java field name (e.g. "full_name" → fullName).
+    // The nesting for teams is deliberately deep: sports → leagues → teams → team.
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    // Response wrapper for GET /teams — contains the list of all 30 NBA teams
-    public record NbaTeamsResponse(List<NbaTeam> data) {}
+    // Top-level wrapper for GET /teams — contains sports → leagues → teams
+    public record EspnTeamsResponse(List<EspnSport> sports) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    // One NBA team — e.g. { "id": 1, "name": "Celtics", "full_name": "Boston Celtics", ... }
-    public record NbaTeam(
-            Long id,
-            String name,                                  // Short name — e.g. "Celtics"
-            @JsonProperty("full_name") String fullName,   // Full name — e.g. "Boston Celtics"
-            String abbreviation,                          // e.g. "BOS" — used as short name in the app
-            String city,                                  // e.g. "Boston"
-            String conference,                            // "East" or "West"
-            String division) {}                           // e.g. "Atlantic"
+    public record EspnSport(List<EspnLeague> leagues) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    // Response wrapper for GET /players — paginated, so it also includes metadata
-    public record NbaPlayersResponse(List<NbaPlayer> data, NbaMeta meta) {}
+    public record EspnLeague(List<EspnTeamEntry> teams) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    // Pagination metadata — next_cursor is null when there are no more pages
-    public record NbaMeta(@JsonProperty("next_cursor") Integer nextCursor) {}
+    // Each team in the list is wrapped in a { "team": {...} } object — we unwrap it
+    public record EspnTeamEntry(EspnTeam team) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    // One NBA player — e.g. { "id": 237, "first_name": "LeBron", "last_name": "James", "position": "F", ... }
-    public record NbaPlayer(
-            Long id,
-            @JsonProperty("first_name") String firstName,
-            @JsonProperty("last_name") String lastName,
-            String position,                                    // "G", "F", "C", "G-F", or "F-C"
-            @JsonProperty("jersey_number") String jerseyNumber, // String — e.g. "23" (sometimes null)
-            String country,                                     // Nationality — e.g. "USA"
-            NbaTeam team) {}                                    // May be null if player is a free agent
+    // One NBA team — e.g. { "id": "1", "displayName": "Atlanta Hawks", "abbreviation": "ATL", ... }
+    public record EspnTeam(
+            String id,            // ESPN's string team ID — e.g. "1" (not our DB ID)
+            String displayName,   // Full name — e.g. "Atlanta Hawks"
+            String abbreviation,  // e.g. "ATL" — shown in score cards
+            String location,      // City — e.g. "Atlanta"
+            String name,          // Short name — e.g. "Hawks"
+            List<EspnLogo> logos) {} // Team logo URLs — first is the default light-mode logo
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    // Response wrapper for GET /games — the list of games on a given date
-    public record NbaGamesResponse(List<NbaGame> data) {}
+    public record EspnLogo(String href) {} // URL to the logo image on ESPN's CDN
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    // One NBA game — includes score, status, and both teams
-    public record NbaGame(
-            Long id,
-            String date,                                                    // "YYYY-MM-DD"
-            String status,                                                  // "Final", "In Progress", "7:30 pm ET", etc.
-            @JsonProperty("home_team") NbaTeam homeTeam,
-            @JsonProperty("visitor_team") NbaTeam visitorTeam,
-            @JsonProperty("home_team_score") Integer homeTeamScore,         // 0 for future games
-            @JsonProperty("visitor_team_score") Integer visitorTeamScore) {}
+    // Response for GET /teams/{id}/roster
+    // NBA rosters use a FLAT athletes array — unlike NFL which groups by offense/defense/specialTeam
+    public record EspnRosterResponse(List<EspnAthlete> athletes) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    // Response wrapper for GET /standings
-    public record NbaStandingsResponse(List<NbaStandingEntry> data) {}
+    // One NBA player — name, jersey, position, birthplace, and date of birth
+    public record EspnAthlete(
+            String id,                    // ESPN athlete ID
+            String fullName,              // e.g. "LeBron James"
+            String jersey,                // Jersey number as string — e.g. "23" (may be null)
+            String dateOfBirth,           // ISO-8601 string — e.g. "1984-12-30T07:00Z"
+            EspnAthletePosition position, // The player's specific position (nested object)
+            EspnBirthPlace birthPlace) {} // Birthplace — used as nationality proxy
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    // One row in the NBA standings — one team's season record
-    public record NbaStandingEntry(
-            NbaTeam team,
-            Integer wins,
-            Integer losses,
-            String conference,
-            @JsonProperty("conference_rank") Integer conferenceRank,
-            @JsonProperty("overall_rank") Integer overallRank) {}
+    // The player's playing position
+    public record EspnAthletePosition(
+            String name,          // Full name — e.g. "Center", "Guard", "Forward"
+            String abbreviation)  // Short code — e.g. "C", "G", "F"
+    {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnBirthPlace(
+            String city,    // e.g. "Akron"
+            String country) // e.g. "USA" — used as a nationality proxy
+    {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // Response for GET /scoreboard?dates=YYYYMMDD — list of games on that date
+    public record EspnScoreboardResponse(List<EspnEvent> events) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // One NBA game event — contains status, both teams, and scores
+    public record EspnEvent(
+            String id,                          // ESPN event ID — string like "401705649"
+            String date,                        // ISO-8601 UTC string — e.g. "2025-04-20T17:00Z"
+            EspnEventStatus status,             // Game status (scheduled, in progress, final, etc.)
+            List<EspnCompetition> competitions) // Always contains exactly one competition
+    {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnEventStatus(EspnStatusType type) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStatusType(
+            String name,         // Machine-readable: "STATUS_FINAL", "STATUS_IN_PROGRESS", etc.
+            String description)  // Human-readable: "Final", "In Progress", "7:00 PM ET"
+    {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // A competition is ESPN's term for one scheduled match — a game between two teams
+    public record EspnCompetition(List<EspnCompetitor> competitors) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // One side in a game — either the home or away team with their score
+    public record EspnCompetitor(
+            String homeAway,     // "home" or "away"
+            EspnCompTeam team,   // The team playing
+            String score) {}     // Score as a string — empty string before the game starts
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // Condensed team info as it appears inside a scoreboard event.
+    // NBA scoreboard uses a single "logo" string (not the "logos" array used by the teams endpoint)
+    public record EspnCompTeam(
+            String id,
+            String displayName,   // e.g. "Oklahoma City Thunder"
+            String abbreviation,  // e.g. "OKC"
+            String logo) {}       // Single logo URL string (not an array like the teams endpoint)
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // Response for GET /standings?season=YYYY — two conference children (East + West)
+    public record EspnStandingsResponse(List<EspnConference> children) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // One NBA conference — "Eastern Conference" or "Western Conference"
+    // NBA standings go: Conference → Entries (no division level, unlike NFL)
+    public record EspnConference(
+            String name,                     // "Eastern Conference" or "Western Conference"
+            EspnStandingsSection standings)  // The actual standings data for this conference
+    {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // Contains the entries list — separated out because ESPN nests it under a "standings" key
+    public record EspnStandingsSection(List<EspnStandingsEntry> entries) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // One row in the standings — one team's season record
+    public record EspnStandingsEntry(
+            EspnStandingsTeam team,   // The team
+            List<EspnStat> stats) {}  // Stats including "wins", "losses", "playoffSeed", etc.
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStandingsTeam(
+            String id,
+            String displayName,   // e.g. "Cleveland Cavaliers"
+            String abbreviation,  // e.g. "CLE"
+            String location) {}   // City — e.g. "Cleveland"
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // A named stat — we specifically use "wins", "losses", and "playoffSeed"
+    public record EspnStat(
+            String name,          // e.g. "wins", "losses", "playoffSeed"
+            Double value,         // Numeric value — e.g. 64.0
+            String displayValue)  // Formatted string — e.g. "64"
+    {}
 
     // ── Public API Methods ────────────────────────────────────────────────────
 
     /**
-     * Fetches all 30 NBA teams.
-     * balldontlie returns all teams in a single response — no pagination needed here.
+     * Fetches all 30 NBA teams from ESPN.
+     * ESPN returns all teams in a single response under a deeply nested path:
+     * sports[0].leagues[0].teams[*].team
      * Used by NbaDataLoader at startup to seed the database.
      */
-    public NbaTeamsResponse fetchAllTeams() {
+    public EspnTeamsResponse fetchAllTeams() {
         return restClient.get()
-                .uri("/teams?per_page=100") // 30 teams fits in one page
+                .uri("/teams?limit=32") // 30 NBA teams — request slightly more to be safe
                 .retrieve()
-                .body(NbaTeamsResponse.class);
+                .body(EspnTeamsResponse.class);
     }
 
     /**
-     * Fetches all players for a specific NBA team using cursor pagination.
+     * Fetches the roster for a single NBA team by its ESPN team ID.
      *
-     * balldontlie uses cursor-based pagination — each response includes a
-     * meta.next_cursor value. We keep requesting new pages until next_cursor is null.
+     * Unlike NFL (where players are grouped by offense/defense/specialTeam),
+     * NBA rosters return a flat "athletes" list — no groups to flatten.
      *
-     * teamId here is balldontlie's team ID (not our DB team ID).
+     * @param espnTeamId ESPN's string team ID — e.g. "1" for the Atlanta Hawks
      */
-    public List<NbaPlayer> fetchPlayersByTeam(Long teamId) {
-        // Fetch only the first 25 players for this team.
-        // NBA active rosters are 15 players + up to 2 two-way contracts = 17 max,
-        // so per_page=25 captures the full current roster with a small buffer.
-        // Note: the /players endpoint does NOT support a season filter — balldontlie
-        // returns players sorted by most recent association, so the first page
-        // gives us current-season players without pulling in decades of history.
-        String uri = "/players?team_ids[]=" + teamId + "&per_page=25";
-
-        NbaPlayersResponse page = restClient.get()
-                .uri(uri)
+    public List<EspnAthlete> fetchPlayersByTeam(String espnTeamId) {
+        EspnRosterResponse response = restClient.get()
+                .uri("/teams/{id}/roster", espnTeamId) // e.g. /teams/1/roster
                 .retrieve()
-                .body(NbaPlayersResponse.class);
+                .body(EspnRosterResponse.class);
 
-        if (page == null || page.data() == null) return Collections.emptyList();
-        return page.data();
+        if (response == null || response.athletes() == null) return Collections.emptyList();
+
+        // NBA roster is already a flat list — no grouping to flatten (unlike NFL)
+        return response.athletes();
     }
 
     /**
      * Fetches NBA games on a specific date and converts them to MatchDtos.
      *
-     * dbLeagueId is our internal database ID for the NBA league — we pass it in
-     * so the returned MatchDtos can link back to the correct league in the frontend.
+     * ESPN's scoreboard uses a different date format: YYYYMMDD with no dashes
+     * (e.g. "20250420") — the same format used by NflApiService.
+     *
+     * @param date       the calendar date to fetch games for
+     * @param dbLeagueId our internal DB league ID — included in returned MatchDtos so
+     *                   the frontend can link games back to the correct league
      */
     public List<MatchDto> fetchGameDtosByDate(LocalDate date, Long dbLeagueId) {
-        // balldontlie array parameter format: ?dates[]=YYYY-MM-DD
-        String uri = "/games?dates[]=" + date;
+        // ESPN scoreboard date format: YYYYMMDD (no dashes)
+        String dateStr = date.format(DateTimeFormatter.BASIC_ISO_DATE); // e.g. "20250420"
 
-        NbaGamesResponse response = restClient.get()
-                .uri(uri)
+        EspnScoreboardResponse response = restClient.get()
+                .uri("/scoreboard?dates=" + dateStr)
                 .retrieve()
-                .body(NbaGamesResponse.class);
+                .body(EspnScoreboardResponse.class);
 
-        if (response == null || response.data() == null) return Collections.emptyList();
+        if (response == null || response.events() == null) return Collections.emptyList();
 
-        return response.data().stream()
-                .map(g -> toMatchDto(g, dbLeagueId))
+        return response.events().stream()
+                .map(event -> toMatchDto(event, dbLeagueId))
                 .toList();
     }
 
     /**
-     * Fetches the current NBA standings and converts them to StandingsEntryDtos.
+     * Fetches current NBA standings and converts them to StandingsEntryDtos.
      *
-     * The NBA season straddles two calendar years (e.g. 2024-25 season starts in October 2024).
-     * balldontlie refers to seasons by their start year — so the 2024-25 season = season 2024.
-     * If we're before October, the current season hasn't started yet, so we use last year.
+     * Uses a different ESPN host (site.web.api.espn.com) which has richer standings data.
+     * Results are sorted globally by win percentage — best record appears first.
+     * Returns an empty list gracefully if the endpoint is down or the season is off.
+     *
+     * @param dbLeagueId our internal DB league ID — included in returned StandingsEntryDtos
      */
     public List<StandingsEntryDto> fetchStandings(Long dbLeagueId) {
-        // Determine which season year to use
+        // The NBA season straddles two calendar years (e.g. 2024-25 season starts Oct 2024).
+        // ESPN identifies seasons by the year the season ends.
+        // Before October → current year hasn't started → use the current year as end year.
+        // After October  → use the next year (the season that just started).
         LocalDate today = LocalDate.now();
-        int season = today.getMonthValue() < 10 ? today.getYear() - 1 : today.getYear();
+        int season = today.getMonthValue() >= 10 ? today.getYear() + 1 : today.getYear();
 
-        NbaStandingsResponse response = restClient.get()
-                .uri("/standings?season=" + season)
-                .retrieve()
-                .body(NbaStandingsResponse.class);
+        try {
+            // type=1 = overall standings (as opposed to conference-only views)
+            EspnStandingsResponse response = standingsClient.get()
+                    .uri("/standings?season=" + season + "&type=1")
+                    .retrieve()
+                    .body(EspnStandingsResponse.class);
 
-        if (response == null || response.data() == null) return Collections.emptyList();
+            if (response == null || response.children() == null || response.children().isEmpty()) {
+                return Collections.emptyList();
+            }
 
-        // Sort by overall league rank before returning
-        return response.data().stream()
-                .sorted(Comparator.comparingInt(e -> e.overallRank() != null ? e.overallRank() : 999))
-                .map(e -> toStandingsEntryDto(e, dbLeagueId))
-                .toList();
+            // Collect all entries from both conferences into one flat list
+            List<EspnStandingsEntry> allEntries = new ArrayList<>();
+            for (EspnConference conference : response.children()) {
+                if (conference.standings() == null || conference.standings().entries() == null) continue;
+                allEntries.addAll(conference.standings().entries());
+            }
+
+            if (allEntries.isEmpty()) return Collections.emptyList();
+
+            // Sort all 30 teams by wins (descending), then assign rank 1–30
+            AtomicInteger rank = new AtomicInteger(0);
+            return allEntries.stream()
+                    .sorted(Comparator.comparingDouble(e -> -getStatValue(e, "wins")))
+                    .map(entry -> toStandingsEntryDto(entry, dbLeagueId, rank.incrementAndGet()))
+                    .toList();
+
+        } catch (RestClientException e) {
+            // Off-season or ESPN structure change — log and return empty list gracefully.
+            // The frontend shows "No standings available" rather than crashing.
+            log.warn("[NbaApiService] fetchStandings failed for season={}: {}", season, e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     // ── Private Mapper Methods ────────────────────────────────────────────────
 
-    // Converts a raw NBA game into the MatchDto format the frontend expects.
-    // We reuse the same MatchDto as football — status strings are mapped to our app's conventions.
-    private MatchDto toMatchDto(NbaGame g, Long dbLeagueId) {
-        // Build minimal TeamDtos — NBA teams don't have crests or stadiums from this endpoint
-        TeamDto home = new TeamDto(
-                g.homeTeam().id(),           // balldontlie team ID (not our DB ID)
-                g.homeTeam().fullName(),      // e.g. "Boston Celtics"
-                g.homeTeam().abbreviation(),  // e.g. "BOS" — shown in score cards
-                null,                         // no crest URL (not in free tier)
-                null,                         // no stadium
-                g.homeTeam().city(),          // e.g. "Boston"
-                dbLeagueId);
+    // Converts one ESPN event (game) into the MatchDto format the frontend expects.
+    // Same pattern as NflApiService.toMatchDto — the ESPN scoreboard structure is identical
+    // between sports, except NBA teams use a "logo" string instead of "logos" array.
+    private MatchDto toMatchDto(EspnEvent event, Long dbLeagueId) {
+        // A competition holds the competitors (home + away teams) and their scores.
+        // ESPN always wraps one game inside a competitions list — we just take the first.
+        EspnCompetition comp = (event.competitions() != null && !event.competitions().isEmpty())
+                ? event.competitions().get(0) : null;
 
-        TeamDto away = new TeamDto(
-                g.visitorTeam().id(),
-                g.visitorTeam().fullName(),
-                g.visitorTeam().abbreviation(),
-                null,
-                null,
-                g.visitorTeam().city(),
-                dbLeagueId);
-
-        // balldontlie returns scores as 0 for future games — treat 0 scores in SCHEDULED games as null
-        String mappedStatus = mapStatus(g.status());
-        Integer homeScore = "SCHEDULED".equals(mappedStatus) ? null : g.homeTeamScore();
-        Integer awayScore  = "SCHEDULED".equals(mappedStatus) ? null : g.visitorTeamScore();
-
-        // Convert date string "YYYY-MM-DD" to LocalDateTime (midnight = start of that day)
-        LocalDateTime startTime = null;
-        if (g.date() != null) {
-            try {
-                startTime = LocalDate.parse(g.date()).atStartOfDay();
-            } catch (Exception ignored) {
-                // Malformed date — leave startTime as null
+        // Find the home and away competitors from the list
+        EspnCompetitor homeComp = null;
+        EspnCompetitor awayComp = null;
+        if (comp != null && comp.competitors() != null) {
+            for (EspnCompetitor c : comp.competitors()) {
+                if ("home".equals(c.homeAway()))      homeComp = c;
+                else if ("away".equals(c.homeAway())) awayComp = c;
             }
         }
 
-        return new MatchDto(g.id(), home, away, homeScore, awayScore,
+        // Build TeamDtos — use the team's logo URL if available
+        TeamDto home = homeComp != null ? toTeamDto(homeComp, dbLeagueId) : emptyTeam(dbLeagueId);
+        TeamDto away = awayComp != null ? toTeamDto(awayComp, dbLeagueId) : emptyTeam(dbLeagueId);
+
+        // Map ESPN's STATUS_* string to our app's three-state convention
+        String statusName = (event.status() != null && event.status().type() != null)
+                ? event.status().type().name() : null;
+        String mappedStatus = mapStatus(statusName);
+
+        // Only show scores once the game has started — ESPN sends "" for future games
+        Integer homeScore = "SCHEDULED".equals(mappedStatus) ? null : parseScore(homeComp);
+        Integer awayScore = "SCHEDULED".equals(mappedStatus) ? null : parseScore(awayComp);
+
+        // Parse the ISO-8601 UTC date string into a LocalDateTime for the tip-off time display
+        LocalDateTime startTime = null;
+        if (event.date() != null) {
+            try {
+                startTime = OffsetDateTime.parse(event.date()).toLocalDateTime();
+            } catch (Exception ignored) {
+                // Malformed date — leave as null
+            }
+        }
+
+        // ESPN event IDs are strings — parse to Long for MatchDto
+        Long matchId = parseId(event.id());
+
+        return new MatchDto(matchId, home, away, homeScore, awayScore,
                 mappedStatus, startTime, dbLeagueId);
     }
 
-    // Converts one row of NBA standings data into the StandingsEntryDto the frontend uses.
-    // Basketball doesn't have draws, goalsFor, or goalsAgainst — those fields are set to 0.
-    // "Points" is mapped to wins — in basketball, teams are ranked by win-loss record, not points.
-    private StandingsEntryDto toStandingsEntryDto(NbaStandingEntry e, Long dbLeagueId) {
-        TeamDto team = new TeamDto(
-                e.team().id(),
-                e.team().fullName(),
-                e.team().abbreviation(),
-                null, null,
-                e.team().city(),
-                dbLeagueId);
+    // Converts an ESPN competitor record to a TeamDto.
+    // NBA scoreboard uses a "logo" string field (not "logos" array used in team records).
+    private TeamDto toTeamDto(EspnCompetitor competitor, Long dbLeagueId) {
+        EspnCompTeam t = competitor.team();
+        if (t == null) return emptyTeam(dbLeagueId);
 
-        int wins   = e.wins()   != null ? e.wins()   : 0;
-        int losses = e.losses() != null ? e.losses() : 0;
+        // "logo" is a single URL string in the NBA scoreboard (unlike the logos[] array in the teams endpoint)
+        String crestUrl = t.logo(); // May be null — frontend shows abbreviation fallback
 
-        return new StandingsEntryDto(
-                e.overallRank(),   // position in the overall league standings
-                team,
-                wins + losses,     // played = wins + losses (no draws in basketball)
-                wins,              // won
-                0,                 // drawn — always 0 in basketball
-                losses,            // lost
-                0,                 // goalsFor — not applicable to basketball
-                0,                 // goalsAgainst — not applicable to basketball
-                wins);             // points — use wins as the ranking metric
+        return new TeamDto(parseId(t.id()), t.displayName(), t.abbreviation(), crestUrl, null, null, dbLeagueId);
     }
 
-    // Maps balldontlie's game status strings to our app's status conventions.
-    // football-data.org uses "FINISHED" / "LIVE" / "TIMED" — we keep that standard here.
-    private String mapStatus(String nbaStatus) {
-        if (nbaStatus == null) return "SCHEDULED";
-        String lower = nbaStatus.toLowerCase();
-        if (lower.equals("final"))        return "FINISHED";
-        if (lower.contains("progress"))   return "LIVE";
-        if (lower.contains("qtr") || lower.contains("half") || lower.contains("ot")) return "LIVE";
-        return "SCHEDULED"; // Future games (show tip-off time like "7:30 pm ET")
+    // Returns a blank TeamDto placeholder for cases where competitor data is missing
+    private TeamDto emptyTeam(Long dbLeagueId) {
+        return new TeamDto(null, "TBD", "TBD", null, null, null, dbLeagueId);
+    }
+
+    // Converts one NBA standings entry to a StandingsEntryDto.
+    // Basketball has no draws — drawn is always 0.
+    // "Points" is set to wins — NBA teams are ranked by win count (not accumulated points).
+    private StandingsEntryDto toStandingsEntryDto(EspnStandingsEntry entry, Long dbLeagueId, int rank) {
+        EspnStandingsTeam t = entry.team();
+        TeamDto team = new TeamDto(
+                parseId(t.id()),
+                t.displayName(),
+                t.abbreviation(),
+                null, null,         // no crest/stadium in standings response
+                t.location(),       // city name
+                dbLeagueId);
+
+        int wins   = (int) getStatValue(entry, "wins");
+        int losses = (int) getStatValue(entry, "losses");
+
+        return new StandingsEntryDto(
+                rank,          // global rank across both conferences (1–30)
+                team,
+                wins + losses, // played = wins + losses (no draws in basketball)
+                wins,
+                0,             // drawn — always 0 in basketball
+                losses,
+                0,             // goalsFor — not applicable
+                0,             // goalsAgainst — not applicable
+                wins);         // "points" = wins — ranking metric for basketball
+    }
+
+    // Parses the score string from a competitor — ESPN sends empty string "" before the game starts.
+    // Returns null instead of 0 so the frontend shows "--" for unstarted games rather than a zero score.
+    private Integer parseScore(EspnCompetitor competitor) {
+        if (competitor == null || competitor.score() == null || competitor.score().isBlank()) return null;
+        try {
+            return Integer.parseInt(competitor.score());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    // Parses an ESPN string ID (e.g. "22") to a Long — returns null if parsing fails
+    private Long parseId(String id) {
+        if (id == null) return null;
+        try {
+            return Long.parseLong(id);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    // Finds a named stat (e.g. "wins") in a standings entry's stats list and returns its value.
+    // Returns 0.0 if the stat isn't present — keeps sorting and arithmetic safe.
+    private double getStatValue(EspnStandingsEntry entry, String statName) {
+        if (entry.stats() == null) return 0.0;
+        return entry.stats().stream()
+                .filter(s -> statName.equals(s.name()) && s.value() != null)
+                .mapToDouble(EspnStat::value)
+                .findFirst()
+                .orElse(0.0);
+    }
+
+    // Maps ESPN's STATUS_* strings to our app's three-state status convention.
+    // We use the same states as football-data.org for consistency: FINISHED / LIVE / SCHEDULED.
+    private String mapStatus(String espnStatus) {
+        if (espnStatus == null) return "SCHEDULED";
+        return switch (espnStatus) {
+            // Game is over
+            case "STATUS_FINAL", "STATUS_FORFEIT" -> "FINISHED";
+            // All in-game states — quarters, halftime, overtime, end of period
+            case "STATUS_IN_PROGRESS", "STATUS_HALFTIME",
+                    "STATUS_END_PERIOD", "STATUS_OVERTIME" -> "LIVE";
+            // Everything else (scheduled, pregame, postponed, suspended) = upcoming
+            default -> "SCHEDULED";
+        };
     }
 }
