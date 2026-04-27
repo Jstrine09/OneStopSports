@@ -6,6 +6,8 @@ import com.onestopsports.dto.MatchEventDto;
 import com.onestopsports.dto.StandingsEntryDto;
 import com.onestopsports.dto.TeamDto;
 import com.onestopsports.repository.LeagueRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -29,6 +31,8 @@ import java.util.List;
 // which owns the combined "all sports" live feed (football + NBA).
 @Service
 public class ExternalApiService {
+
+    private static final Logger log = LoggerFactory.getLogger(ExternalApiService.class);
 
     // The pre-configured HTTP client — has the base URL and API key baked in
     private final RestClient restClient;
@@ -220,21 +224,32 @@ public class ExternalApiService {
     /**
      * Fetches standings for a competition and returns them as a list of StandingsEntryDtos.
      * Filters to the TOTAL standings group (the API also returns HOME and AWAY splits).
+     * Returns an empty list on API errors (e.g. 403 invalid key, 429 rate limit) rather
+     * than letting the exception propagate to a 500 — same pattern as NbaApiService and NflApiService.
      */
     public List<StandingsEntryDto> fetchStandings(Integer competitionId) {
-        ApiStandingsResponse response = fetchStandingsByCompetition(competitionId);
-        if (response == null || response.standings() == null) {
+        try {
+            ApiStandingsResponse response = fetchStandingsByCompetition(competitionId);
+            if (response == null || response.standings() == null) {
+                return Collections.emptyList();
+            }
+
+            // football-data.org returns TOTAL, HOME, and AWAY groups — we only want TOTAL
+            return response.standings().stream()
+                    .filter(group -> "TOTAL".equals(group.type()))
+                    .findFirst()
+                    .map(group -> group.table().stream()
+                            .map(this::toStandingsEntryDto)
+                            .toList())
+                    .orElse(Collections.emptyList());
+
+        } catch (Exception e) {
+            // Log the error so it's visible in the server console — common causes are
+            // a missing/invalid API key (403), hitting the free-tier rate limit (429),
+            // or the server starting without the "local" profile (key = placeholder value).
+            log.warn("[ExternalApiService] fetchStandings failed for competition={}: {}", competitionId, e.getMessage());
             return Collections.emptyList();
         }
-
-        // football-data.org returns TOTAL, HOME, and AWAY groups — we only want TOTAL
-        return response.standings().stream()
-                .filter(group -> "TOTAL".equals(group.type()))
-                .findFirst()
-                .map(group -> group.table().stream()
-                        .map(this::toStandingsEntryDto)
-                        .toList())
-                .orElse(Collections.emptyList());
     }
 
     /**
