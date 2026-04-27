@@ -56,7 +56,9 @@ export default function AuthPage() {
               value={form.username}
               onChange={handle}
               required
-              className="w-full rounded-lg bg-slate-700 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-600 transition focus:ring-blue-500"
+              autoComplete="username"
+              autoCapitalize="none"
+              className="w-full rounded-lg bg-slate-700 px-3 py-2.5 text-base outline-none ring-1 ring-slate-600 transition focus:ring-blue-500 md:text-sm"
             />
           </div>
 
@@ -69,7 +71,9 @@ export default function AuthPage() {
                 value={form.email}
                 onChange={handle}
                 required
-                className="w-full rounded-lg bg-slate-700 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-600 transition focus:ring-blue-500"
+                autoComplete="email"
+                inputMode="email"
+                className="w-full rounded-lg bg-slate-700 px-3 py-2.5 text-base outline-none ring-1 ring-slate-600 transition focus:ring-blue-500 md:text-sm"
               />
             </div>
           )}
@@ -83,7 +87,8 @@ export default function AuthPage() {
               onChange={handle}
               required
               minLength={8}
-              className="w-full rounded-lg bg-slate-700 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-600 transition focus:ring-blue-500"
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              className="w-full rounded-lg bg-slate-700 px-3 py-2.5 text-base outline-none ring-1 ring-slate-600 transition focus:ring-blue-500 md:text-sm"
             />
           </div>
 

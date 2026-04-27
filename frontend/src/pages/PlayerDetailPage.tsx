@@ -93,7 +93,7 @@ export default function PlayerDetailPage() {
       {/* Back */}
       <button
         onClick={() => handleBack(player)}
-        className="flex items-center gap-1 text-sm text-slate-400 hover:text-white"
+        className="flex items-center gap-1 py-2 text-sm text-slate-400 hover:text-white"
       >
         <ChevronLeft size={16} /> Back
       </button>

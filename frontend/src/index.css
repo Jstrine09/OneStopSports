@@ -12,6 +12,8 @@
     @apply bg-slate-900 text-white;
     /* Remove default iOS tap highlight */
     -webkit-tap-highlight-color: transparent;
+    /* Prevent pull-to-refresh and overscroll bounce in standalone PWA mode */
+    overscroll-behavior-y: none;
   }
 
   /* Smooth scrolling everywhere */
@@ -24,6 +26,13 @@
   /* Padding that accounts for iPhone home indicator */
   .pb-safe {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  /* Padding that accounts for iPhone notch / Dynamic Island (top).
+     Uses max() so the content always has at least 1rem baseline padding,
+     growing to fill the full notch/status-bar safe area in standalone PWA mode. */
+  .pt-safe {
+    padding-top: max(1rem, env(safe-area-inset-top));
   }
 
   /* Hidden scrollbar but still scrollable */
