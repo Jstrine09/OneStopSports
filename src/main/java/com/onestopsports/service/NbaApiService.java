@@ -49,12 +49,23 @@ public class NbaApiService {
 
     // Both base URLs are injected from application.yml so they can be overridden in tests.
     // No API key is needed — ESPN's unofficial API is publicly accessible.
+    // @Autowired is required here because we also have a package-private test constructor below —
+    // Spring needs to know which constructor to use for production dependency injection.
+    @org.springframework.beans.factory.annotation.Autowired
     public NbaApiService(
             @Value("${external-api.nba.base-url}") String baseUrl,
             @Value("${external-api.nba.standings-url}") String standingsUrl) {
         // No Authorization header needed — ESPN API is publicly accessible
         this.restClient       = RestClient.builder().baseUrl(baseUrl).build();
         this.standingsClient  = RestClient.builder().baseUrl(standingsUrl).build();
+    }
+
+    // Package-private test constructor — accepts pre-built RestClient instances.
+    // Used by NbaApiServiceTest so we can inject mock clients without starting a real HTTP server.
+    // Never called by Spring — only by unit tests in the same package.
+    NbaApiService(RestClient restClient, RestClient standingsClient) {
+        this.restClient      = restClient;
+        this.standingsClient = standingsClient;
     }
 
     // ── API Response Records ──────────────────────────────────────────────────
