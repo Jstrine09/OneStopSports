@@ -34,7 +34,8 @@ com.onestopsports
 │   ├── WebSocketConfig.java
 │   ├── OpenApiConfig.java          Swagger/OpenAPI setup — JWT Bearer auth scheme for Swagger UI
 │   ├── DataLoader.java             Seeds football DB from football-data.org on first boot
-│   └── NbaDataLoader.java          Seeds NBA teams + rosters from ESPN on first boot (migrates balldontlie logos)
+│   ├── NbaDataLoader.java          Seeds NBA teams + rosters from ESPN on first boot (migrates old logo-less teams)
+│   └── NflDataLoader.java          Seeds NFL teams + rosters from ESPN on first boot
 ├── controller/
 │   ├── Sport, League, Team, Player, Match, Auth, User, Search controllers
 │   └── GlobalExceptionHandler.java @RestControllerAdvice — consistent JSON error responses
@@ -47,7 +48,8 @@ com.onestopsports
 └── service/
     ├── Sport, League, Team, Player, Match, Auth, User services
     ├── ExternalApiService.java     Football API — teams, matches, standings, events (pure football, no scheduler)
-    └── NbaApiService.java          NBA API (ESPN) — teams with logos, rosters, scores, standings
+    ├── NbaApiService.java          NBA API (ESPN) — teams with logos, rosters, scores, standings
+    └── NflApiService.java          NFL API (ESPN) — teams with logos, rosters, scores, standings
 ```
 
 ---
@@ -87,25 +89,53 @@ com.onestopsports
 - Uses `RestClient` (Spring 6, synchronous) — **not** `WebClient`
 - API keys live in `application-local.yml` (gitignored) — never in `application.yml`
 - **Football** (football-data.org): `X-Auth-Token` header auth, 10 req/min free tier → `DataLoader` sleeps 6.2s between competitions
-- **NBA** (ESPN unofficial): no API key needed — same public ESPN API as NFL; uses two base URLs (main + standings subdomain)
+- **NBA** (ESPN unofficial): no API key needed; base URL `site.api.espn.com/apis/site/v2/sports/basketball/nba`; standings URL `site.web.api.espn.com/apis/v2/sports/basketball/nba/standings`; two `RestClient` instances
+- **NFL** (ESPN unofficial): no API key needed; base URL `site.api.espn.com/apis/site/v2/sports/football/nfl`; single `RestClient` instance
 
 ### Multi-Sport Routing
 - DB schema is sport-agnostic: `sport → league → team → player`
 - `MatchService.getMatchesByLeagueAndDate()` and `LeagueService.getStandings()` check `league.getSport().getSlug()` and route to the correct API:
   - `"basketball"` → `NbaApiService`
-  - default → `ExternalApiService` (football)
+  - `"american-football"` → `NflApiService`
+  - default → `ExternalApiService` (football/soccer)
 - Both methods are `@Transactional(readOnly = true)` so the lazy `league.getSport()` relationship loads within a Hibernate session
+- `getMatchById()` and `getMatchEvents()` are football-only — they always delegate to `ExternalApiService` (no sport routing needed; NBA/NFL don't expose per-match event APIs)
+- `refreshLiveMatchCache()` also queries all basketball leagues via `leagueRepository.findBySport_Slug("basketball")` and all american-football leagues via `findBySport_Slug("american-football")` so live NFL games appear in the combined feed
 
 ### NBA Data
 - `NbaDataLoader` seeds: 1 Sport (Basketball) → 1 League (NBA) → 30 Teams → full rosters
-- Skip condition: all 30 teams exist AND at least one has a crestUrl (ESPN-sourced) — if crestUrls are all null (old balldontlie data), re-runs to update logos
-- Migration: on first boot after switching from balldontlie, loader updates all 30 teams' `crestUrl` fields with ESPN CDN URLs; existing players are not re-seeded
-- `NbaApiService` inner records mirror ESPN's JSON: `EspnTeam`, `EspnAthlete`, `EspnEvent`, `EspnStandingsEntry` — same pattern as `NflApiService`
-- NBA ESPN roster: `athletes` is a flat array (unlike NFL which groups by offense/defense/specialTeam)
+- Skip condition: all 30 teams exist AND at least one has a crestUrl (ESPN-sourced) — if crestUrls are all null (old data), re-runs to update logos
+- `NbaApiService` inner records mirror ESPN's JSON (see API Response Records section)
+- NBA ESPN roster: `athletes` is a **flat array** (unlike NFL which groups by offense/defense/specialTeam)
 - Positions are already full names from ESPN ("Center", "Guard", "Forward") — no abbreviation-to-full mapping needed
-- NBA teams now have `crestUrl` from ESPN CDN (e.g. `https://a.espncdn.com/i/teamlogos/nba/500/bos.png`)
-- `dateOfBirth` is populated from ESPN (ISO-8601 string parsed to `LocalDate`) — NBA players now have DOB
+- NBA teams have `crestUrl` from ESPN CDN (e.g. `https://a.espncdn.com/i/teamlogos/nba/500/bos.png`)
+- `dateOfBirth` is populated from ESPN (ISO-8601 string parsed to `LocalDate`) — NBA players have DOB
 - Standings use `site.web.api.espn.com/apis/v2` (different subdomain from main API) — separate `standingsClient` RestClient in `NbaApiService`
+- NBA season year logic: `month >= 10 ? year + 1 : year` (October–December belongs to the next season's label, e.g. Oct 2024 → "2024-25")
+
+### NFL Data
+- `NflDataLoader` seeds: 1 Sport (American Football, slug `"american-football"`) → 1 League (NFL) → 32 Teams → full rosters (~53 active players each)
+- Skip condition: `teamRepository.findByLeagueId(nfl.getId()).size() >= 32` — if all 32 teams exist, skip entirely; partial seeding fills in missing teams only
+- Season label: `"2025-26"`; sleep 1500ms between roster fetches to avoid rate-limiting
+- `NflApiService` inner records mirror ESPN's JSON (see API Response Records section)
+- NFL rosters are grouped by side: `EspnPositionGroup` has a `position` field (`"offense"` / `"defense"` / `"specialTeam"`) with an `items` list of `EspnAthlete` — must iterate all groups to collect all players
+- NFL players do **not** have `dateOfBirth` — ESPN NFL endpoint doesn't return it
+- Position abbreviations from ESPN ("QB", "WR", "CB") are stored as-is — no full-name expansion
+- NFL teams have `crestUrl` from ESPN CDN (e.g. `https://a.espncdn.com/i/teamlogos/nfl/500/ne.png`)
+- NFL season year logic: `month < 9 ? year - 1 : year` (January–August belongs to the previous season, e.g. Feb 2025 → "2024" season)
+- Standings: Conference → Division → Group entries (3 levels of nesting); teams sorted by wins descending within each division
+
+### ET Timezone Display (NBA + NFL)
+- **Problem**: ESPN returns game times as UTC ISO-8601 strings (e.g. `"2025-04-26T23:30Z"`). The backend stripped the offset with `.toLocalDateTime()`, producing a naive `LocalDateTime`. A browser in Ireland (BST = UTC+1) then shows "11:30 PM" for a "7:30 PM ET" game.
+- **Fix**: Convert UTC→ET in both `NbaApiService` and `NflApiService` before building the MatchDto:
+  ```java
+  startTime = OffsetDateTime.parse(event.date())
+          .atZoneSameInstant(ZoneId.of("America/New_York"))
+          .toLocalDateTime();
+  ```
+  `ZoneId.of("America/New_York")` handles EDT/EST transitions automatically.
+- **`MatchDto.timezone` field**: 9th field, `String timezone`. `"ET"` for NBA/NFL; `null` for football (soccer). Football times from football-data.org are left as UTC — no conversion needed.
+- **Frontend**: `MatchCard.tsx` and `MatchDetailPage.tsx` call `formatKickoff(utc, match.timezone)` — when `timezone === "ET"` the label is appended: `"7:30 PM ET"`. The time string itself displays correctly in any browser locale because the backend already stored the ET wall-clock time as a naive `LocalDateTime`.
 
 ### WebSocket Live Push
 - `MatchService.refreshLiveMatchCache()` runs every 30s via `@Scheduled(fixedDelay = 30_000)` — scheduler moved from `ExternalApiService` to `MatchService` because `MatchService` owns the combined "all sports" live feed
@@ -150,16 +180,28 @@ Lombok MUST come before MapStruct in `maven-compiler-plugin` annotationProcessor
 - Cache key for the no-arg `getLiveMatches()` method is `SimpleKey.EMPTY` — used when manually updating the cache from `refreshLiveMatchCache()`
 
 ### Testing
-- **`AuthServiceTest`** — pure unit tests with `@ExtendWith(MockitoExtension.class)`, no Spring context
-- **`AuthControllerTest`** — `@WebMvcTest` slice tests
+- **`AuthServiceTest`** — 6 pure unit tests with `@ExtendWith(MockitoExtension.class)`, no Spring context
+- **`AuthControllerTest`** — 7 `@WebMvcTest` slice tests
   - `@WebMvcTest` only scans web-tier beans — `@Configuration` classes like `SecurityConfig` are NOT auto-scanned. Requires `@Import(SecurityConfig.class)` or Spring's default "deny all" fires and every request returns 401
   - `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class` prevents duplicate `UserDetailsService` bean crash
   - `spring-security-test` dependency required for `csrf()` / `SecurityMockMvcRequestPostProcessors`
+- **`MatchServiceTest`** — 13 pure unit tests (`@ExtendWith(MockitoExtension.class)`, no Spring context)
+  - Tests: null leagueId/date guard clauses, unknown league, basketball→NbaApiService routing, american-football→NflApiService routing, football with/without externalId, getMatchById (null + valid), getMatchEvents (null + valid), getMatchStats/getMatchLineups return empty maps
+  - Key gotcha: `fetchMatchDtosByCompetition(int, LocalDate)` takes a primitive `int` — use `anyInt()` not `any()` in `verify()`/`when()`, or Mockito returns `null` which auto-unboxes to NPE
+- **`NbaApiServiceTest`** — 12 pure unit tests
+  - Uses `@Mock(answer = Answers.RETURNS_DEEP_STUBS) RestClient restClient` — RETURNS_DEEP_STUBS makes every method in a fluent chain return a sub-mock, so `restClient.get().uri(...).retrieve().body(Class)` can be stubbed without every intermediate call matching
+  - Manually constructs `NbaApiService` via a **package-private test constructor** in `@BeforeEach` (injects mock RestClients directly, bypassing the `@Value` URL parameter). The production `@Autowired` constructor is marked `@Autowired` so Spring knows which one to use when both exist
+  - Tests: null scoreboard response, STATUS_FINAL→FINISHED, STATUS_IN_PROGRESS→LIVE, scheduled games show null scores, leagueId propagation, standings sorted by wins descending, API exception→empty list, draws are always 0 (NBA), played = wins + losses
+- **`LeagueServiceTest`** — 9 pure unit tests covering: getStandings 404 on unknown league, basketball/american-football/football routing, football without externalId, getLeagueById found/not found, getLeaguesBySport
+- **`OneStopSportsApplicationTests`** — context load test
+  - Requires `@MockBean RedisConnectionFactory redisConnectionFactory` — `RedisConfig` creates a `RedisCacheManager` that needs a real `RedisConnectionFactory`; excluding Redis auto-configuration alone is not enough because `RedisConfig` is a user `@Configuration`, not an auto-config
+  - `src/test/resources/application-test.yml` sets `spring.cache.type: none` and excludes `RedisAutoConfiguration` + `RedisRepositoriesAutoConfiguration` to prevent Redis from being required during tests
+- **Total: 48 tests, all passing** (`mvn test`)
 
 ---
 
 ## API Response Records
-All nested inside `ExternalApiService.java` (football) and `NbaApiService.java` (NBA):
+All are private inner records nested inside their respective service class.
 
 **Football (`ExternalApiService`):**
 ```
@@ -176,6 +218,16 @@ EspnRosterResponse, EspnAthlete, EspnAthletePosition, EspnBirthPlace
 EspnScoreboardResponse, EspnEvent, EspnEventStatus, EspnStatusType, EspnCompetition, EspnCompetitor, EspnCompTeam
 EspnStandingsResponse, EspnConference, EspnStandingsSection, EspnStandingsEntry, EspnStandingsTeam, EspnStat
 ```
+NBA-specific: roster `athletes` is a flat array; standings have 2-level nesting (Conference → Entries).
+
+**NFL (`NflApiService`) — ESPN-based (same ESPN API, different sport path):**
+```
+EspnTeamsResponse, EspnSport, EspnLeague, EspnTeamEntry, EspnTeam, EspnLogo
+EspnRosterResponse, EspnPositionGroup, EspnAthlete, EspnAthletePosition, EspnBirthPlace
+EspnScoreboardResponse, EspnEvent, EspnEventStatus, EspnStatusType, EspnCompetition, EspnCompetitor, EspnCompTeam
+EspnStandingsResponse, EspnConference, EspnDivision, EspnStandingsGroup, EspnStandingsEntry, EspnStandingsTeam, EspnStat
+```
+NFL-specific differences: `EspnPositionGroup` wraps `items: List<EspnAthlete>` (rosters grouped by offense/defense/specialTeam); standings have 3-level nesting (Conference → Division → Group entries).
 
 ---
 
@@ -277,6 +329,7 @@ mvn test
 curl http://localhost:8080/api/sports
 curl http://localhost:8080/api/sports/football/leagues
 curl http://localhost:8080/api/sports/basketball/leagues
+curl http://localhost:8080/api/sports/american-football/leagues
 ```
 
 ### Swagger UI
@@ -289,18 +342,20 @@ http://localhost:8080/swagger-ui/index.html
 ## Current Status
 
 ### ✅ Fully implemented
-- All 7 JPA entities, 7 repositories, 13 DTOs
+- All 7 JPA entities, 7 repositories, 14 DTOs (includes `MatchDto` with `timezone` field)
 - JWT security layer + Spring Security 6 config
 - Redis config + WebSocket config
 - `GlobalExceptionHandler` — consistent JSON error responses for all error types
 - `AuthService` (register + login) + `AuthServiceTest` (6 unit tests)
-- `AuthControllerTest` (7 @WebMvcTest slice tests — all passing)
+- `AuthControllerTest` (7 `@WebMvcTest` slice tests — all passing)
 - `UserService` (favorites CRUD — teams + players)
 - `SportService`, `LeagueService`, `TeamService`, `PlayerService` (full DB-backed)
-- `MatchService`: `getLiveMatches()` (football + NBA combined), `getMatchesByLeagueAndDate()`, `getMatchEvents()`, `getMatchById()`, `refreshLiveMatchCache()` scheduler
+- `MatchService`: `getLiveMatches()` (football + NBA + NFL combined), `getMatchesByLeagueAndDate()`, `getMatchEvents()`, `getMatchById()`, `refreshLiveMatchCache()` scheduler
 - `ExternalApiService` — all football API records, mappers, fetch methods (scheduler moved to MatchService)
-- `NbaApiService` — ESPN-based (switched from balldontlie): all NBA ESPN records, `fetchGameDtosByDate`, `fetchStandings` (no API key); two RestClient instances (main + standings subdomain)
-- `NbaDataLoader` — seeds Basketball sport, NBA league, all 30 teams (with ESPN logo URLs) + rosters; auto-migrates old balldontlie-seeded teams with missing crestUrls
+- `NbaApiService` — ESPN-based: NBA records, `fetchGameDtosByDate`, `fetchStandings`; two RestClient instances (main + standings subdomain); times converted UTC→ET
+- `NflApiService` — ESPN-based: NFL records, `fetchAllTeams`, `fetchPlayersByTeam`, `fetchGameDtosByDate`, `fetchStandings`; times converted UTC→ET
+- `NbaDataLoader` — seeds Basketball sport, NBA league, 30 teams (ESPN logo URLs) + rosters; auto-migrates teams with missing crestUrls
+- `NflDataLoader` — seeds American Football sport, NFL league, 32 teams (ESPN logo URLs) + rosters
 - All 7 REST controllers — all endpoints wired
 - `DataLoader` — seeds 6 Futbol leagues, 20 teams each, full squads from football-data.org
 - All 5 Flyway migrations applied
@@ -308,10 +363,12 @@ http://localhost:8080/swagger-ui/index.html
 - `docker-compose.yml` — postgres:16-alpine + redis:7-alpine with healthchecks
 - `.env.example` at project root
 - React frontend — 9 pages, 4 components + `useLiveScores` WebSocket hook, JWT Axios interceptor, React Query, Tailwind, responsive layout
-- Standings table — color zone indicators (`showZones` prop, no shading for UCL / basketball)
-- Multi-sport frontend: Basketball leagues + teams visible alongside Futbol
+- Standings table — color zone indicators (`showZones` prop, no shading for UCL / basketball / NFL)
+- Multi-sport frontend: Basketball + American Football leagues + teams visible alongside Futbol
 - `SearchPage` at `/search` — global team + player search, debounced via React Query `enabled`, Search in both nav bars
-- Live page shows both football and NBA in-progress games
+- Live page shows football, NBA, and NFL in-progress games
+- ET timezone display: NBA/NFL game times shown as "7:30 PM ET" regardless of browser locale
+- **48 tests passing** — `MatchServiceTest` (13), `NbaApiServiceTest` (12), `LeagueServiceTest` (9), `AuthServiceTest` (6), `AuthControllerTest` (7), `OneStopSportsApplicationTests` (1)
 
 ### 🔲 Stubbed (returns empty — free tier limitation)
 - `MatchService.getMatchStats()` — returns `Map.of()` (match stats not in football-data.org free tier)
@@ -323,6 +380,8 @@ http://localhost:8080/swagger-ui/index.html
 - `docker-compose.yml` — full stack: postgres + redis + app, with `depends_on: service_healthy` so app waits for DB before starting
 - `.env.example` updated — documents both local dev (Option A) and full Docker Compose (Option B) workflows
 - TypeScript errors fixed: `PlayerDetailPage.tsx` null→undefined, `TeamDetailPage.tsx` unused `calculateAge` removed
+- `MatchDto.timezone` field (`String`, 9th component) — `"ET"` for NBA/NFL, `null` for football; both `NbaApiService` and `NflApiService` convert UTC→ET before constructing the DTO
+- `src/test/resources/application-test.yml` — disables Redis cache (`spring.cache.type: none`) and excludes Redis auto-configs so tests run without a Redis instance
 
 ---
 
@@ -330,4 +389,5 @@ http://localhost:8080/swagger-ui/index.html
 
 ### Polish / Nice-to-have
 - [ ] Push notifications for favourite teams
-- [ ] More test coverage — `MatchService`, `NbaApiService`, `NflApiService` have no tests
+- [ ] NFL standings display on the frontend (backend `fetchStandings` is implemented; frontend `StandingsTable` needs a conference/division layout instead of a flat table)
+- [ ] More test coverage — `NflApiService`, `ExternalApiService`, `UserService`, `TeamService`, `PlayerService` have no unit tests yet
