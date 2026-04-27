@@ -12,6 +12,7 @@ public record MatchDto(
         Integer homeScore,    // null if the match hasn't started yet
         Integer awayScore,    // null if the match hasn't started yet
         String status,        // e.g. "LIVE", "FINISHED", "SCHEDULED", "PAUSED" (halftime)
-        LocalDateTime startTime, // Kick-off time in local time (converted from UTC)
-        Long leagueId         // Our internal DB league ID (used to navigate to the right league)
+        LocalDateTime startTime, // NBA/NFL: already converted to ET. Football (soccer): UTC.
+        Long leagueId,        // Our internal DB league ID (used to navigate to the right league)
+        String timezone       // "ET" for NBA/NFL (so frontend can show the label). null for football.
 ) {}

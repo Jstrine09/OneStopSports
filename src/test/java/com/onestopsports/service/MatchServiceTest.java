@@ -63,7 +63,7 @@ class MatchServiceTest {
             999L,
             new TeamDto(1L, "Home FC", "HFC", null, null, null, 7L),
             new TeamDto(2L, "Away FC", "AFC", null, null, null, 7L),
-            2, 1, "FINISHED", LocalDateTime.of(2025, 4, 20, 19, 0), 7L);
+            2, 1, "FINISHED", LocalDateTime.of(2025, 4, 20, 19, 0), 7L, null);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

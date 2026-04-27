@@ -45,8 +45,9 @@ export interface MatchDto {
   homeScore: number | null
   awayScore: number | null
   status: string        // SCHEDULED | TIMED | IN_PLAY | PAUSED | FINISHED | HALFTIME | etc.
-  startTime: string | null  // ISO-8601 LocalDateTime from backend
+  startTime: string | null  // NBA/NFL: already converted to ET. Football: UTC.
   leagueId: number | null
+  timezone: string | null   // "ET" for NBA/NFL — shown as a label next to the time. null for football.
 }
 
 export interface StandingsEntryDto {

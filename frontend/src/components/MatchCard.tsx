@@ -5,9 +5,12 @@ interface Props {
   match: MatchDto
 }
 
-// Formats a UTC ISO string to local HH:MM
-function formatKickoff(utc: string): string {
-  return new Date(utc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+// Formats a time string to HH:MM, with an optional timezone label appended.
+// For NBA/NFL the backend sends ET wall-clock time + timezone="ET", so we just display
+// the digits as-is and append the label — e.g. "7:30 PM ET".
+function formatKickoff(utc: string, timezone?: string | null): string {
+  const time = new Date(utc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return timezone ? `${time} ${timezone}` : time
 }
 
 function TeamCrest({ url, name }: { url: string | null; name: string }) {
@@ -27,7 +30,7 @@ export default function MatchCard({ match }: Props) {
 
   const scoreline =
     state === 'scheduled'
-      ? match.startTime ? formatKickoff(match.startTime) : '--:--'
+      ? match.startTime ? formatKickoff(match.startTime, match.timezone) : '--:--'
       : `${match.homeScore ?? 0} - ${match.awayScore ?? 0}`
 
   const badge = (() => {

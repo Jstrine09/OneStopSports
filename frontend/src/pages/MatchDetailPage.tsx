@@ -5,11 +5,14 @@ import { getMatchState, type MatchDto, type MatchEventDto } from '../types'
 import { fetchMatchEvents } from '../api/matches'
 import LoadingSpinner from '../components/LoadingSpinner'
 
-function formatKickoff(utc: string): string {
-  return new Date(utc).toLocaleString([], {
+// Formats a date-time string to a human-readable label with an optional timezone suffix.
+// NBA/NFL games pass timezone="ET" so displays as e.g. "Sun, Apr 27, 7:30 PM ET".
+function formatKickoff(utc: string, timezone?: string | null): string {
+  const formatted = new Date(utc).toLocaleString([], {
     weekday: 'short', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
+  return timezone ? `${formatted} ${timezone}` : formatted
 }
 
 function TeamCrest({ url, name }: { url: string | null; name: string }) {
@@ -111,7 +114,7 @@ export default function MatchDetailPage() {
               </span>
             ) : (
               <span className="text-3xl font-bold text-white">
-                {match.startTime ? formatKickoff(match.startTime) : 'TBD'}
+                {match.startTime ? formatKickoff(match.startTime, match.timezone) : 'TBD'}
               </span>
             )}
 
@@ -119,7 +122,7 @@ export default function MatchDetailPage() {
             {state === 'halftime'  && <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">HALF TIME</span>}
             {state === 'finished'  && <span className="text-xs font-semibold text-slate-400">FULL TIME</span>}
             {state === 'scheduled' && match.startTime && (
-              <span className="text-xs text-slate-400">{formatKickoff(match.startTime)}</span>
+              <span className="text-xs text-slate-400">{formatKickoff(match.startTime, match.timezone)}</span>
             )}
           </div>
 

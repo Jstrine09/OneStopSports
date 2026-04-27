@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClientException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -355,11 +356,17 @@ public class NbaApiService {
         Integer homeScore = "SCHEDULED".equals(mappedStatus) ? null : parseScore(homeComp);
         Integer awayScore = "SCHEDULED".equals(mappedStatus) ? null : parseScore(awayComp);
 
-        // Parse the ISO-8601 UTC date string into a LocalDateTime for the tip-off time display
+        // Convert ESPN's UTC tip-off time to Eastern Time (ET).
+        // ZoneId.of("America/New_York") handles EDT/EST transitions automatically —
+        // e.g. a 23:30 UTC April game (EDT, UTC-4) becomes 19:30 ET.
+        // We strip the timezone after converting so the frontend receives a plain time string
+        // (e.g. "19:30:00") that displays correctly as "7:30 PM" in any browser locale.
         LocalDateTime startTime = null;
         if (event.date() != null) {
             try {
-                startTime = OffsetDateTime.parse(event.date()).toLocalDateTime();
+                startTime = OffsetDateTime.parse(event.date())
+                        .atZoneSameInstant(ZoneId.of("America/New_York"))
+                        .toLocalDateTime();
             } catch (Exception ignored) {
                 // Malformed date — leave as null
             }
@@ -369,7 +376,7 @@ public class NbaApiService {
         Long matchId = parseId(event.id());
 
         return new MatchDto(matchId, home, away, homeScore, awayScore,
-                mappedStatus, startTime, dbLeagueId);
+                mappedStatus, startTime, dbLeagueId, "ET");
     }
 
     // Converts an ESPN competitor record to a TeamDto.
