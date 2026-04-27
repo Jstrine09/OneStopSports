@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: onestopsports
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
     ports:
       - "5432:5432"
     volumes:
@@ -27,6 +27,28 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  app:
+    build: .                            # Uses the Dockerfile in the project root
+    container_name: onestopsports-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Activate the docker Spring profile — loads application-docker.yml which
+      # points datasource to the "postgres" service and Redis to the "redis" service
+      SPRING_PROFILES_ACTIVE: docker
+      # Secrets injected from the .env file at the project root (gitignored)
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      FOOTBALL_DATA_API_KEY: ${FOOTBALL_DATA_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      # Wait for both postgres and redis to pass their healthchecks before starting
+      # the app — avoids "connection refused" errors during startup
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure  # Restart if the app crashes (e.g. DB not ready despite healthcheck)
 
 volumes:
   onestopsports_postgres_data:

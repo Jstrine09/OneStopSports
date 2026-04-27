@@ -1,0 +1,29 @@
+# Docker profile — loaded automatically when SPRING_PROFILES_ACTIVE=docker.
+# Overrides application.yml with Docker Compose service names and reads
+# secrets from environment variables (set in docker-compose.yml via .env).
+#
+# This file is safe to commit — it contains no secrets, only ${VAR} placeholders.
+# The actual secrets live in a gitignored .env file at the project root.
+
+spring:
+  datasource:
+    # In Docker Compose, services reach each other by service name, not localhost.
+    # "postgres" matches the service name defined in docker-compose.yml.
+    url: jdbc:postgresql://postgres:5432/onestopsports
+    # Password comes from the environment — set in .env, passed via docker-compose.yml
+    password: ${DB_PASSWORD:password}
+
+  data:
+    redis:
+      # "redis" matches the Redis service name in docker-compose.yml
+      host: redis
+
+external-api:
+  football-data:
+    # Football API key — must be set in .env as FOOTBALL_DATA_API_KEY
+    api-key: ${FOOTBALL_DATA_API_KEY}
+  # NBA and NFL use ESPN's public API — no key needed, base URLs already in application.yml
+
+jwt:
+  # JWT signing secret — must be set in .env as JWT_SECRET (Base64-encoded)
+  secret: ${JWT_SECRET}

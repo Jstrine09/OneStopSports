@@ -27,6 +27,9 @@ replay_pid*
 application-local.yml
 application-local.properties
 src/main/resources/application-local.yml
+
+# Docker secrets file — contains API keys and JWT secret for docker-compose
+.env
 OneStopSports_Study_Guide.pdf
 
 # Maven build output

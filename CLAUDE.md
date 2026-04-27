@@ -234,28 +234,37 @@ SUBSCRIBE /topic/matches/live   Server pushes full live match list whenever a sc
 
 ## Local Dev Setup
 
-### Prerequisites
-- PostgreSQL running, database named `onestopsports`
-- Redis running on `localhost:6379`
-- API keys in `src/main/resources/application-local.yml`:
-  ```yaml
-  external-api:
-    football-data:
-      api-key: YOUR_FOOTBALL_KEY
-    nba:
-      api-key: YOUR_BALLDONTLIE_KEY
-  jwt:
-    secret: YOUR_BASE64_SECRET
-  ```
+### Option A — Maven (fastest for active development)
+Postgres + Redis via Docker, app runs on the host via Maven.
 
-### Run backend
 ```bash
+# 1. Start infra only
+docker-compose up -d postgres redis
+
+# 2. Add secrets to application-local.yml
+cp .env.example src/main/resources/application-local.yml
+# edit application-local.yml — add football-data api-key and jwt.secret
+
+# 3. Run backend
 mvn spring-boot:run -Dspring-boot.run.profiles=local
+
+# 4. Run frontend
+cd frontend && npm run dev
 ```
 
-### Run frontend
+### Option B — Full Docker Compose (prod-like, no local Java/Maven needed)
+Everything in containers — app + Postgres + Redis.
+
 ```bash
-cd frontend && npm run dev
+# 1. Create .env from the example
+cp .env.example .env
+# edit .env — set FOOTBALL_DATA_API_KEY and JWT_SECRET
+
+# 2. Build and start everything
+docker-compose up --build
+
+# On first boot the data loaders seed the DB (~2 min for all three sports).
+# The app is ready at http://localhost:8080 once "Started OneStopSportsApplication" appears.
 ```
 
 ### Test (H2 in-memory, no Postgres/Redis needed)
@@ -308,14 +317,17 @@ http://localhost:8080/swagger-ui/index.html
 - `MatchService.getMatchStats()` — returns `Map.of()` (match stats not in football-data.org free tier)
 - `MatchService.getMatchLineups()` — returns `Map.of()` (lineups not in football-data.org free tier)
 
-### 🔲 Not started
-- Dockerfile for the Spring Boot app (Docker Compose for infra exists, but the app itself isn't containerised)
+### ✅ Also implemented
+- `Dockerfile` — multi-stage build (Maven builder + JRE runtime); final image has no JDK or source code
+- `application-docker.yml` — Docker Spring profile; points datasource to `postgres` service, Redis to `redis` service, reads secrets from env vars
+- `docker-compose.yml` — full stack: postgres + redis + app, with `depends_on: service_healthy` so app waits for DB before starting
+- `.env.example` updated — documents both local dev (Option A) and full Docker Compose (Option B) workflows
+- TypeScript errors fixed: `PlayerDetailPage.tsx` null→undefined, `TeamDetailPage.tsx` unused `calculateAge` removed
 
 ---
 
 ## Remaining Tasks
 
 ### Polish / Nice-to-have
-- [ ] Dockerfile for the Spring Boot app + add `app` service to `docker-compose.yml`
-- [ ] NFL (American Football) sport — next sport to add after NBA pattern is established
-- [ ] Pre-existing TypeScript errors: `PlayerDetailPage.tsx(83)` null type mismatch, `TeamDetailPage.tsx(33)` unused `calculateAge`
+- [ ] Push notifications for favourite teams
+- [ ] More test coverage — `MatchService`, `NbaApiService`, `NflApiService` have no tests

@@ -39,12 +39,6 @@ function groupByPosition(players: PlayerDto[]): Record<string, PlayerDto[]> {
   }, {})
 }
 
-function calculateAge(dob: string | null): string {
-  if (!dob) return '—'
-  const birth = new Date(dob)
-  const age = Math.floor((Date.now() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-  return `${age}`
-}
 
 export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>()
