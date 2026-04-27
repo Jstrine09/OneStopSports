@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClient;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -350,11 +351,17 @@ public class NflApiService {
         Integer homeScore = "SCHEDULED".equals(mappedStatus) ? null : parseScore(homeComp);
         Integer awayScore = "SCHEDULED".equals(mappedStatus) ? null : parseScore(awayComp);
 
-        // Parse the ISO-8601 UTC date string into a LocalDateTime for the frontend kick-off display
+        // Convert ESPN's UTC kick-off time to Eastern Time (ET).
+        // ZoneId.of("America/New_York") handles EDT/EST transitions automatically —
+        // e.g. a 1:00 PM ET Sunday game (18:00 UTC in EDT) stays as 13:00 ET.
+        // We strip the timezone after converting so the frontend receives a plain time string
+        // (e.g. "13:00:00") that displays correctly as "1:00 PM" in any browser locale.
         LocalDateTime startTime = null;
         if (event.date() != null) {
             try {
-                startTime = OffsetDateTime.parse(event.date()).toLocalDateTime();
+                startTime = OffsetDateTime.parse(event.date())
+                        .atZoneSameInstant(ZoneId.of("America/New_York"))
+                        .toLocalDateTime();
             } catch (Exception ignored) {
                 // Malformed date — leave as null
             }
@@ -367,7 +374,7 @@ public class NflApiService {
         } catch (NumberFormatException ignored) {}
 
         return new MatchDto(matchId, home, away, homeScore, awayScore,
-                mappedStatus, startTime, dbLeagueId);
+                mappedStatus, startTime, dbLeagueId, "ET");
     }
 
     // Converts an ESPN competitor record to a TeamDto.
