@@ -13,8 +13,8 @@ export default function Sidebar() {
   return (
     // Only shown on large screens
     <aside className="fixed left-0 top-0 hidden h-full w-56 flex-col border-r border-slate-700 bg-slate-900 lg:flex">
-      {/* Logo */}
-      <div className="px-6 py-5">
+      {/* Logo — pt-safe ensures the logo clears the notch on iPad/Mac with notch */}
+      <div className="pt-safe px-6 py-5">
         <span className="text-xl font-extrabold tracking-tight text-white">
           OneStop<span className="text-blue-400">Sports</span>
         </span>

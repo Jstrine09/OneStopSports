@@ -33,14 +33,17 @@ export default function SearchPage() {
 
       {/* Search input — autofocused so users can type immediately on mobile */}
       <input
-        type="text"
+        type="search"
         placeholder="Search teams or players…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         autoFocus
-        className="w-full rounded-xl bg-slate-800 px-4 py-3 text-sm text-white
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        className="w-full rounded-xl bg-slate-800 px-4 py-3 text-base text-white
                    placeholder-slate-500 outline-none ring-1 ring-slate-700
-                   focus:ring-blue-500 transition"
+                   focus:ring-blue-500 transition md:text-sm"
       />
 
       {/* Loading state — shown while the API request is in flight */}
