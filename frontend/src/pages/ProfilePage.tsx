@@ -109,7 +109,7 @@ export default function ProfilePage() {
                 {/* Remove button */}
                 <button
                   onClick={() => handleRemoveTeam(team.id)}
-                  className="absolute right-1.5 top-1.5 rounded-full bg-slate-700 p-1 text-slate-400 transition hover:bg-red-500/20 hover:text-red-400"
+                  className="absolute right-1 top-1 flex h-[30px] w-[30px] items-center justify-center rounded-full bg-slate-700 text-slate-400 transition hover:bg-red-500/20 hover:text-red-400"
                   aria-label="Remove from favourites"
                 >
                   <X size={12} />
@@ -167,7 +167,7 @@ export default function ProfilePage() {
                 {/* Remove */}
                 <button
                   onClick={() => handleRemovePlayer(player.id)}
-                  className="rounded-full p-1.5 text-slate-500 transition hover:bg-red-500/20 hover:text-red-400"
+                  className="flex h-[44px] w-[44px] items-center justify-center rounded-full text-slate-500 transition hover:bg-red-500/20 hover:text-red-400"
                   aria-label="Remove from favourites"
                 >
                   <X size={14} />

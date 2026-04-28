@@ -2,11 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <!-- Responsive viewport — critical for mobile/tablet -->
+    <!-- Responsive viewport — critical for mobile/tablet; viewport-fit=cover handles iPhone notch -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- PWA theme colour (matches app dark background) -->
     <meta name="theme-color" content="#0f172a" />
+
+    <!-- PWA manifest — enables "Add to Home Screen" on Android/Chrome -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- iOS PWA meta tags — Safari reads these instead of the manifest -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="OneStop" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- App icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+
     <title>OneStopSports</title>
   </head>
   <body>

@@ -9,10 +9,10 @@ export default function AppLayout() {
       <Sidebar />
 
       {/* Main content
-          - On mobile/tablet: full width, padded bottom for nav bar
+          - On mobile/tablet: full width, padded bottom for nav bar + safe area top for standalone PWA
           - On desktop: offset left by sidebar width */}
       <main className="lg:ml-56">
-        <div className="mx-auto max-w-2xl px-4 pb-24 pt-4 lg:pb-8 lg:pt-6">
+        <div className="mx-auto max-w-2xl px-4 pb-24 pt-safe lg:pb-8 lg:pt-6">
           <Outlet />
         </div>
       </main>

@@ -143,7 +143,7 @@ export default function TeamDetailPage() {
       {/* Back */}
       <button
         onClick={handleBack}
-        className="flex items-center gap-1 text-sm text-slate-400 hover:text-white"
+        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-400 hover:text-white"
       >
         <ChevronLeft size={16} /> Back
       </button>
@@ -173,7 +173,7 @@ export default function TeamDetailPage() {
           {/* Favourite toggle for team */}
           <button
             onClick={toggleTeamFav}
-            className="shrink-0 rounded-full p-2 transition hover:bg-slate-700 active:scale-90"
+            className="shrink-0 rounded-full p-2 transition hover:bg-slate-700 active:scale-90 min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label={isTeamFav ? 'Remove from favourites' : 'Add to favourites'}
           >
             <Heart
