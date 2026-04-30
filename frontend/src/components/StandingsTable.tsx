@@ -34,14 +34,14 @@ function rowBorder(position: number, total: number): string {
 
 export default function StandingsTable({ entries, showZones = true }: Props) {
   if (entries.length === 0) {
-    return <p className="py-8 text-center text-slate-400">No standings available</p>
+    return <p className="py-8 text-center text-slate-500 dark:text-slate-400">No standings available</p>
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl bg-slate-800">
+    <div className="overflow-x-auto rounded-xl bg-white dark:bg-slate-800">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-slate-700 text-xs text-slate-400">
+          <tr className="border-b border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
             <th className="py-3 pl-4 text-left">#</th>
             <th className="py-3 text-left">Team</th>
             <th className="py-3 text-center">P</th>
@@ -51,7 +51,7 @@ export default function StandingsTable({ entries, showZones = true }: Props) {
             <th className="hidden py-3 text-center sm:table-cell">GF</th>
             <th className="hidden py-3 text-center sm:table-cell">GA</th>
             <th className="py-3 text-center">GD</th>
-            <th className="py-3 pr-4 text-center font-bold text-white">Pts</th>
+            <th className="py-3 pr-4 text-center font-bold text-slate-900 dark:text-white">Pts</th>
           </tr>
         </thead>
         <tbody>
@@ -62,13 +62,13 @@ export default function StandingsTable({ entries, showZones = true }: Props) {
               // Only applied when showZones is true (domestic leagues). The Champions League
               // and non-football sports skip this so the table looks clean without a misleading key.
               // hover:bg-slate-700/50 still works on top of the tint (it just darkens the row slightly).
-              className={`border-b border-slate-700/50 last:border-0 hover:bg-slate-700/50 ${showZones ? rowBg(e.position, entries.length) : ''}`}
+              className={`border-b border-slate-200 last:border-0 hover:bg-slate-100 dark:border-slate-700/50 dark:hover:bg-slate-700/50 ${showZones ? rowBg(e.position, entries.length) : ''}`}
             >
               {/* rowBorder puts the solid 4px stripe on the left edge of the # cell.
                   Keeping it on <td> rather than <tr> ensures it always renders.
                   When showZones is off, we still add a transparent border so all rows
                   stay the same width and the # column doesn't shift. */}
-              <td className={`py-2.5 pl-4 text-slate-400 ${showZones ? rowBorder(e.position, entries.length) : 'border-l-4 border-transparent'}`}>{e.position}</td>
+              <td className={`py-2.5 pl-4 text-slate-500 dark:text-slate-400 ${showZones ? rowBorder(e.position, entries.length) : 'border-l-4 border-transparent'}`}>{e.position}</td>
               <td className="py-2.5">
                 <div className="flex items-center gap-2">
                   {e.team.crestUrl && (
@@ -80,13 +80,13 @@ export default function StandingsTable({ entries, showZones = true }: Props) {
                   </span>
                 </div>
               </td>
-              <td className="py-2.5 text-center text-slate-300">{e.played}</td>
-              <td className="py-2.5 text-center text-slate-300">{e.won}</td>
-              <td className="py-2.5 text-center text-slate-300">{e.drawn}</td>
-              <td className="py-2.5 text-center text-slate-300">{e.lost}</td>
-              <td className="hidden py-2.5 text-center text-slate-300 sm:table-cell">{e.goalsFor}</td>
-              <td className="hidden py-2.5 text-center text-slate-300 sm:table-cell">{e.goalsAgainst}</td>
-              <td className="py-2.5 text-center text-slate-300">{e.goalsFor - e.goalsAgainst}</td>
+              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.played}</td>
+              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.won}</td>
+              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.drawn}</td>
+              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.lost}</td>
+              <td className="hidden py-2.5 text-center text-slate-600 dark:text-slate-300 sm:table-cell">{e.goalsFor}</td>
+              <td className="hidden py-2.5 text-center text-slate-600 dark:text-slate-300 sm:table-cell">{e.goalsAgainst}</td>
+              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.goalsFor - e.goalsAgainst}</td>
               <td className="py-2.5 pr-4 text-center font-bold">{e.points}</td>
             </tr>
           ))}
@@ -96,7 +96,7 @@ export default function StandingsTable({ entries, showZones = true }: Props) {
       {/* Legend — only shown for domestic football leagues that have promotion/relegation zones.
           Hidden for the Champions League and non-football sports (showZones = false). */}
       {showZones && (
-        <div className="flex flex-wrap gap-4 border-t border-slate-700 px-4 py-2 text-[11px] text-slate-400">
+        <div className="flex flex-wrap gap-4 border-t border-slate-200 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-blue-500" /> Champions League</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-orange-400" /> Europa League</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-green-500" /> Conference League</span>

@@ -19,7 +19,7 @@ function TeamCrest({ url, name }: { url: string | null; name: string }) {
   }
   // Fallback: coloured initials badge
   return (
-    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-600 text-xs font-bold">
+    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-bold dark:bg-slate-600">
       {name.slice(0, 3).toUpperCase()}
     </div>
   )
@@ -36,7 +36,7 @@ export default function MatchCard({ match }: Props) {
   const badge = (() => {
     if (state === 'live')     return <span className="animate-pulse rounded bg-green-500 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">Live</span>
     if (state === 'halftime') return <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">HT</span>
-    if (state === 'finished') return <span className="text-[10px] font-semibold uppercase text-slate-400">FT</span>
+    if (state === 'finished') return <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">FT</span>
     return null
   })()
 
@@ -44,7 +44,7 @@ export default function MatchCard({ match }: Props) {
     <Link
       to={`/match/${match.id}`}
       state={match}
-      className="flex items-center gap-3 rounded-xl bg-slate-800 px-4 py-3 transition hover:bg-slate-700 active:scale-[0.98]"
+      className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 transition hover:bg-slate-50 active:scale-[0.98] dark:bg-slate-800 dark:hover:bg-slate-700"
     >
       {/* Home team */}
       <div className="flex flex-1 items-center gap-2 overflow-hidden">
@@ -54,7 +54,7 @@ export default function MatchCard({ match }: Props) {
 
       {/* Score / kickoff time */}
       <div className="flex w-20 flex-col items-center gap-0.5 text-center">
-        <span className={`text-base font-bold tabular-nums ${state === 'live' ? 'text-green-400' : 'text-white'}`}>
+        <span className={`text-base font-bold tabular-nums ${state === 'live' ? 'text-green-400' : 'text-slate-900 dark:text-white'}`}>
           {scoreline}
         </span>
         {badge}

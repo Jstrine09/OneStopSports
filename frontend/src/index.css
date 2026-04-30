@@ -9,7 +9,7 @@
   }
 
   body {
-    @apply bg-slate-900 text-white;
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-white;
     /* Remove default iOS tap highlight */
     -webkit-tap-highlight-color: transparent;
     /* Prevent pull-to-refresh and overscroll bounce in standalone PWA mode */
@@ -33,6 +33,13 @@
      growing to fill the full notch/status-bar safe area in standalone PWA mode. */
   .pt-safe {
     padding-top: max(1rem, env(safe-area-inset-top));
+  }
+
+  /* Top padding for the main content area on mobile.
+     Accounts for the fixed mobile header (44px) plus the notch safe area.
+     On desktop this class is not applied (lg:pt-6 overrides it). */
+  .pt-mobile-header {
+    padding-top: calc(max(1rem, env(safe-area-inset-top)) + 2.75rem);
   }
 
   /* Hidden scrollbar but still scrollable */

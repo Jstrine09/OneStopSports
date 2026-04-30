@@ -78,7 +78,7 @@ export default function PlayerDetailPage() {
 
   if (!player) {
     return (
-      <div className="py-16 text-center text-slate-400">
+      <div className="py-16 text-center text-slate-500 dark:text-slate-400">
         <p>Player not found.</p>
         <button onClick={() => handleBack(undefined)} className="mt-4 text-blue-400 underline">Go back</button>
       </div>
@@ -93,16 +93,16 @@ export default function PlayerDetailPage() {
       {/* Back */}
       <button
         onClick={() => handleBack(player)}
-        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-400 hover:text-white"
+        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
       >
         <ChevronLeft size={16} /> Back
       </button>
 
       {/* Player hero card */}
-      <div className="rounded-2xl bg-slate-800 px-5 py-6">
+      <div className="rounded-2xl bg-white px-5 py-6 dark:bg-slate-800">
         <div className="flex items-start justify-between gap-4">
           {/* Jersey number circle */}
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-slate-700 text-3xl font-extrabold text-white">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-slate-100 text-3xl font-extrabold text-slate-900 dark:bg-slate-700 dark:text-white">
             {player.jerseyNumber ?? '?'}
           </div>
 
@@ -118,13 +118,13 @@ export default function PlayerDetailPage() {
 
             <div className="space-y-1 pt-1">
               {player.nationality && (
-                <p className="flex items-center gap-2 text-sm text-slate-400">
+                <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                   <Flag size={14} className="shrink-0" />
                   {player.nationality}
                 </p>
               )}
               {player.dateOfBirth && (
-                <p className="flex items-center gap-2 text-sm text-slate-400">
+                <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                   <MapPin size={14} className="shrink-0 opacity-0" />{/* spacer */}
                   {dobDisplay}
                 </p>
@@ -135,21 +135,21 @@ export default function PlayerDetailPage() {
           {/* Favourite button */}
           <button
             onClick={toggleFav}
-            className="shrink-0 rounded-full p-2 transition hover:bg-slate-700 active:scale-90 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="shrink-0 rounded-full p-2 transition hover:bg-slate-100 active:scale-90 min-h-[44px] min-w-[44px] flex items-center justify-center dark:hover:bg-slate-700"
             aria-label={isFav ? 'Remove from favourites' : 'Add to favourites'}
           >
             <Heart
               size={26}
-              className={isFav ? 'fill-red-500 text-red-500' : 'text-slate-400'}
+              className={isFav ? 'fill-red-500 text-red-500' : 'text-slate-500 dark:text-slate-400'}
             />
           </button>
         </div>
       </div>
 
       {/* Stats placeholder — future expansion */}
-      <div className="rounded-2xl bg-slate-800 px-4 py-5">
-        <h2 className="mb-3 text-sm font-semibold text-slate-300">Season Stats</h2>
-        <div className="flex flex-col items-center gap-1 py-4 text-slate-500">
+      <div className="rounded-2xl bg-white px-4 py-5 dark:bg-slate-800">
+        <h2 className="mb-3 text-sm font-semibold text-slate-600 dark:text-slate-300">Season Stats</h2>
+        <div className="flex flex-col items-center gap-1 py-4 text-slate-400 dark:text-slate-500">
           <span className="text-2xl">📊</span>
           <p className="text-xs">Stats coming soon</p>
         </div>

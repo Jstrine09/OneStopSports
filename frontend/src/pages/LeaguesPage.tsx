@@ -97,7 +97,7 @@ export default function LeaguesPage() {
               className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition
                 ${sportSlug === s.slug
                   ? 'bg-blue-500 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white'
                 }`}
             >
               {s.name}
@@ -116,7 +116,7 @@ export default function LeaguesPage() {
               className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition
                 ${leagueId === l.id
                   ? 'bg-blue-500 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white'
                 }`}
             >
               {l.name}
@@ -127,17 +127,17 @@ export default function LeaguesPage() {
 
       {/* League info bar — shows the selected league's country and season */}
       {activeLeague && (
-        <div className="rounded-xl bg-slate-800 px-4 py-3">
-          <p className="text-xs text-slate-400">{activeLeague.country}</p>
+        <div className="rounded-xl bg-white px-4 py-3 dark:bg-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">{activeLeague.country}</p>
           <p className="font-semibold">
             {activeLeague.name}{' '}
-            <span className="text-sm font-normal text-slate-400">· {activeLeague.season}</span>
+            <span className="text-sm font-normal text-slate-500 dark:text-slate-400">· {activeLeague.season}</span>
           </p>
         </div>
       )}
 
       {/* Standings / Teams tab toggle */}
-      <div className="flex rounded-xl bg-slate-800 p-1">
+      <div className="flex rounded-xl bg-white p-1 dark:bg-slate-800">
         {(['standings', 'teams'] as Tab[]).map((tab) => (
           <button
             key={tab}
@@ -145,7 +145,7 @@ export default function LeaguesPage() {
             className={`flex-1 rounded-lg py-2 text-xs font-semibold capitalize transition
               ${activeTab === tab
                 ? 'bg-blue-500 text-white'
-                : 'text-slate-400 hover:text-white'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
               }`}
           >
             {tab}
@@ -171,7 +171,7 @@ export default function LeaguesPage() {
         loadingTeams ? (
           <LoadingSpinner />
         ) : teams.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">No teams found</p>
+          <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">No teams found</p>
         ) : (
           <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
             {teams.map((team) => (
@@ -182,15 +182,15 @@ export default function LeaguesPage() {
                 // TeamDetailPage reads this in its Back button so it can navigate
                 // back to exactly this sport, league, and tab — not the default view.
                 state={{ fromLeagues: true, sportSlug, leagueId }}
-                className="flex flex-col items-center gap-2 rounded-xl bg-slate-800 p-4 transition hover:bg-slate-700 active:scale-[0.97]"
+                className="flex flex-col items-center gap-2 rounded-xl bg-white p-4 transition hover:bg-slate-50 active:scale-[0.97] dark:bg-slate-800 dark:hover:bg-slate-700"
               >
                 {team.crestUrl
                   ? <img src={team.crestUrl} alt={team.name} className="h-12 w-12 object-contain" />
-                  : <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-600 text-sm font-bold">{team.shortName.slice(0,3)}</div>
+                  : <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200 text-sm font-bold dark:bg-slate-600">{team.shortName.slice(0,3)}</div>
                 }
                 <p className="text-center text-xs font-semibold leading-tight">{team.name}</p>
                 {team.stadium && (
-                  <p className="flex items-center gap-1 text-center text-[10px] text-slate-500">
+                  <p className="flex items-center gap-1 text-center text-[10px] text-slate-400 dark:text-slate-500">
                     <MapPin size={10} />{team.stadium}
                   </p>
                 )}

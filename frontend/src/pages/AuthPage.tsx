@@ -42,15 +42,15 @@ export default function AuthPage() {
           <h1 className="text-3xl font-extrabold">
             OneStop<span className="text-blue-400">Sports</span>
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             {mode === 'login' ? 'Welcome back' : 'Create your account'}
           </p>
         </div>
 
         {/* Form card */}
-        <form onSubmit={submit} className="space-y-3 rounded-2xl bg-slate-800 p-6">
+        <form onSubmit={submit} className="space-y-3 rounded-2xl bg-white p-6 dark:bg-slate-800">
           <div>
-            <label className="mb-1 block text-xs text-slate-400">Username</label>
+            <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Username</label>
             <input
               name="username"
               value={form.username}
@@ -58,13 +58,13 @@ export default function AuthPage() {
               required
               autoComplete="username"
               autoCapitalize="none"
-              className="w-full rounded-lg bg-slate-700 px-3 py-2.5 text-base outline-none ring-1 ring-slate-600 transition focus:ring-blue-500 md:text-sm"
+              className="w-full rounded-lg bg-slate-100 px-3 py-2.5 text-base outline-none ring-1 ring-slate-300 transition focus:ring-blue-500 dark:bg-slate-700 dark:ring-slate-600 md:text-sm"
             />
           </div>
 
           {mode === 'register' && (
             <div>
-              <label className="mb-1 block text-xs text-slate-400">Email</label>
+              <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Email</label>
               <input
                 type="email"
                 name="email"
@@ -73,13 +73,13 @@ export default function AuthPage() {
                 required
                 autoComplete="email"
                 inputMode="email"
-                className="w-full rounded-lg bg-slate-700 px-3 py-2.5 text-base outline-none ring-1 ring-slate-600 transition focus:ring-blue-500 md:text-sm"
+                className="w-full rounded-lg bg-slate-100 px-3 py-2.5 text-base outline-none ring-1 ring-slate-300 transition focus:ring-blue-500 dark:bg-slate-700 dark:ring-slate-600 md:text-sm"
               />
             </div>
           )}
 
           <div>
-            <label className="mb-1 block text-xs text-slate-400">Password</label>
+            <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Password</label>
             <input
               type="password"
               name="password"
@@ -88,7 +88,7 @@ export default function AuthPage() {
               required
               minLength={8}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              className="w-full rounded-lg bg-slate-700 px-3 py-2.5 text-base outline-none ring-1 ring-slate-600 transition focus:ring-blue-500 md:text-sm"
+              className="w-full rounded-lg bg-slate-100 px-3 py-2.5 text-base outline-none ring-1 ring-slate-300 transition focus:ring-blue-500 dark:bg-slate-700 dark:ring-slate-600 md:text-sm"
             />
           </div>
 
@@ -106,7 +106,7 @@ export default function AuthPage() {
         </form>
 
         {/* Toggle */}
-        <p className="text-center text-xs text-slate-400">
+        <p className="text-center text-xs text-slate-500 dark:text-slate-400">
           {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
           <button
             onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError(null) }}

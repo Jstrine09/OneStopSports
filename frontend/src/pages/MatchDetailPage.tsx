@@ -18,7 +18,7 @@ function formatKickoff(utc: string, timezone?: string | null): string {
 function TeamCrest({ url, name }: { url: string | null; name: string }) {
   if (url) return <img src={url} alt={name} className="h-16 w-16 object-contain sm:h-20 sm:w-20" />
   return (
-    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-600 text-lg font-bold sm:h-20 sm:w-20">
+    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-200 text-lg font-bold dark:bg-slate-600 sm:h-20 sm:w-20">
       {name.slice(0, 3).toUpperCase()}
     </div>
   )
@@ -75,7 +75,7 @@ export default function MatchDetailPage() {
 
   if (!match) {
     return (
-      <div className="py-16 text-center text-slate-400">
+      <div className="py-16 text-center text-slate-500 dark:text-slate-400">
         <p>Match not found.</p>
         <button onClick={handleBack} className="mt-4 text-blue-400 underline">Go back</button>
       </div>
@@ -90,13 +90,13 @@ export default function MatchDetailPage() {
       {/* Back button */}
       <button
         onClick={handleBack}
-        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-400 hover:text-white"
+        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
       >
         <ChevronLeft size={16} /> Back
       </button>
 
       {/* Score hero */}
-      <div className="rounded-2xl bg-slate-800 px-4 py-6">
+      <div className="rounded-2xl bg-white px-4 py-6 dark:bg-slate-800">
         <div className="flex items-center justify-between gap-2">
           {/* Home team */}
           <div className="flex flex-1 flex-col items-center gap-2">
@@ -109,20 +109,20 @@ export default function MatchDetailPage() {
           {/* Score / time */}
           <div className="flex flex-col items-center gap-1 px-2">
             {hasScore ? (
-              <span className={`text-4xl font-extrabold tabular-nums sm:text-5xl ${state === 'live' ? 'text-green-400' : 'text-white'}`}>
+              <span className={`text-4xl font-extrabold tabular-nums sm:text-5xl ${state === 'live' ? 'text-green-400' : 'text-slate-900 dark:text-white'}`}>
                 {match.homeScore ?? 0} – {match.awayScore ?? 0}
               </span>
             ) : (
-              <span className="text-3xl font-bold text-white">
+              <span className="text-3xl font-bold text-slate-900 dark:text-white">
                 {match.startTime ? formatKickoff(match.startTime, match.timezone) : 'TBD'}
               </span>
             )}
 
             {state === 'live'      && <span className="animate-pulse rounded bg-green-500 px-2 py-0.5 text-xs font-bold text-white">LIVE</span>}
             {state === 'halftime'  && <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">HALF TIME</span>}
-            {state === 'finished'  && <span className="text-xs font-semibold text-slate-400">FULL TIME</span>}
+            {state === 'finished'  && <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">FULL TIME</span>}
             {state === 'scheduled' && match.startTime && (
-              <span className="text-xs text-slate-400">{formatKickoff(match.startTime, match.timezone)}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{formatKickoff(match.startTime, match.timezone)}</span>
             )}
           </div>
 
@@ -137,13 +137,13 @@ export default function MatchDetailPage() {
       </div>
 
       {/* Match Events / Timeline */}
-      <div className="rounded-2xl bg-slate-800 px-4 py-5">
-        <h2 className="mb-3 text-sm font-semibold text-slate-300">Match Events</h2>
+      <div className="rounded-2xl bg-white px-4 py-5 dark:bg-slate-800">
+        <h2 className="mb-3 text-sm font-semibold text-slate-600 dark:text-slate-300">Match Events</h2>
 
         {loadingEvents ? (
           <LoadingSpinner />
         ) : sortedEvents.length === 0 ? (
-          <div className="flex flex-col items-center gap-1 py-4 text-slate-500">
+          <div className="flex flex-col items-center gap-1 py-4 text-slate-400 dark:text-slate-500">
             <span className="text-2xl">📋</span>
             <p className="text-xs">
               {state === 'scheduled' ? 'Match not started yet' : 'No events available'}
@@ -154,10 +154,10 @@ export default function MatchDetailPage() {
             {sortedEvents.map((event, i) => (
               <div
                 key={i}
-                className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-700/50"
+                className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-100 dark:hover:bg-slate-700/50"
               >
                 {/* Minute */}
-                <span className="w-10 shrink-0 text-right text-xs font-bold tabular-nums text-slate-400">
+                <span className="w-10 shrink-0 text-right text-xs font-bold tabular-nums text-slate-500 dark:text-slate-400">
                   {event.minute != null
                     ? event.injuryMinute != null
                       ? `${event.minute}+${event.injuryMinute}'`
@@ -172,13 +172,13 @@ export default function MatchDetailPage() {
                 <div className="flex-1 overflow-hidden">
                   <p className="truncate text-sm font-medium">{eventLabel(event)}</p>
                   {event.type === 'GOAL' && event.assistName && (
-                    <p className="truncate text-xs text-slate-400">Assist: {event.assistName}</p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">Assist: {event.assistName}</p>
                   )}
                 </div>
 
                 {/* Team name */}
                 {event.teamName && (
-                  <span className="shrink-0 max-w-[100px] truncate text-right text-xs text-slate-500">
+                  <span className="shrink-0 max-w-[100px] truncate text-right text-xs text-slate-400 dark:text-slate-500">
                     {event.teamName}
                   </span>
                 )}
@@ -189,18 +189,18 @@ export default function MatchDetailPage() {
       </div>
 
       {/* Stats placeholder */}
-      <div className="rounded-2xl bg-slate-800 px-4 py-5">
-        <h2 className="mb-3 text-sm font-semibold text-slate-300">Match Stats</h2>
-        <div className="flex flex-col items-center gap-1 py-4 text-slate-500">
+      <div className="rounded-2xl bg-white px-4 py-5 dark:bg-slate-800">
+        <h2 className="mb-3 text-sm font-semibold text-slate-600 dark:text-slate-300">Match Stats</h2>
+        <div className="flex flex-col items-center gap-1 py-4 text-slate-400 dark:text-slate-500">
           <span className="text-2xl">📊</span>
           <p className="text-xs">Stats coming soon</p>
         </div>
       </div>
 
       {/* Lineups placeholder */}
-      <div className="rounded-2xl bg-slate-800 px-4 py-5">
-        <h2 className="mb-3 text-sm font-semibold text-slate-300">Lineups</h2>
-        <div className="flex flex-col items-center gap-1 py-4 text-slate-500">
+      <div className="rounded-2xl bg-white px-4 py-5 dark:bg-slate-800">
+        <h2 className="mb-3 text-sm font-semibold text-slate-600 dark:text-slate-300">Lineups</h2>
+        <div className="flex flex-col items-center gap-1 py-4 text-slate-400 dark:text-slate-500">
           <span className="text-2xl">📋</span>
           <p className="text-xs">Lineups coming soon</p>
         </div>
