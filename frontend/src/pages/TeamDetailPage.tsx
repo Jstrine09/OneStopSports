@@ -123,7 +123,7 @@ export default function TeamDetailPage() {
       {/* Back */}
       <button
         onClick={handleBack}
-        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-500 transition-colors hover:text-slate-900 dark:text-zinc-500 dark:hover:text-zinc-100"
+        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-stone-500 transition-colors hover:text-stone-900 dark:text-zinc-500 dark:hover:text-zinc-100"
       >
         <ChevronLeft size={16} /> Back
       </button>
@@ -135,7 +135,7 @@ export default function TeamDetailPage() {
       {loadingTeam ? (
         <LoadingSpinner />
       ) : team ? (
-        <header className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
+        <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
           {/* Subtle radial wash behind the crest — adds depth without using
               gradient text or glassmorphism (both banned). */}
           <div className="pointer-events-none absolute -left-12 -top-12 h-48 w-48 rounded-full bg-amber-500/[0.04] blur-3xl" />
@@ -144,14 +144,14 @@ export default function TeamDetailPage() {
             {team.crestUrl ? (
               <img src={team.crestUrl} alt={team.name} className="h-20 w-20 shrink-0 object-contain sm:h-24 sm:w-24" />
             ) : (
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-slate-200 text-2xl font-extrabold dark:bg-zinc-800 dark:text-zinc-300 sm:h-24 sm:w-24">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-stone-200 text-2xl font-extrabold dark:bg-zinc-800 dark:text-zinc-300 sm:h-24 sm:w-24">
                 {team.shortName.slice(0, 3)}
               </div>
             )}
 
             <div className="min-w-0 flex-1 space-y-2">
               <h1 className="truncate text-2xl font-extrabold tracking-tight sm:text-3xl">{team.name}</h1>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-zinc-500">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-500 dark:text-zinc-500">
                 {team.country && (
                   <span className="flex items-center gap-1.5">
                     <Globe size={12} className="opacity-60" /> {team.country}
@@ -167,12 +167,12 @@ export default function TeamDetailPage() {
 
             <button
               onClick={toggleTeamFav}
-              className="absolute right-0 top-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full transition active:scale-90 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              className="absolute right-0 top-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full transition active:scale-90 hover:bg-stone-100 dark:hover:bg-zinc-800"
               aria-label={isTeamFav ? 'Remove from favourites' : 'Add to favourites'}
             >
               <Heart
                 size={22}
-                className={isTeamFav ? 'fill-red-500 text-red-500' : 'text-slate-400 dark:text-zinc-600'}
+                className={isTeamFav ? 'fill-red-500 text-red-500' : 'text-stone-400 dark:text-zinc-600'}
               />
             </button>
           </div>
@@ -184,37 +184,37 @@ export default function TeamDetailPage() {
           sit as flat rows inside a single rounded surface per group. */}
       <section>
         <div className="mb-3 flex items-baseline justify-between px-1">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-400">
             Squad
           </h2>
           {players.length > 0 && (
-            <span className="text-xs tabular-nums text-slate-400 dark:text-zinc-600">{players.length} players</span>
+            <span className="text-xs tabular-nums text-stone-400 dark:text-zinc-600">{players.length} players</span>
           )}
         </div>
 
         {loadingPlayers ? (
           <LoadingSpinner />
         ) : players.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500 dark:text-zinc-500">No squad data available</p>
+          <p className="py-8 text-center text-sm text-stone-500 dark:text-zinc-500">No squad data available</p>
         ) : (
           <div className="space-y-4">
             {POSITION_ORDER
               .filter((pos) => grouped[pos]?.length > 0)
               .map((pos) => (
                 <div key={pos}>
-                  <h3 className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-zinc-600">
+                  <h3 className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-stone-400 dark:text-zinc-600">
                     {pos}s <span className="ml-1 opacity-60">· {grouped[pos].length}</span>
                   </h3>
-                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+                  <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
                     {grouped[pos].map((player) => {
                       const playerFav = favPlayerIds.has(player.id)
                       return (
                         <div
                           key={player.id}
-                          className="flex items-center gap-3 border-t border-slate-100 px-4 py-2.5 first:border-0 transition-colors hover:bg-slate-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
+                          className="flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-0 transition-colors hover:bg-stone-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
                         >
                           {/* Jersey number — small but bold, the player's identifier */}
-                          <span className="w-8 shrink-0 text-center text-xs font-extrabold tabular-nums text-slate-400 dark:text-zinc-500">
+                          <span className="w-8 shrink-0 text-center text-xs font-extrabold tabular-nums text-stone-400 dark:text-zinc-500">
                             {player.jerseyNumber != null ? player.jerseyNumber : '—'}
                           </span>
 
@@ -223,24 +223,24 @@ export default function TeamDetailPage() {
                             <Link
                               to={`/players/${player.id}`}
                               state={player}
-                              className="truncate text-sm font-semibold transition-colors hover:text-amber-400"
+                              className="truncate text-sm font-semibold transition-colors hover:text-amber-600 dark:hover:text-amber-400"
                             >
                               {player.name}
                             </Link>
                             {player.nationality && (
-                              <p className="truncate text-xs text-slate-500 dark:text-zinc-500">{player.nationality}</p>
+                              <p className="truncate text-xs text-stone-500 dark:text-zinc-500">{player.nationality}</p>
                             )}
                           </div>
 
                           {/* Favourite toggle */}
                           <button
                             onClick={() => togglePlayerFav(player.id)}
-                            className="shrink-0 rounded-full p-1.5 transition active:scale-90 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                            className="shrink-0 rounded-full p-1.5 transition active:scale-90 hover:bg-stone-100 dark:hover:bg-zinc-800"
                             aria-label={playerFav ? 'Remove from favourites' : 'Add to favourites'}
                           >
                             <Heart
                               size={14}
-                              className={playerFav ? 'fill-red-500 text-red-500' : 'text-slate-300 dark:text-zinc-700'}
+                              className={playerFav ? 'fill-red-500 text-red-500' : 'text-stone-300 dark:text-zinc-700'}
                             />
                           </button>
                         </div>

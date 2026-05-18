@@ -19,7 +19,7 @@ function TeamCrest({ url, name }: { url: string | null; name: string }) {
   }
   // Fallback: initials badge
   return (
-    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-700 text-xs font-bold text-zinc-300">
+    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-200 text-xs font-bold text-stone-600 dark:bg-zinc-700 dark:text-zinc-300">
       {name.slice(0, 3).toUpperCase()}
     </div>
   )
@@ -37,7 +37,7 @@ export default function MatchCard({ match }: Props) {
   const badge = (() => {
     if (state === 'live')     return <span className="animate-pulse rounded bg-green-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Live</span>
     if (state === 'halftime') return <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">HT</span>
-    if (state === 'finished') return <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">FT</span>
+    if (state === 'finished') return <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-500 dark:text-zinc-500">FT</span>
     return null
   })()
 
@@ -49,9 +49,9 @@ export default function MatchCard({ match }: Props) {
       // Live matches get a faint green tint so they're instantly identifiable
       // at a glance, without the badge being the only signal.
       className={`flex items-center gap-3 px-4 py-3 transition-colors active:scale-[0.98]
-        hover:bg-slate-100 dark:hover:bg-zinc-800/60
-        border-b border-slate-100 dark:border-zinc-800/70 last:border-0
-        ${state === 'live' ? 'bg-green-500/[0.04] dark:bg-green-500/[0.06]' : ''}`}
+        hover:bg-stone-100 dark:hover:bg-zinc-800/60
+        border-b border-stone-100 dark:border-zinc-800/70 last:border-0
+        ${state === 'live' ? 'bg-green-50 dark:bg-green-500/[0.06]' : ''}`}
     >
       {/* Home team */}
       <div className="flex flex-1 items-center gap-2.5 overflow-hidden">
@@ -63,10 +63,10 @@ export default function MatchCard({ match }: Props) {
       <div className="flex w-24 flex-col items-center gap-0.5 text-center">
         <span className={`text-lg font-extrabold tabular-nums tracking-tight
           ${state === 'live'
-            ? 'text-green-400'
+            ? 'text-green-600 dark:text-green-400'
             : state === 'scheduled'
-              ? 'text-zinc-500 dark:text-zinc-400'
-              : 'text-slate-900 dark:text-zinc-100'}`}
+              ? 'text-stone-500 dark:text-zinc-400'
+              : 'text-stone-900 dark:text-zinc-100'}`}
         >
           {scoreline}
         </span>

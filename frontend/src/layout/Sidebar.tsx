@@ -13,11 +13,11 @@ const items = [
 export default function Sidebar() {
   return (
     // Only shown on large screens
-    <aside className="fixed left-0 top-0 hidden h-full w-56 flex-col border-r border-slate-200 bg-white dark:border-zinc-900 dark:bg-zinc-950 lg:flex">
+    <aside className="fixed left-0 top-0 hidden h-full w-56 flex-col border-r border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-950 lg:flex">
       {/* Logo — pt-safe ensures the logo clears the notch on iPad/Mac with notch */}
       <div className="pt-safe px-6 py-5">
-        <span className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-zinc-100">
-          OneStop<span className="text-amber-400">Sports</span>
+        <span className="text-xl font-extrabold tracking-tight text-stone-900 dark:text-zinc-100">
+          OneStop<span className="text-amber-600 dark:text-amber-400">Sports</span>
         </span>
       </div>
 
@@ -31,8 +31,8 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition
                ${isActive
-                 ? 'bg-amber-500/10 text-amber-400'
-                 : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-100'
+                 ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
+                 : 'text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-zinc-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-100'
                }`
             }
           >
@@ -47,7 +47,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Theme toggle — pushed to the bottom of the sidebar */}
-      <div className="mt-auto border-t border-slate-200 px-3 py-3 dark:border-zinc-900">
+      <div className="mt-auto border-t border-stone-200 px-3 py-3 dark:border-zinc-900">
         <ThemeToggle showLabel />
       </div>
     </aside>

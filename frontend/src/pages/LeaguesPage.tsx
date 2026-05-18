@@ -4,14 +4,15 @@ import { fetchSports, fetchLeaguesBySport } from '../api/sports'
 import { fetchStandings, fetchTeamsByLeague } from '../api/leagues'
 import StandingsTable from '../components/StandingsTable'
 import LoadingSpinner from '../components/LoadingSpinner'
+import StadiumBackdrop from '../components/StadiumBackdrop'
+import { getLeagueTheme } from '../lib/leagueTheme'
 import { MapPin } from 'lucide-react'
 
 type Tab = 'standings' | 'teams'
 
 export default function LeaguesPage() {
-  // useSearchParams reads and writes the URL query string — e.g. ?sport=basketball&league=7&tab=teams
-  // This keeps the active sport/league/tab in the URL so navigation (back button, deep links,
-  // shared URLs) all restore the correct view.
+  // useSearchParams keeps the active sport/league/tab in the URL so navigation
+  // (back button, deep links, shared URLs) restore the correct view.
   const [searchParams, setSearchParams] = useSearchParams()
 
   const { data: sports = [], isLoading: loadingSports } = useQuery({
@@ -49,7 +50,12 @@ export default function LeaguesPage() {
 
   const activeLeague = leagues.find((l) => l.id === leagueId) ?? leagues[0]
 
-  // URL update helpers — { replace: true } so back button doesn't cycle through every pill click
+  // Resolve the brand theme for the active league. Falls back to the sport-level
+  // theme (NBA/NFL) when no league-specific match exists, and to the default
+  // amber when neither league nor sport matches.
+  const theme = getLeagueTheme(activeLeague?.name, sportSlug)
+
+  // URL update helpers — { replace: true } so back button doesn't cycle through pill clicks
   const setSport  = (slug: string) => setSearchParams({ sport: slug }, { replace: true })
   const setLeague = (id: number) =>
     setSearchParams({ sport: sportSlug ?? '', league: String(id) }, { replace: true })
@@ -62,12 +68,11 @@ export default function LeaguesPage() {
 
   return (
     <div className="space-y-5">
-      {/* Sport selector — underline tab style instead of pills.
-          A horizontal underline reads as "navigation between sections", which is
-          what switching sports really is. Pills here felt like filter chips on
-          a SaaS dashboard, which is the anti-reference. */}
+      {/* Sport selector — underline tab style, active tab takes the active league's theme color.
+          When you switch sports mid-flow the underline color refreshes too, since the theme
+          resolves from sport when no league is yet chosen. */}
       {!loadingSports && sports.length > 1 && (
-        <div className="flex gap-6 overflow-x-auto no-scrollbar border-b border-slate-200 dark:border-zinc-900">
+        <div className="flex gap-6 overflow-x-auto no-scrollbar border-b border-stone-200 dark:border-zinc-900">
           {sports.map((s) => {
             const isActive = sportSlug === s.slug
             return (
@@ -76,13 +81,13 @@ export default function LeaguesPage() {
                 onClick={() => setSport(s.slug)}
                 className={`relative shrink-0 pb-3 text-sm font-semibold transition
                   ${isActive
-                    ? 'text-slate-900 dark:text-zinc-100'
-                    : 'text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-300'
+                    ? 'text-stone-900 dark:text-zinc-100'
+                    : 'text-stone-400 hover:text-stone-700 dark:text-zinc-500 dark:hover:text-zinc-300'
                   }`}
               >
                 {s.name}
                 {isActive && (
-                  <span className="absolute inset-x-0 -bottom-px h-0.5 bg-amber-400" />
+                  <span className={`absolute inset-x-0 -bottom-px h-0.5 ${theme.bg}`} />
                 )}
               </button>
             )
@@ -91,48 +96,59 @@ export default function LeaguesPage() {
       )}
 
       {/* League identity header — the league is the subject of this page.
-          Logo + big name + season puts the league front and centre instead of
-          burying it inside a small info card. This is the "sport over chrome"
-          principle in action. */}
+          The StadiumBackdrop component renders floodlight glows + bowl silhouette
+          + crowd-dot texture, all themed to the league's brand color. This is the
+          "live feels alive" + "sport over chrome" principles working together:
+          the chrome IS the sport. */}
       {activeLeague && (
-        <header className="flex items-center gap-4 py-1">
-          {activeLeague.logoUrl ? (
-            <img
-              src={activeLeague.logoUrl}
-              alt={activeLeague.name}
-              className="h-14 w-14 shrink-0 object-contain"
-            />
-          ) : (
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-lg font-extrabold text-amber-400">
-              {activeLeague.name.slice(0, 2).toUpperCase()}
+        <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
+          <StadiumBackdrop colorClass={theme.text} intensity="strong" />
+
+          {/* Top accent — a thin colored bar across the very top of the header.
+              Reinforces league identity without using the banned side-stripe pattern. */}
+          <div className={`absolute inset-x-0 top-0 h-0.5 ${theme.bg} opacity-80`} />
+
+          <div className="relative flex items-center gap-5">
+            {activeLeague.logoUrl ? (
+              <img
+                src={activeLeague.logoUrl}
+                alt={activeLeague.name}
+                className="h-16 w-16 shrink-0 object-contain"
+              />
+            ) : (
+              <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl ${theme.tint} text-lg font-extrabold ${theme.text}`}>
+                {activeLeague.name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-2xl font-extrabold tracking-tight">
+                {activeLeague.name}
+              </h1>
+              <p className={`text-xs font-bold uppercase tracking-[0.12em] ${theme.text}`}>
+                {activeLeague.country} <span className="mx-1.5 opacity-50">/</span> {activeLeague.season}
+              </p>
             </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-2xl font-extrabold tracking-tight">
-              {activeLeague.name}
-            </h1>
-            <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-zinc-500">
-              {activeLeague.country} <span className="mx-1.5 opacity-40">/</span> {activeLeague.season}
-            </p>
           </div>
         </header>
       )}
 
-      {/* League selector — horizontal-scroll pills, kept since there can be
-          many leagues per sport. Active league uses amber on a tinted bg
-          (not solid blue fill) so the pill feels lit-up rather than stamped. */}
+      {/* League selector pills — active league adopts its theme color so the
+          active state is immediately recognisable across leagues. The pill ring
+          tells you which league is selected; the color tells you which league
+          you're in. */}
       {!loadingLeagues && leagues.length > 0 && (
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
           {leagues.map((l) => {
             const isActive = leagueId === l.id
+            const pillTheme = getLeagueTheme(l.name, sportSlug)
             return (
               <button
                 key={l.id}
                 onClick={() => setLeague(l.id)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition
                   ${isActive
-                    ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-400/40'
-                    : 'bg-slate-100 text-slate-500 hover:text-slate-900 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                    ? `${pillTheme.tint} ${pillTheme.text} ring-1 ${pillTheme.ring}`
+                    : 'bg-stone-100 text-stone-500 hover:text-stone-900 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
                   }`}
               >
                 {l.name}
@@ -142,18 +158,17 @@ export default function LeaguesPage() {
         </div>
       )}
 
-      {/* Standings / Teams tab toggle — segmented control on a flat surface.
-          Padding inside the segments stays consistent; the active pill shifts
-          rather than the whole control morphing. */}
-      <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-zinc-900">
+      {/* Standings / Teams toggle — segmented control on a flat surface.
+          Stays neutral (zinc-100 fill) — it's a control, not identity. */}
+      <div className="inline-flex rounded-lg border border-stone-200 p-0.5 dark:border-zinc-900">
         {(['standings', 'teams'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setTab(tab)}
             className={`rounded-md px-4 py-1.5 text-xs font-semibold capitalize transition
               ${activeTab === tab
-                ? 'bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'text-slate-500 hover:text-slate-900 dark:text-zinc-500 dark:hover:text-zinc-100'
+                ? 'bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                : 'text-stone-500 hover:text-stone-900 dark:text-zinc-500 dark:hover:text-zinc-100'
               }`}
           >
             {tab}
@@ -178,28 +193,28 @@ export default function LeaguesPage() {
         loadingTeams ? (
           <LoadingSpinner />
         ) : teams.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500 dark:text-zinc-500">No teams found</p>
+          <p className="py-8 text-center text-sm text-stone-500 dark:text-zinc-500">No teams found</p>
         ) : (
-          // Squad-wall layout — bigger crests, less uniform padding than the old grid.
-          // Reads as a press wall of clubs, not a card collection.
+          // Squad-wall layout. Hover uses the league's theme color so the brand
+          // continuity carries through into the interaction state.
           <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
             {teams.map((team) => (
               <Link
                 key={team.id}
                 to={`/teams/${team.id}`}
                 state={{ fromLeagues: true, sportSlug, leagueId }}
-                className="group flex flex-col items-center gap-3 rounded-xl border border-transparent bg-white px-3 py-5 transition
-                           hover:border-amber-400/30 hover:bg-amber-500/[0.03] active:scale-[0.97]
-                           dark:bg-zinc-900/60 dark:hover:border-amber-400/30 dark:hover:bg-amber-500/[0.04]"
+                className={`group flex flex-col items-center gap-3 rounded-xl border border-transparent bg-white px-3 py-5 transition
+                           ${theme.hoverBorder} ${theme.hoverTint} active:scale-[0.97]
+                           dark:bg-zinc-900/60`}
               >
                 {team.crestUrl
                   ? <img src={team.crestUrl} alt={team.name} className="h-14 w-14 object-contain transition-transform group-hover:scale-105" />
-                  : <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-200 text-sm font-extrabold dark:bg-zinc-800 dark:text-zinc-300">{team.shortName.slice(0,3)}</div>
+                  : <div className="flex h-14 w-14 items-center justify-center rounded-full bg-stone-200 text-sm font-extrabold dark:bg-zinc-800 dark:text-zinc-300">{team.shortName.slice(0,3)}</div>
                 }
                 <div className="space-y-0.5">
                   <p className="text-center text-xs font-semibold leading-tight">{team.name}</p>
                   {team.stadium && (
-                    <p className="flex items-center justify-center gap-1 text-[10px] text-slate-400 dark:text-zinc-600">
+                    <p className="flex items-center justify-center gap-1 text-[10px] text-stone-400 dark:text-zinc-600">
                       <MapPin size={9} />{team.stadium}
                     </p>
                   )}

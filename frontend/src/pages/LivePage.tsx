@@ -3,6 +3,8 @@ import { fetchLiveMatches } from '../api/matches'
 import { useLiveScores } from '../hooks/useLiveScores'
 import MatchCard from '../components/MatchCard'
 import LoadingSpinner from '../components/LoadingSpinner'
+import StadiumBackdrop from '../components/StadiumBackdrop'
+import { getLeagueTheme, type LeagueTheme } from '../lib/leagueTheme'
 import { Radio } from 'lucide-react'
 import type { MatchDto } from '../types'
 
@@ -10,7 +12,15 @@ import type { MatchDto } from '../types'
 // - timezone === "ET"  →  American sports (NBA/NFL) — backend converts ET wall-clock time
 // - timezone === null  →  Football (soccer) — UTC times left as-is
 // This avoids an extra round-trip for league/sport metadata on the live feed.
-type SportGroup = { label: string; emoji: string; matches: MatchDto[] }
+//
+// Each group carries a theme so the section header, top-accent strip, and
+// stadium backdrop all use the sport's brand color.
+type SportGroup = {
+  label: string
+  emoji: string
+  theme: LeagueTheme
+  matches: MatchDto[]
+}
 
 function groupBySport(matches: MatchDto[]): SportGroup[] {
   const football: MatchDto[] = []
@@ -20,8 +30,23 @@ function groupBySport(matches: MatchDto[]): SportGroup[] {
     else football.push(m)
   }
   const groups: SportGroup[] = []
-  if (football.length) groups.push({ label: 'Football',        emoji: '⚽', matches: football })
-  if (american.length) groups.push({ label: 'American Sports', emoji: '🏀', matches: american })
+  // Football fallback theme is the default amber — once we group per-league
+  // we can swap this to specific league themes.
+  if (football.length) groups.push({
+    label: 'Football',
+    emoji: '⚽',
+    theme: getLeagueTheme(null, 'football'),
+    matches: football,
+  })
+  // American sports are mixed NBA + NFL on the live feed; we use NBA's theme
+  // since the orange reads strongly and most live games at any given time
+  // tend to be NBA. (When we have per-league grouping this gets resolved.)
+  if (american.length) groups.push({
+    label: 'American Sports',
+    emoji: '🏀',
+    theme: getLeagueTheme(null, 'basketball'),
+    matches: american,
+  })
   return groups
 }
 
@@ -48,19 +73,19 @@ export default function LivePage() {
   return (
     <div className="space-y-6">
       {/* Page header — earned committed color treatment.
-          The whole header pulses with the live signal: green icon, glowing
-          background, animated count. This is the one page where the brand
-          says "something is happening right now". */}
+          Pulsing green ring around the icon. The whole header reads as the
+          live signal: this is the one page where the brand says "something
+          is happening right now". */}
       <div className="flex items-center gap-3">
-        <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10">
+        <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/10">
           {matches.length > 0 && (
             <span className="absolute inset-0 animate-ping rounded-full bg-green-500/40" />
           )}
-          <Radio size={20} className="relative text-green-400" strokeWidth={2.25} />
+          <Radio size={20} className="relative text-green-600 dark:text-green-400" strokeWidth={2.25} />
         </div>
         <div className="flex-1">
           <h1 className="text-2xl font-extrabold tracking-tight">Live Now</h1>
-          <p className="text-xs text-slate-500 dark:text-zinc-500">
+          <p className="text-xs text-stone-500 dark:text-zinc-500">
             {matches.length === 0 ? 'Nothing live at the moment' : `${matches.length} game${matches.length === 1 ? '' : 's'} in progress`}
           </p>
         </div>
@@ -75,34 +100,41 @@ export default function LivePage() {
         <LoadingSpinner />
       ) : matches.length === 0 ? (
         // Empty state — teaches the surface instead of "nothing here".
-        // No live games → tell the user what to do next.
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white py-16 dark:border-zinc-900 dark:bg-zinc-900/40">
-          <Radio size={36} className="text-slate-300 dark:text-zinc-700" strokeWidth={1.5} />
-          <p className="text-sm font-medium text-slate-600 dark:text-zinc-400">No live matches right now</p>
-          <p className="max-w-xs text-center text-xs text-slate-400 dark:text-zinc-500">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-stone-200 bg-white py-16 dark:border-zinc-900 dark:bg-zinc-900/40">
+          <Radio size={36} className="text-stone-300 dark:text-zinc-700" strokeWidth={1.5} />
+          <p className="text-sm font-medium text-stone-600 dark:text-zinc-400">No live matches right now</p>
+          <p className="max-w-xs text-center text-xs text-stone-400 dark:text-zinc-500">
             Check the Leagues tab to see today's fixtures, or come back when games kick off.
           </p>
         </div>
       ) : (
-        // Sport groups — each one is its own surface container so the section
-        // header reads as part of the group, and the matches inside feel like
-        // rows in a scoreboard rather than scattered cards.
+        // Sport groups — each is its own surface container with the sport's
+        // brand color: top accent bar, themed section header, and a faint
+        // stadium backdrop inside the section. This gives every match in the
+        // group an immediate visual association with its sport.
         <div className="space-y-5">
           {groups.map((group) => (
             <section key={group.label}>
               <div className="mb-2 flex items-center justify-between px-1">
-                <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
+                <h2 className={`flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] ${group.theme.text}`}>
                   <span className="text-base leading-none">{group.emoji}</span>
                   {group.label}
                 </h2>
-                <span className="text-xs tabular-nums text-slate-400 dark:text-zinc-600">
+                <span className="text-xs tabular-nums text-stone-400 dark:text-zinc-600">
                   {group.matches.length}
                 </span>
               </div>
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
-                {group.matches.map((match) => (
-                  <MatchCard key={match.id} match={match} />
-                ))}
+              <div className="relative overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+                {/* Top accent — thin colored bar identifies the sport */}
+                <div className={`absolute inset-x-0 top-0 h-0.5 ${group.theme.bg} opacity-80 z-10`} />
+                {/* Stadium backdrop sits behind the matches — kept subtle so
+                    score legibility is preserved */}
+                <StadiumBackdrop colorClass={group.theme.text} intensity="subtle" />
+                <div className="relative">
+                  {group.matches.map((match) => (
+                    <MatchCard key={match.id} match={match} />
+                  ))}
+                </div>
               </div>
             </section>
           ))}

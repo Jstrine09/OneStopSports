@@ -13,7 +13,7 @@ export default function BottomNav() {
   return (
     // Fixed to bottom, hidden on large screens (sidebar takes over)
     // pb-safe accounts for iPhone home indicator
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white pb-safe dark:border-zinc-900 dark:bg-zinc-950 lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-stone-200 bg-white pb-safe dark:border-zinc-900 dark:bg-zinc-950 lg:hidden">
       <div className="flex">
         {items.map(({ to, icon: Icon, label }) => (
           <NavLink
@@ -22,7 +22,7 @@ export default function BottomNav() {
             end={to === '/'}
             className={({ isActive }) =>
               `flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] transition
-               ${isActive ? 'text-amber-400' : 'text-slate-500 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-200'}`
+               ${isActive ? 'text-amber-600 dark:text-amber-400' : 'text-stone-500 hover:text-stone-700 dark:text-zinc-500 dark:hover:text-zinc-200'}`
             }
           >
             <Icon size={22} />
