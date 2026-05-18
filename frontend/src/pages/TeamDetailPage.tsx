@@ -11,7 +11,7 @@ import { ChevronLeft, MapPin, Globe, Heart } from 'lucide-react'
 import type { PlayerDto } from '../types'
 
 // Position groups — covers football (soccer), basketball, and American football (NFL).
-// Any position that doesn't match one of these falls into the 'Other' bucket.
+// Anything that doesn't match falls into the 'Other' bucket.
 const POSITION_ORDER = [
   // Football (soccer)
   'Goalkeeper', 'Defender', 'Midfielder', 'Forward',
@@ -47,25 +47,17 @@ export default function TeamDetailPage() {
   const { isAuthenticated } = useAuth()
 
   // When the Leagues page links to a team, it passes the active sport + league as router state.
-  // e.g. { fromLeagues: true, sportSlug: 'basketball', leagueId: 7 }
   // We read that here so the Back button can return to exactly the right sport and tab.
   const fromState = location.state as { fromLeagues?: boolean; sportSlug?: string; leagueId?: number } | null
 
   const handleBack = () => {
     if (fromState?.fromLeagues && fromState.sportSlug) {
-      // The user came from the Leagues → Teams tab.
-      // Build the URL manually so we land back on the correct sport, league, AND tab=teams.
-      // Without this, the Leagues page would remount with its default state (football, standings).
       const params = new URLSearchParams({ tab: 'teams', sport: fromState.sportSlug })
       if (fromState.leagueId) params.set('league', String(fromState.leagueId))
       navigate(`/leagues?${params.toString()}`)
     } else if ((window.history.state?.idx ?? 0) > 0) {
-      // window.history.state.idx is React Router's internal page counter.
-      // If it's greater than 0, the user navigated here from somewhere — go back normally.
       navigate(-1)
     } else {
-      // idx === 0 means this was the first page loaded (e.g. direct URL / bookmark).
-      // There's nothing to go back to, so send them to Leagues as a safe landing page.
       navigate('/leagues')
     }
   }
@@ -85,7 +77,6 @@ export default function TeamDetailPage() {
     staleTime: 5 * 60_000,
   })
 
-  // Favourite teams — only fetch when signed in
   const { data: favTeams = [] } = useQuery({
     queryKey: ['favorites', 'teams'],
     queryFn: getFavoriteTeams,
@@ -93,7 +84,6 @@ export default function TeamDetailPage() {
     staleTime: 2 * 60_000,
   })
 
-  // Favourite players — only fetch when signed in
   const { data: favPlayers = [] } = useQuery({
     queryKey: ['favorites', 'players'],
     queryFn: getFavoritePlayers,
@@ -107,16 +97,10 @@ export default function TeamDetailPage() {
   const toggleTeamFav = async () => {
     if (!isAuthenticated) { navigate('/auth'); return }
     try {
-      if (isTeamFav) {
-        await removeFavoriteTeam(teamId)
-      } else {
-        await addFavoriteTeam(teamId)
-      }
-      // Refresh the favourites list so the heart updates to reflect the new state
+      if (isTeamFav) await removeFavoriteTeam(teamId)
+      else await addFavoriteTeam(teamId)
       queryClient.invalidateQueries({ queryKey: ['favorites', 'teams'] })
     } catch (err) {
-      // If the request fails (e.g. expired token, server error), log it so it's
-      // visible in the browser console instead of silently doing nothing
       console.error('[TeamDetailPage] toggleTeamFav failed:', err)
     }
   }
@@ -124,12 +108,8 @@ export default function TeamDetailPage() {
   const togglePlayerFav = async (playerId: number) => {
     if (!isAuthenticated) { navigate('/auth'); return }
     try {
-      if (favPlayerIds.has(playerId)) {
-        await removeFavoritePlayer(playerId)
-      } else {
-        await addFavoritePlayer(playerId)
-      }
-      // Refresh the favourites list so the heart updates to reflect the new state
+      if (favPlayerIds.has(playerId)) await removeFavoritePlayer(playerId)
+      else await addFavoritePlayer(playerId)
       queryClient.invalidateQueries({ queryKey: ['favorites', 'players'] })
     } catch (err) {
       console.error('[TeamDetailPage] togglePlayerFav failed:', err)
@@ -139,116 +119,139 @@ export default function TeamDetailPage() {
   const grouped = groupByPosition(players)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Back */}
       <button
         onClick={handleBack}
-        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-500 transition-colors hover:text-slate-900 dark:text-zinc-500 dark:hover:text-zinc-100"
       >
         <ChevronLeft size={16} /> Back
       </button>
 
-      {/* Team header */}
+      {/* Team identity header — crest is the anchor of the page.
+          Larger crest, generous breathing room around the name, metadata sits
+          below in a quieter row. The favourite heart is the only call to action
+          here and sits at the top right so it doesn't compete with identity. */}
       {loadingTeam ? (
         <LoadingSpinner />
       ) : team ? (
-        <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-5 dark:bg-slate-800">
-          {team.crestUrl
-            ? <img src={team.crestUrl} alt={team.name} className="h-16 w-16 object-contain" />
-            : <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-200 text-lg font-bold dark:bg-slate-600">{team.shortName.slice(0, 3)}</div>
-          }
-          <div className="flex-1 space-y-1">
-            <h1 className="text-xl font-bold">{team.name}</h1>
-            {team.stadium && (
-              <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                <MapPin size={12} /> {team.stadium}
-              </p>
+        <header className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
+          {/* Subtle radial wash behind the crest — adds depth without using
+              gradient text or glassmorphism (both banned). */}
+          <div className="pointer-events-none absolute -left-12 -top-12 h-48 w-48 rounded-full bg-amber-500/[0.04] blur-3xl" />
+
+          <div className="relative flex items-center gap-5">
+            {team.crestUrl ? (
+              <img src={team.crestUrl} alt={team.name} className="h-20 w-20 shrink-0 object-contain sm:h-24 sm:w-24" />
+            ) : (
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-slate-200 text-2xl font-extrabold dark:bg-zinc-800 dark:text-zinc-300 sm:h-24 sm:w-24">
+                {team.shortName.slice(0, 3)}
+              </div>
             )}
-            {team.country && (
-              <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                <Globe size={12} /> {team.country}
-              </p>
-            )}
+
+            <div className="min-w-0 flex-1 space-y-2">
+              <h1 className="truncate text-2xl font-extrabold tracking-tight sm:text-3xl">{team.name}</h1>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-zinc-500">
+                {team.country && (
+                  <span className="flex items-center gap-1.5">
+                    <Globe size={12} className="opacity-60" /> {team.country}
+                  </span>
+                )}
+                {team.stadium && (
+                  <span className="flex items-center gap-1.5">
+                    <MapPin size={12} className="opacity-60" /> {team.stadium}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={toggleTeamFav}
+              className="absolute right-0 top-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full transition active:scale-90 hover:bg-slate-100 dark:hover:bg-zinc-800"
+              aria-label={isTeamFav ? 'Remove from favourites' : 'Add to favourites'}
+            >
+              <Heart
+                size={22}
+                className={isTeamFav ? 'fill-red-500 text-red-500' : 'text-slate-400 dark:text-zinc-600'}
+              />
+            </button>
           </div>
-          {/* Favourite toggle for team */}
-          <button
-            onClick={toggleTeamFav}
-            className="shrink-0 rounded-full p-2 transition hover:bg-slate-100 active:scale-90 min-h-[44px] min-w-[44px] flex items-center justify-center dark:hover:bg-slate-700"
-            aria-label={isTeamFav ? 'Remove from favourites' : 'Add to favourites'}
-          >
-            <Heart
-              size={24}
-              className={isTeamFav ? 'fill-red-500 text-red-500' : 'text-slate-400'}
-            />
-          </button>
-        </div>
+        </header>
       ) : null}
 
-      {/* Squad heading */}
-      <div className="space-y-1">
-        <h2 className="px-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
-          Squad {players.length > 0 && <span className="text-slate-400 dark:text-slate-500">({players.length})</span>}
-        </h2>
-      </div>
+      {/* Squad section — like a printed team sheet rather than a card collection.
+          Position groups stack as sections with tight uppercase labels, players
+          sit as flat rows inside a single rounded surface per group. */}
+      <section>
+        <div className="mb-3 flex items-baseline justify-between px-1">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
+            Squad
+          </h2>
+          {players.length > 0 && (
+            <span className="text-xs tabular-nums text-slate-400 dark:text-zinc-600">{players.length} players</span>
+          )}
+        </div>
 
-      {loadingPlayers ? (
-        <LoadingSpinner />
-      ) : players.length === 0 ? (
-        <p className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">No squad data available</p>
-      ) : (
-        POSITION_ORDER
-          .filter((pos) => grouped[pos]?.length > 0)
-          .map((pos) => (
-            <section key={pos} className="space-y-1">
-              <h3 className="px-1 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                {pos}s
-              </h3>
-              {/* Responsive grid: 1 col on mobile, 2 on sm+ */}
-              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                {grouped[pos].map((player) => {
-                  const playerFav = favPlayerIds.has(player.id)
-                  return (
-                    <div
-                      key={player.id}
-                      className="flex items-center gap-3 rounded-lg bg-white px-3 py-2.5 dark:bg-slate-800"
-                    >
-                      {/* Name + nationality */}
-                      <div className="flex-1 overflow-hidden">
-                        <Link
-                          to={`/players/${player.id}`}
-                          state={player}
-                          className="truncate text-sm font-medium hover:text-blue-400 transition-colors"
+        {loadingPlayers ? (
+          <LoadingSpinner />
+        ) : players.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500 dark:text-zinc-500">No squad data available</p>
+        ) : (
+          <div className="space-y-4">
+            {POSITION_ORDER
+              .filter((pos) => grouped[pos]?.length > 0)
+              .map((pos) => (
+                <div key={pos}>
+                  <h3 className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-zinc-600">
+                    {pos}s <span className="ml-1 opacity-60">· {grouped[pos].length}</span>
+                  </h3>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+                    {grouped[pos].map((player) => {
+                      const playerFav = favPlayerIds.has(player.id)
+                      return (
+                        <div
+                          key={player.id}
+                          className="flex items-center gap-3 border-t border-slate-100 px-4 py-2.5 first:border-0 transition-colors hover:bg-slate-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
                         >
-                          {player.name}
-                        </Link>
-                        {player.nationality && (
-                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">{player.nationality}</p>
-                        )}
-                      </div>
+                          {/* Jersey number — small but bold, the player's identifier */}
+                          <span className="w-8 shrink-0 text-center text-xs font-extrabold tabular-nums text-slate-400 dark:text-zinc-500">
+                            {player.jerseyNumber != null ? player.jerseyNumber : '—'}
+                          </span>
 
-                      {/* Jersey number */}
-                      <span className="shrink-0 text-xs font-bold text-slate-500 dark:text-slate-400">
-                        {player.jerseyNumber != null ? `#${player.jerseyNumber}` : '—'}
-                      </span>
+                          {/* Name + nationality */}
+                          <div className="flex-1 overflow-hidden">
+                            <Link
+                              to={`/players/${player.id}`}
+                              state={player}
+                              className="truncate text-sm font-semibold transition-colors hover:text-amber-400"
+                            >
+                              {player.name}
+                            </Link>
+                            {player.nationality && (
+                              <p className="truncate text-xs text-slate-500 dark:text-zinc-500">{player.nationality}</p>
+                            )}
+                          </div>
 
-                      {/* Favourite toggle for player */}
-                      <button
-                        onClick={() => togglePlayerFav(player.id)}
-                        className="shrink-0 rounded-full p-1.5 transition hover:bg-slate-100 active:scale-90 dark:hover:bg-slate-700"
-                        aria-label={playerFav ? 'Remove from favourites' : 'Add to favourites'}
-                      >
-                        <Heart
-                          size={14}
-                          className={playerFav ? 'fill-red-500 text-red-500' : 'text-slate-400 dark:text-slate-600'}
-                        />
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          ))
-      )}
+                          {/* Favourite toggle */}
+                          <button
+                            onClick={() => togglePlayerFav(player.id)}
+                            className="shrink-0 rounded-full p-1.5 transition active:scale-90 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                            aria-label={playerFav ? 'Remove from favourites' : 'Add to favourites'}
+                          >
+                            <Heart
+                              size={14}
+                              className={playerFav ? 'fill-red-500 text-red-500' : 'text-slate-300 dark:text-zinc-700'}
+                            />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

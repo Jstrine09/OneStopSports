@@ -4,12 +4,18 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      fontFamily: {
+        // Inter — precise, tight, built for dense sports data at any size
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+      },
       colors: {
-        // App-wide dark palette
+        // Zinc has a slightly warmer cast than slate — the dark theme feels like a
+        // stadium at night rather than a generic off-the-shelf "dark mode".
         surface: {
-          DEFAULT: '#1e293b', // slate-800 — card background
-          dark:    '#0f172a', // slate-900 — page background
-          light:   '#334155', // slate-700 — borders / hover
+          DEFAULT: '#18181b', // zinc-900 — card / section background
+          dark:    '#09090b', // zinc-950 — page background
+          raised:  '#27272a', // zinc-800 — elevated within a surface
+          border:  '#3f3f46', // zinc-700 — visible dividers
         },
       },
       // Safe area insets for iPhone notch / home indicator

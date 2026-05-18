@@ -6,34 +6,66 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { Radio } from 'lucide-react'
 import type { MatchDto } from '../types'
 
+// Group live matches by sport using the timezone field as a heuristic:
+// - timezone === "ET"  →  American sports (NBA/NFL) — backend converts ET wall-clock time
+// - timezone === null  →  Football (soccer) — UTC times left as-is
+// This avoids an extra round-trip for league/sport metadata on the live feed.
+type SportGroup = { label: string; emoji: string; matches: MatchDto[] }
+
+function groupBySport(matches: MatchDto[]): SportGroup[] {
+  const football: MatchDto[] = []
+  const american: MatchDto[] = []
+  for (const m of matches) {
+    if (m.timezone === 'ET') american.push(m)
+    else football.push(m)
+  }
+  const groups: SportGroup[] = []
+  if (football.length) groups.push({ label: 'Football',        emoji: '⚽', matches: football })
+  if (american.length) groups.push({ label: 'American Sports', emoji: '🏀', matches: american })
+  return groups
+}
+
 export default function LivePage() {
   const queryClient = useQueryClient()
 
-  // Initial load + fallback polling via REST (every 60 s).
-  // The WebSocket push below is the primary update mechanism — polling is a safety net
-  // in case the WebSocket connection drops and auto-reconnect hasn't fired yet.
+  // Initial load + 60s fallback polling. WebSocket is the primary update path —
+  // polling is a safety net in case the socket drops and auto-reconnect hasn't fired yet.
   const { data: matches = [], isLoading } = useQuery({
     queryKey: ['matches', 'live'],
     queryFn: fetchLiveMatches,
-    refetchInterval: 60_000, // Reduced from 30 s — WebSocket handles real-time updates
+    refetchInterval: 60_000,
     staleTime: 30_000,
   })
 
-  // Subscribe to WebSocket pushes from the backend.
-  // When a score changes, the server sends the full updated match list.
-  // We write it directly into React Query's cache so MatchCards re-render instantly
-  // without waiting for the next polling cycle.
+  // Live WebSocket push — writes straight into React Query's cache so cards
+  // re-render the moment a score changes, without waiting for the next poll.
   useLiveScores((updatedMatches: MatchDto[]) => {
     queryClient.setQueryData(['matches', 'live'], updatedMatches)
   })
 
+  const groups = groupBySport(matches)
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Radio size={20} className="text-green-400" />
-        <h1 className="text-xl font-bold">Live Now</h1>
+    <div className="space-y-6">
+      {/* Page header — earned committed color treatment.
+          The whole header pulses with the live signal: green icon, glowing
+          background, animated count. This is the one page where the brand
+          says "something is happening right now". */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10">
+          {matches.length > 0 && (
+            <span className="absolute inset-0 animate-ping rounded-full bg-green-500/40" />
+          )}
+          <Radio size={20} className="relative text-green-400" strokeWidth={2.25} />
+        </div>
+        <div className="flex-1">
+          <h1 className="text-2xl font-extrabold tracking-tight">Live Now</h1>
+          <p className="text-xs text-slate-500 dark:text-zinc-500">
+            {matches.length === 0 ? 'Nothing live at the moment' : `${matches.length} game${matches.length === 1 ? '' : 's'} in progress`}
+          </p>
+        </div>
         {matches.length > 0 && (
-          <span className="animate-pulse rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">
+          <span className="rounded-full bg-green-500 px-3 py-1 text-xs font-extrabold tabular-nums text-white shadow-[0_0_20px_rgba(34,197,94,0.4)]">
             {matches.length}
           </span>
         )}
@@ -42,14 +74,37 @@ export default function LivePage() {
       {isLoading ? (
         <LoadingSpinner />
       ) : matches.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-16 text-slate-500 dark:text-slate-400">
-          <Radio size={40} className="opacity-30" />
-          <p className="text-sm">No live matches right now</p>
+        // Empty state — teaches the surface instead of "nothing here".
+        // No live games → tell the user what to do next.
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white py-16 dark:border-zinc-900 dark:bg-zinc-900/40">
+          <Radio size={36} className="text-slate-300 dark:text-zinc-700" strokeWidth={1.5} />
+          <p className="text-sm font-medium text-slate-600 dark:text-zinc-400">No live matches right now</p>
+          <p className="max-w-xs text-center text-xs text-slate-400 dark:text-zinc-500">
+            Check the Leagues tab to see today's fixtures, or come back when games kick off.
+          </p>
         </div>
       ) : (
-        <div className="space-y-1.5">
-          {matches.map((match) => (
-            <MatchCard key={match.id} match={match} />
+        // Sport groups — each one is its own surface container so the section
+        // header reads as part of the group, and the matches inside feel like
+        // rows in a scoreboard rather than scattered cards.
+        <div className="space-y-5">
+          {groups.map((group) => (
+            <section key={group.label}>
+              <div className="mb-2 flex items-center justify-between px-1">
+                <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
+                  <span className="text-base leading-none">{group.emoji}</span>
+                  {group.label}
+                </h2>
+                <span className="text-xs tabular-nums text-slate-400 dark:text-zinc-600">
+                  {group.matches.length}
+                </span>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+                {group.matches.map((match) => (
+                  <MatchCard key={match.id} match={match} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}

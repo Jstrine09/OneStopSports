@@ -2,105 +2,115 @@ import type { StandingsEntryDto } from '../types'
 
 interface Props {
   entries: StandingsEntryDto[]
-  // Whether to show coloured position indicators (row shading + left border + legend).
-  // Set to false for competitions with no promotion/relegation zones — e.g. Champions League,
-  // and non-football sports like basketball where the colour key doesn't apply.
-  // Defaults to true so existing callers don't need to change.
+  // Whether to colour-code position zones (CL/EL/Conf/relegation).
+  // false for competitions with no zones (Champions League, NBA, NFL) so the
+  // table doesn't show a misleading legend.
   showZones?: boolean
 }
 
-// Returns a subtle background tint for the whole row based on league position.
-// Using very low opacity (/10) so the highlight is noticeable but not distracting.
-// This is applied to the <tr> so the entire row gets a soft wash of colour.
-function rowBg(position: number, total: number): string {
-  if (position <= 4)           return 'bg-blue-500/10'
-  if (position === 5)          return 'bg-orange-400/10'
-  if (position === 6)          return 'bg-green-500/10'
-  if (position > total - 3)    return 'bg-red-500/10'
-  return ''
+type Zone = 'cl' | 'el' | 'conf' | 'releg' | null
+
+function zoneFor(position: number, total: number): Zone {
+  if (position <= 4)        return 'cl'
+  if (position === 5)       return 'el'
+  if (position === 6)       return 'conf'
+  if (position > total - 3) return 'releg'
+  return null
 }
 
-// Returns a solid left-border colour for the position-number cell.
-// Applied to the first <td> (not <tr>) because browsers don't reliably
-// render left borders directly on table row elements.
-// The transparent fallback keeps all rows the same width so nothing shifts.
-function rowBorder(position: number, total: number): string {
-  if (position <= 4)           return 'border-l-4 border-blue-500'
-  if (position === 5)          return 'border-l-4 border-orange-400'
-  if (position === 6)          return 'border-l-4 border-green-500'
-  if (position > total - 3)    return 'border-l-4 border-red-500'
-  return 'border-l-4 border-transparent'
+// Background tint for the row. Very low chroma so the wash reads as context,
+// not as the dominant signal — the position number badge carries the colour weight.
+function rowTint(zone: Zone): string {
+  switch (zone) {
+    case 'cl':    return 'bg-blue-500/[0.06]'
+    case 'el':    return 'bg-orange-400/[0.06]'
+    case 'conf':  return 'bg-green-500/[0.06]'
+    case 'releg': return 'bg-red-500/[0.06]'
+    default:      return ''
+  }
+}
+
+// Position number badge — replaces the banned border-left side-stripe.
+// The number itself carries the zone signal, which is more legible than a thin
+// strip of colour off to the side and works at any density.
+function positionBadge(position: number, zone: Zone): JSX.Element {
+  const base = 'inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold tabular-nums'
+  switch (zone) {
+    case 'cl':    return <span className={`${base} bg-blue-500/20 text-blue-400`}>{position}</span>
+    case 'el':    return <span className={`${base} bg-orange-400/20 text-orange-300`}>{position}</span>
+    case 'conf':  return <span className={`${base} bg-green-500/20 text-green-400`}>{position}</span>
+    case 'releg': return <span className={`${base} bg-red-500/20 text-red-400`}>{position}</span>
+    default:      return <span className={`${base} text-slate-500 dark:text-zinc-500`}>{position}</span>
+  }
 }
 
 export default function StandingsTable({ entries, showZones = true }: Props) {
   if (entries.length === 0) {
-    return <p className="py-8 text-center text-slate-500 dark:text-slate-400">No standings available</p>
+    return <p className="py-8 text-center text-sm text-slate-500 dark:text-zinc-500">No standings available</p>
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl bg-white dark:bg-slate-800">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            <th className="py-3 pl-4 text-left">#</th>
-            <th className="py-3 text-left">Team</th>
-            <th className="py-3 text-center">P</th>
-            <th className="py-3 text-center">W</th>
-            <th className="py-3 text-center">D</th>
-            <th className="py-3 text-center">L</th>
-            <th className="hidden py-3 text-center sm:table-cell">GF</th>
-            <th className="hidden py-3 text-center sm:table-cell">GA</th>
-            <th className="py-3 text-center">GD</th>
-            <th className="py-3 pr-4 text-center font-bold text-slate-900 dark:text-white">Pts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map((e) => (
-            <tr
-              key={e.team.id}
-              // rowBg gives each row a faint colour wash — blue for CL spots, red for relegation, etc.
-              // Only applied when showZones is true (domestic leagues). The Champions League
-              // and non-football sports skip this so the table looks clean without a misleading key.
-              // hover:bg-slate-700/50 still works on top of the tint (it just darkens the row slightly).
-              className={`border-b border-slate-200 last:border-0 hover:bg-slate-100 dark:border-slate-700/50 dark:hover:bg-slate-700/50 ${showZones ? rowBg(e.position, entries.length) : ''}`}
-            >
-              {/* rowBorder puts the solid 4px stripe on the left edge of the # cell.
-                  Keeping it on <td> rather than <tr> ensures it always renders.
-                  When showZones is off, we still add a transparent border so all rows
-                  stay the same width and the # column doesn't shift. */}
-              <td className={`py-2.5 pl-4 text-slate-500 dark:text-slate-400 ${showZones ? rowBorder(e.position, entries.length) : 'border-l-4 border-transparent'}`}>{e.position}</td>
-              <td className="py-2.5">
-                <div className="flex items-center gap-2">
-                  {e.team.crestUrl && (
-                    <img src={e.team.crestUrl} alt={e.team.name} className="h-5 w-5 object-contain" />
-                  )}
-                  <span className="font-medium">
-                    <span className="hidden sm:inline">{e.team.name}</span>
-                    <span className="sm:hidden">{e.team.shortName}</span>
-                  </span>
-                </div>
-              </td>
-              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.played}</td>
-              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.won}</td>
-              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.drawn}</td>
-              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.lost}</td>
-              <td className="hidden py-2.5 text-center text-slate-600 dark:text-slate-300 sm:table-cell">{e.goalsFor}</td>
-              <td className="hidden py-2.5 text-center text-slate-600 dark:text-slate-300 sm:table-cell">{e.goalsAgainst}</td>
-              <td className="py-2.5 text-center text-slate-600 dark:text-slate-300">{e.goalsFor - e.goalsAgainst}</td>
-              <td className="py-2.5 pr-4 text-center font-bold">{e.points}</td>
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-[0.1em] text-slate-400 dark:text-zinc-600">
+              <th className="py-3 pl-4 text-left font-semibold">#</th>
+              <th className="py-3 text-left font-semibold">Team</th>
+              <th className="py-3 text-center font-semibold">P</th>
+              <th className="py-3 text-center font-semibold">W</th>
+              <th className="py-3 text-center font-semibold">D</th>
+              <th className="py-3 text-center font-semibold">L</th>
+              <th className="hidden py-3 text-center font-semibold sm:table-cell">GF</th>
+              <th className="hidden py-3 text-center font-semibold sm:table-cell">GA</th>
+              <th className="py-3 text-center font-semibold">GD</th>
+              <th className="py-3 pr-4 text-center font-bold text-slate-700 dark:text-zinc-300">Pts</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {entries.map((e) => {
+              const zone = showZones ? zoneFor(e.position, entries.length) : null
+              return (
+                <tr
+                  key={e.team.id}
+                  className={`border-t border-slate-100 transition-colors
+                    hover:bg-slate-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40
+                    ${rowTint(zone)}`}
+                >
+                  <td className="py-2.5 pl-4">{positionBadge(e.position, zone)}</td>
+                  <td className="py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      {e.team.crestUrl && (
+                        <img src={e.team.crestUrl} alt={e.team.name} className="h-5 w-5 object-contain" />
+                      )}
+                      <span className="font-medium">
+                        <span className="hidden sm:inline">{e.team.name}</span>
+                        <span className="sm:hidden">{e.team.shortName}</span>
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 text-center tabular-nums text-slate-600 dark:text-zinc-400">{e.played}</td>
+                  <td className="py-2.5 text-center tabular-nums text-slate-600 dark:text-zinc-400">{e.won}</td>
+                  <td className="py-2.5 text-center tabular-nums text-slate-600 dark:text-zinc-400">{e.drawn}</td>
+                  <td className="py-2.5 text-center tabular-nums text-slate-600 dark:text-zinc-400">{e.lost}</td>
+                  <td className="hidden py-2.5 text-center tabular-nums text-slate-600 dark:text-zinc-400 sm:table-cell">{e.goalsFor}</td>
+                  <td className="hidden py-2.5 text-center tabular-nums text-slate-600 dark:text-zinc-400 sm:table-cell">{e.goalsAgainst}</td>
+                  <td className="py-2.5 text-center tabular-nums text-slate-600 dark:text-zinc-400">{e.goalsFor - e.goalsAgainst}</td>
+                  <td className="py-2.5 pr-4 text-center font-extrabold tabular-nums">{e.points}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
 
-      {/* Legend — only shown for domestic football leagues that have promotion/relegation zones.
-          Hidden for the Champions League and non-football sports (showZones = false). */}
+      {/* Legend — only shown for domestic football leagues with promotion/relegation zones */}
       {showZones && (
-        <div className="flex flex-wrap gap-4 border-t border-slate-200 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-blue-500" /> Champions League</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-orange-400" /> Europa League</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-green-500" /> Conference League</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-red-500" /> Relegation</span>
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-500 dark:border-zinc-900 dark:text-zinc-500">
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-blue-500" /> Champions League</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-orange-400" /> Europa League</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-green-500" /> Conference League</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-red-500" /> Relegation</span>
         </div>
       )}
     </div>

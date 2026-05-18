@@ -1,3 +1,6 @@
+/* Inter — precise, tight, the right voice for a sports data product */
+@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,7 +12,9 @@
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-white;
+    /* Dark: zinc-950 — warmer than slate, like a stadium at night rather than
+       a generic off-the-shelf dark mode. Light: clean slate for daylight use. */
+    @apply bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100;
     /* Remove default iOS tap highlight */
     -webkit-tap-highlight-color: transparent;
     /* Prevent pull-to-refresh and overscroll bounce in standalone PWA mode */

@@ -5,7 +5,7 @@ import ThemeToggle from '../components/ThemeToggle'
 
 export default function AppLayout() {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100">
       {/* Desktop sidebar (≥ lg) */}
       <Sidebar />
 
@@ -15,7 +15,7 @@ export default function AppLayout() {
         className="fixed left-0 right-0 top-0 z-40 flex justify-end
                    border-b border-slate-200 bg-white px-2
                    pt-[env(safe-area-inset-top)]
-                   dark:border-slate-800 dark:bg-slate-900 lg:hidden"
+                   dark:border-zinc-900 dark:bg-zinc-950 lg:hidden"
       >
         <div className="flex h-11 items-center">
           <ThemeToggle />
