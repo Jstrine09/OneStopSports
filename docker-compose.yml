@@ -32,7 +32,7 @@ services:
     build: .                            # Uses the Dockerfile in the project root
     container_name: onestopsports-app
     ports:
-      - "8080:8080"
+      - "8081:8081"
     environment:
       # Activate the docker Spring profile — loads application-docker.yml which
       # points datasource to the "postgres" service and Redis to the "redis" service
