@@ -143,7 +143,7 @@ export default function TeamDetailPage() {
       {/* Back */}
       <button
         onClick={handleBack}
-        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-400 hover:text-white"
+        className="flex min-h-[44px] items-center gap-1 py-2 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
       >
         <ChevronLeft size={16} /> Back
       </button>
@@ -152,20 +152,20 @@ export default function TeamDetailPage() {
       {loadingTeam ? (
         <LoadingSpinner />
       ) : team ? (
-        <div className="flex items-center gap-4 rounded-2xl bg-slate-800 px-4 py-5">
+        <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-5 dark:bg-slate-800">
           {team.crestUrl
             ? <img src={team.crestUrl} alt={team.name} className="h-16 w-16 object-contain" />
-            : <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-600 text-lg font-bold">{team.shortName.slice(0, 3)}</div>
+            : <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-200 text-lg font-bold dark:bg-slate-600">{team.shortName.slice(0, 3)}</div>
           }
           <div className="flex-1 space-y-1">
             <h1 className="text-xl font-bold">{team.name}</h1>
             {team.stadium && (
-              <p className="flex items-center gap-1 text-xs text-slate-400">
+              <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                 <MapPin size={12} /> {team.stadium}
               </p>
             )}
             {team.country && (
-              <p className="flex items-center gap-1 text-xs text-slate-400">
+              <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                 <Globe size={12} /> {team.country}
               </p>
             )}
@@ -173,7 +173,7 @@ export default function TeamDetailPage() {
           {/* Favourite toggle for team */}
           <button
             onClick={toggleTeamFav}
-            className="shrink-0 rounded-full p-2 transition hover:bg-slate-700 active:scale-90 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="shrink-0 rounded-full p-2 transition hover:bg-slate-100 active:scale-90 min-h-[44px] min-w-[44px] flex items-center justify-center dark:hover:bg-slate-700"
             aria-label={isTeamFav ? 'Remove from favourites' : 'Add to favourites'}
           >
             <Heart
@@ -186,21 +186,21 @@ export default function TeamDetailPage() {
 
       {/* Squad heading */}
       <div className="space-y-1">
-        <h2 className="px-1 text-sm font-semibold text-slate-300">
-          Squad {players.length > 0 && <span className="text-slate-500">({players.length})</span>}
+        <h2 className="px-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
+          Squad {players.length > 0 && <span className="text-slate-400 dark:text-slate-500">({players.length})</span>}
         </h2>
       </div>
 
       {loadingPlayers ? (
         <LoadingSpinner />
       ) : players.length === 0 ? (
-        <p className="py-8 text-center text-slate-400 text-sm">No squad data available</p>
+        <p className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">No squad data available</p>
       ) : (
         POSITION_ORDER
           .filter((pos) => grouped[pos]?.length > 0)
           .map((pos) => (
             <section key={pos} className="space-y-1">
-              <h3 className="px-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <h3 className="px-1 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 {pos}s
               </h3>
               {/* Responsive grid: 1 col on mobile, 2 on sm+ */}
@@ -210,7 +210,7 @@ export default function TeamDetailPage() {
                   return (
                     <div
                       key={player.id}
-                      className="flex items-center gap-3 rounded-lg bg-slate-800 px-3 py-2.5"
+                      className="flex items-center gap-3 rounded-lg bg-white px-3 py-2.5 dark:bg-slate-800"
                     >
                       {/* Name + nationality */}
                       <div className="flex-1 overflow-hidden">
@@ -222,24 +222,24 @@ export default function TeamDetailPage() {
                           {player.name}
                         </Link>
                         {player.nationality && (
-                          <p className="truncate text-xs text-slate-400">{player.nationality}</p>
+                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">{player.nationality}</p>
                         )}
                       </div>
 
                       {/* Jersey number */}
-                      <span className="shrink-0 text-xs font-bold text-slate-400">
+                      <span className="shrink-0 text-xs font-bold text-slate-500 dark:text-slate-400">
                         {player.jerseyNumber != null ? `#${player.jerseyNumber}` : '—'}
                       </span>
 
                       {/* Favourite toggle for player */}
                       <button
                         onClick={() => togglePlayerFav(player.id)}
-                        className="shrink-0 rounded-full p-1.5 transition hover:bg-slate-700 active:scale-90"
+                        className="shrink-0 rounded-full p-1.5 transition hover:bg-slate-100 active:scale-90 dark:hover:bg-slate-700"
                         aria-label={playerFav ? 'Remove from favourites' : 'Add to favourites'}
                       >
                         <Heart
                           size={14}
-                          className={playerFav ? 'fill-red-500 text-red-500' : 'text-slate-600'}
+                          className={playerFav ? 'fill-red-500 text-red-500' : 'text-slate-400 dark:text-slate-600'}
                         />
                       </button>
                     </div>

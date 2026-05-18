@@ -42,7 +42,7 @@ export default function LivePage() {
       {isLoading ? (
         <LoadingSpinner />
       ) : matches.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-16 text-slate-400">
+        <div className="flex flex-col items-center gap-2 py-16 text-slate-500 dark:text-slate-400">
           <Radio size={40} className="opacity-30" />
           <p className="text-sm">No live matches right now</p>
         </div>

@@ -27,7 +27,7 @@ export default function SearchPage() {
     <div className="space-y-4">
       {/* Page header */}
       <div className="flex items-center gap-2">
-        <Search size={20} className="text-slate-400" />
+        <Search size={20} className="text-slate-500 dark:text-slate-400" />
         <h1 className="text-xl font-bold">Search</h1>
       </div>
 
@@ -41,9 +41,11 @@ export default function SearchPage() {
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}
-        className="w-full rounded-xl bg-slate-800 px-4 py-3 text-base text-white
-                   placeholder-slate-500 outline-none ring-1 ring-slate-700
-                   focus:ring-blue-500 transition md:text-sm"
+        className="w-full rounded-xl bg-white px-4 py-3 text-base text-slate-900
+                   placeholder-slate-400 outline-none ring-1 ring-slate-200
+                   focus:ring-blue-500 transition
+                   dark:bg-slate-800 dark:text-white dark:placeholder-slate-500 dark:ring-slate-700
+                   md:text-sm"
       />
 
       {/* Loading state — shown while the API request is in flight */}
@@ -51,7 +53,7 @@ export default function SearchPage() {
 
       {/* Empty state — shown when the query is long enough but there are no matches */}
       {showEmpty && (
-        <p className="py-8 text-center text-sm text-slate-400">
+        <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
           No results for "{trimmed}"
         </p>
       )}
@@ -59,7 +61,7 @@ export default function SearchPage() {
       {/* Team results */}
       {data && data.teams.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Teams
           </h2>
           <div className="space-y-1.5">
@@ -67,15 +69,16 @@ export default function SearchPage() {
               <Link
                 key={team.id}
                 to={`/teams/${team.id}`}
-                className="flex items-center gap-3 rounded-xl bg-slate-800 px-4 py-3
-                           transition hover:bg-slate-700 active:scale-[0.98]"
+                className="flex items-center gap-3 rounded-xl bg-white px-4 py-3
+                           transition hover:bg-slate-50 active:scale-[0.98]
+                           dark:bg-slate-800 dark:hover:bg-slate-700"
               >
                 {/* Team crest or abbreviation fallback — same logic as MatchCard */}
                 {team.crestUrl ? (
                   <img src={team.crestUrl} alt={team.name} className="h-8 w-8 object-contain" />
                 ) : (
                   <div className="flex h-8 w-8 items-center justify-center rounded-full
-                                  bg-slate-600 text-xs font-bold">
+                                  bg-slate-200 text-xs font-bold dark:bg-slate-600">
                     {(team.shortName ?? team.name).slice(0, 3).toUpperCase()}
                   </div>
                 )}
@@ -83,7 +86,7 @@ export default function SearchPage() {
                   <p className="text-sm font-medium">{team.name}</p>
                   {/* Country shown as a subtle subtitle */}
                   {team.country && (
-                    <p className="text-xs text-slate-400">{team.country}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{team.country}</p>
                   )}
                 </div>
               </Link>
@@ -95,7 +98,7 @@ export default function SearchPage() {
       {/* Player results */}
       {data && data.players.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Players
           </h2>
           <div className="space-y-1.5">
@@ -103,18 +106,20 @@ export default function SearchPage() {
               <Link
                 key={player.id}
                 to={`/players/${player.id}`}
-                className="flex items-center gap-3 rounded-xl bg-slate-800 px-4 py-3
-                           transition hover:bg-slate-700 active:scale-[0.98]"
+                className="flex items-center gap-3 rounded-xl bg-white px-4 py-3
+                           transition hover:bg-slate-50 active:scale-[0.98]
+                           dark:bg-slate-800 dark:hover:bg-slate-700"
               >
                 {/* Jersey number badge, or # if unknown */}
                 <div className="flex h-8 w-8 items-center justify-center rounded-full
-                                bg-slate-700 text-xs font-bold text-slate-300 shrink-0">
+                                bg-slate-100 text-xs font-bold text-slate-600 shrink-0
+                                dark:bg-slate-700 dark:text-slate-300">
                   {player.jerseyNumber ?? '#'}
                 </div>
                 <div className="overflow-hidden">
                   <p className="truncate text-sm font-medium">{player.name}</p>
                   {/* Position and nationality as a single subtitle line */}
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     {[player.position, player.nationality].filter(Boolean).join(' · ')}
                   </p>
                 </div>
@@ -126,7 +131,7 @@ export default function SearchPage() {
 
       {/* Prompt shown before the user starts typing */}
       {!trimmed && (
-        <p className="py-8 text-center text-sm text-slate-400">
+        <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
           Search for any team or player across all sports
         </p>
       )}

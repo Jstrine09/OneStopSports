@@ -77,7 +77,7 @@ export default function HomePage() {
             className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition
               ${activeLeague === 'all'
                 ? 'bg-blue-500 text-white'
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white'
               }`}
           >
             All
@@ -89,7 +89,7 @@ export default function HomePage() {
               className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition
                 ${activeLeague === l.id
                   ? 'bg-blue-500 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white'
                 }`}
             >
               {l.name}
@@ -102,7 +102,7 @@ export default function HomePage() {
       {isLoading ? (
         <LoadingSpinner />
       ) : sections.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-16 text-slate-400">
+        <div className="flex flex-col items-center gap-2 py-16 text-slate-500 dark:text-slate-400">
           <span className="text-4xl">🏅</span>
           <p className="text-sm">No matches on this date</p>
         </div>
@@ -113,7 +113,7 @@ export default function HomePage() {
               {league.logoUrl && (
                 <img src={league.logoUrl} alt={league.name} className="h-4 w-4 object-contain" />
               )}
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {league.country} · {league.name}
               </h2>
             </div>

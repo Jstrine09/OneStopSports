@@ -21,10 +21,10 @@ function label(dateStr: string): string {
 
 export default function DateNav({ date, onChange }: Props) {
   return (
-    <div className="flex items-center justify-between rounded-xl bg-slate-800 px-2 py-1">
+    <div className="flex items-center justify-between rounded-xl bg-white px-2 py-1 dark:bg-slate-800">
       <button
         onClick={() => onChange(addDays(date, -1))}
-        className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white active:scale-95"
+        className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 active:scale-95 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
         aria-label="Previous day"
       >
         <ChevronLeft size={20} />
@@ -34,7 +34,7 @@ export default function DateNav({ date, onChange }: Props) {
 
       <button
         onClick={() => onChange(addDays(date, 1))}
-        className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white active:scale-95"
+        className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 active:scale-95 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
         aria-label="Next day"
       >
         <ChevronRight size={20} />
