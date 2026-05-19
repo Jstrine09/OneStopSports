@@ -4,41 +4,36 @@ import { fetchSports, fetchLeaguesBySport } from '../api/sports'
 import { fetchStandings, fetchTeamsByLeague } from '../api/leagues'
 import StandingsTable from '../components/StandingsTable'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { Trophy, MapPin } from 'lucide-react'
+import StadiumBackdrop from '../components/StadiumBackdrop'
+import { getLeagueTheme } from '../lib/leagueTheme'
+import { MapPin } from 'lucide-react'
 
 type Tab = 'standings' | 'teams'
 
 export default function LeaguesPage() {
-  // useSearchParams reads and writes the URL query string — e.g. ?sport=basketball&league=7&tab=teams
-  // We use this instead of useState so the active sport/league/tab survive navigation.
-  // When the user goes to a team and presses Back, the URL is restored and they land
-  // exactly where they were — same sport, same league, same tab.
+  // useSearchParams keeps the active sport/league/tab in the URL so navigation
+  // (back button, deep links, shared URLs) restore the correct view.
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // Fetch all sports so we can show sport selector pills (Football, Basketball, etc.)
   const { data: sports = [], isLoading: loadingSports } = useQuery({
     queryKey: ['sports'],
     queryFn: fetchSports,
     staleTime: 10 * 60_000,
   })
 
-  // Read the active state from the URL — fall back to sensible defaults when params aren't set
-  const sportSlug    = searchParams.get('sport')  ?? sports[0]?.slug ?? null  // e.g. 'basketball'
-  const activeLeagueId = searchParams.get('league') ? Number(searchParams.get('league')) : null // e.g. 7
-  const activeTab    = (searchParams.get('tab') ?? 'standings') as Tab  // 'standings' or 'teams'
+  const sportSlug    = searchParams.get('sport')  ?? sports[0]?.slug ?? null
+  const activeLeagueId = searchParams.get('league') ? Number(searchParams.get('league')) : null
+  const activeTab    = (searchParams.get('tab') ?? 'standings') as Tab
 
-  // Fetch leagues for the selected sport (e.g. all football leagues, or just NBA for basketball)
   const { data: leagues = [], isLoading: loadingLeagues } = useQuery({
     queryKey: ['leagues', sportSlug],
     queryFn: () => fetchLeaguesBySport(sportSlug!),
-    enabled: !!sportSlug, // don't fetch until we know which sport is selected
+    enabled: !!sportSlug,
     staleTime: 5 * 60_000,
   })
 
-  // If no league is explicitly selected in the URL, fall back to the first one in the list
   const leagueId = activeLeagueId ?? leagues[0]?.id ?? null
 
-  // Fetch standings for the selected league — only when the standings tab is active
   const { data: standings = [], isLoading: loadingStandings } = useQuery({
     queryKey: ['standings', leagueId],
     queryFn: () => fetchStandings(leagueId!),
@@ -46,7 +41,6 @@ export default function LeaguesPage() {
     staleTime: 5 * 60_000,
   })
 
-  // Fetch teams for the selected league — only when the teams tab is active
   const { data: teams = [], isLoading: loadingTeams } = useQuery({
     queryKey: ['teams', leagueId],
     queryFn: () => fetchTeamsByLeague(leagueId!),
@@ -54,25 +48,17 @@ export default function LeaguesPage() {
     staleTime: 5 * 60_000,
   })
 
-  // The full league object for the currently selected league — used to show name/country/season
   const activeLeague = leagues.find((l) => l.id === leagueId) ?? leagues[0]
 
-  // --- URL update helpers ---
-  // All three use { replace: true } which means the URL change REPLACES the current history entry
-  // instead of pushing a new one. This way, pressing Back from a team page doesn't cycle through
-  // every sport/league/tab the user clicked — it just goes straight back to the leagues page.
+  // Resolve the brand theme for the active league. Falls back to the sport-level
+  // theme (NBA/NFL) when no league-specific match exists, and to the default
+  // amber when neither league nor sport matches.
+  const theme = getLeagueTheme(activeLeague?.name, sportSlug)
 
-  // Called when the user clicks a sport pill (e.g. switches from Football to Basketball)
-  const setSport = (slug: string) =>
-    setSearchParams({ sport: slug }, { replace: true })
-
-  // Called when the user clicks a league pill (e.g. switches from Premier League to NBA)
-  // We keep the sport param so it doesn't get wiped when switching leagues
+  // URL update helpers — { replace: true } so back button doesn't cycle through pill clicks
+  const setSport  = (slug: string) => setSearchParams({ sport: slug }, { replace: true })
   const setLeague = (id: number) =>
     setSearchParams({ sport: sportSlug ?? '', league: String(id) }, { replace: true })
-
-  // Called when the user clicks the Standings or Teams tab
-  // We preserve sport and league so the context doesn't reset
   const setTab = (tab: Tab) => {
     const params: Record<string, string> = { tab }
     if (sportSlug) params.sport  = sportSlug
@@ -81,71 +67,108 @@ export default function LeaguesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Trophy size={20} className="text-blue-400" />
-        <h1 className="text-xl font-bold">Leagues</h1>
-      </div>
-
-      {/* Sport selector pills — only shown when more than one sport exists in the DB */}
+    <div className="space-y-5">
+      {/* Sport selector — underline tab style, active tab takes the active league's theme color.
+          When you switch sports mid-flow the underline color refreshes too, since the theme
+          resolves from sport when no league is yet chosen. */}
       {!loadingSports && sports.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {sports.map((s) => (
-            <button
-              key={s.slug}
-              onClick={() => setSport(s.slug)}
-              className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition
-                ${sportSlug === s.slug
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
-                }`}
-            >
-              {s.name}
-            </button>
-          ))}
+        <div className="flex gap-6 overflow-x-auto no-scrollbar border-b border-stone-200 dark:border-zinc-900">
+          {sports.map((s) => {
+            const isActive = sportSlug === s.slug
+            return (
+              <button
+                key={s.slug}
+                onClick={() => setSport(s.slug)}
+                className={`relative shrink-0 pb-3 text-sm font-semibold transition
+                  ${isActive
+                    ? 'text-stone-900 dark:text-zinc-100'
+                    : 'text-stone-400 hover:text-stone-700 dark:text-zinc-500 dark:hover:text-zinc-300'
+                  }`}
+              >
+                {s.name}
+                {isActive && (
+                  <span className={`absolute inset-x-0 -bottom-px h-0.5 ${theme.bg}`} />
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
 
-      {/* League selector pills — e.g. Premier League, La Liga, NBA */}
+      {/* League identity header — the league is the subject of this page.
+          The StadiumBackdrop component renders floodlight glows + bowl silhouette
+          + crowd-dot texture, all themed to the league's brand color. This is the
+          "live feels alive" + "sport over chrome" principles working together:
+          the chrome IS the sport. */}
+      {activeLeague && (
+        <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
+          <StadiumBackdrop colorClass={theme.text} intensity="strong" />
+
+          {/* Top accent — a thin colored bar across the very top of the header.
+              Reinforces league identity without using the banned side-stripe pattern. */}
+          <div className={`absolute inset-x-0 top-0 h-0.5 ${theme.bg} opacity-80`} />
+
+          <div className="relative flex items-center gap-5">
+            {activeLeague.logoUrl ? (
+              <img
+                src={activeLeague.logoUrl}
+                alt={activeLeague.name}
+                className="h-16 w-16 shrink-0 object-contain"
+              />
+            ) : (
+              <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl ${theme.tint} text-lg font-extrabold ${theme.text}`}>
+                {activeLeague.name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-2xl font-extrabold tracking-tight">
+                {activeLeague.name}
+              </h1>
+              <p className={`text-xs font-bold uppercase tracking-[0.12em] ${theme.text}`}>
+                {activeLeague.country} <span className="mx-1.5 opacity-50">/</span> {activeLeague.season}
+              </p>
+            </div>
+          </div>
+        </header>
+      )}
+
+      {/* League selector pills — active league adopts its theme color so the
+          active state is immediately recognisable across leagues. The pill ring
+          tells you which league is selected; the color tells you which league
+          you're in. */}
       {!loadingLeagues && leagues.length > 0 && (
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {leagues.map((l) => (
-            <button
-              key={l.id}
-              onClick={() => setLeague(l.id)}
-              className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition
-                ${leagueId === l.id
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
-                }`}
-            >
-              {l.name}
-            </button>
-          ))}
+          {leagues.map((l) => {
+            const isActive = leagueId === l.id
+            const pillTheme = getLeagueTheme(l.name, sportSlug)
+            return (
+              <button
+                key={l.id}
+                onClick={() => setLeague(l.id)}
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition
+                  ${isActive
+                    ? `${pillTheme.tint} ${pillTheme.text} ring-1 ${pillTheme.ring}`
+                    : 'bg-stone-100 text-stone-500 hover:text-stone-900 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  }`}
+              >
+                {l.name}
+              </button>
+            )
+          })}
         </div>
       )}
 
-      {/* League info bar — shows the selected league's country and season */}
-      {activeLeague && (
-        <div className="rounded-xl bg-slate-800 px-4 py-3">
-          <p className="text-xs text-slate-400">{activeLeague.country}</p>
-          <p className="font-semibold">
-            {activeLeague.name}{' '}
-            <span className="text-sm font-normal text-slate-400">· {activeLeague.season}</span>
-          </p>
-        </div>
-      )}
-
-      {/* Standings / Teams tab toggle */}
-      <div className="flex rounded-xl bg-slate-800 p-1">
+      {/* Standings / Teams toggle — segmented control on a flat surface.
+          Stays neutral (zinc-100 fill) — it's a control, not identity. */}
+      <div className="inline-flex rounded-lg border border-stone-200 p-0.5 dark:border-zinc-900">
         {(['standings', 'teams'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setTab(tab)}
-            className={`flex-1 rounded-lg py-2 text-xs font-semibold capitalize transition
+            className={`rounded-md px-4 py-1.5 text-xs font-semibold capitalize transition
               ${activeTab === tab
-                ? 'bg-blue-500 text-white'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                : 'text-stone-500 hover:text-stone-900 dark:text-zinc-500 dark:hover:text-zinc-100'
               }`}
           >
             {tab}
@@ -156,11 +179,10 @@ export default function LeaguesPage() {
       {/* Tab content */}
       {activeTab === 'standings' ? (
         loadingStandings ? <LoadingSpinner /> : (
-          // showZones controls whether row shading + left border + legend appear.
-          // We show them only for domestic football leagues — the Champions League has no
-          // relegation/promotion zones, and basketball uses a completely different ranking system.
           <StandingsTable
             entries={standings}
+            // showZones only for domestic football leagues — Champions League
+            // has no relegation, basketball uses a different ranking system.
             showZones={
               sportSlug === 'football' &&
               !activeLeague?.name?.toLowerCase().includes('champions')
@@ -171,29 +193,32 @@ export default function LeaguesPage() {
         loadingTeams ? (
           <LoadingSpinner />
         ) : teams.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">No teams found</p>
+          <p className="py-8 text-center text-sm text-stone-500 dark:text-zinc-500">No teams found</p>
         ) : (
+          // Squad-wall layout. Hover uses the league's theme color so the brand
+          // continuity carries through into the interaction state.
           <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
             {teams.map((team) => (
               <Link
                 key={team.id}
                 to={`/teams/${team.id}`}
-                // Pass the current sport + league as router state.
-                // TeamDetailPage reads this in its Back button so it can navigate
-                // back to exactly this sport, league, and tab — not the default view.
                 state={{ fromLeagues: true, sportSlug, leagueId }}
-                className="flex flex-col items-center gap-2 rounded-xl bg-slate-800 p-4 transition hover:bg-slate-700 active:scale-[0.97]"
+                className={`group flex flex-col items-center gap-3 rounded-xl border border-transparent bg-white px-3 py-5 transition
+                           ${theme.hoverBorder} ${theme.hoverTint} active:scale-[0.97]
+                           dark:bg-zinc-900/60`}
               >
                 {team.crestUrl
-                  ? <img src={team.crestUrl} alt={team.name} className="h-12 w-12 object-contain" />
-                  : <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-600 text-sm font-bold">{team.shortName.slice(0,3)}</div>
+                  ? <img src={team.crestUrl} alt={team.name} className="h-14 w-14 object-contain transition-transform group-hover:scale-105" />
+                  : <div className="flex h-14 w-14 items-center justify-center rounded-full bg-stone-200 text-sm font-extrabold dark:bg-zinc-800 dark:text-zinc-300">{team.shortName.slice(0,3)}</div>
                 }
-                <p className="text-center text-xs font-semibold leading-tight">{team.name}</p>
-                {team.stadium && (
-                  <p className="flex items-center gap-1 text-center text-[10px] text-slate-500">
-                    <MapPin size={10} />{team.stadium}
-                  </p>
-                )}
+                <div className="space-y-0.5">
+                  <p className="text-center text-xs font-semibold leading-tight">{team.name}</p>
+                  {team.stadium && (
+                    <p className="flex items-center justify-center gap-1 text-[10px] text-stone-400 dark:text-zinc-600">
+                      <MapPin size={9} />{team.stadium}
+                    </p>
+                  )}
+                </div>
               </Link>
             ))}
           </div>

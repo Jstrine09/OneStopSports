@@ -1,3 +1,6 @@
+/* Inter — precise, tight, the right voice for a sports data product */
+@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,7 +12,11 @@
   }
 
   body {
-    @apply bg-slate-900 text-white;
+    /* Dark: zinc-950 — warmer than slate, like a stadium at night.
+       Light: stone-50 — warm paper, like a matchday programme. Both palettes
+       share a warm undertone so the two themes feel like the same product
+       in different conditions, not two different products. */
+    @apply bg-stone-50 text-stone-900 dark:bg-zinc-950 dark:text-zinc-100;
     /* Remove default iOS tap highlight */
     -webkit-tap-highlight-color: transparent;
     /* Prevent pull-to-refresh and overscroll bounce in standalone PWA mode */
@@ -33,6 +40,13 @@
      growing to fill the full notch/status-bar safe area in standalone PWA mode. */
   .pt-safe {
     padding-top: max(1rem, env(safe-area-inset-top));
+  }
+
+  /* Top padding for the main content area on mobile.
+     Accounts for the fixed mobile header (44px) plus the notch safe area.
+     On desktop this class is not applied (lg:pt-6 overrides it). */
+  .pt-mobile-header {
+    padding-top: calc(max(1rem, env(safe-area-inset-top)) + 2.75rem);
   }
 
   /* Hidden scrollbar but still scrollable */
