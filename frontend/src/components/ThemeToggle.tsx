@@ -15,8 +15,8 @@ export default function ThemeToggle({ showLabel = false }: Props) {
       onClick={toggleTheme}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition
-        text-slate-500 hover:bg-slate-100 hover:text-slate-900
-        dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white`}
+        text-stone-500 hover:bg-stone-100 hover:text-stone-900
+        dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white`}
     >
       {isDark ? <Sun size={20} strokeWidth={1.75} /> : <Moon size={20} strokeWidth={1.75} />}
       {showLabel && (isDark ? 'Light mode' : 'Dark mode')}
