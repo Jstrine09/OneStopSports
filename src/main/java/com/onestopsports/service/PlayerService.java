@@ -1,5 +1,6 @@
 package com.onestopsports.service;
 
+import com.onestopsports.dto.PlayerBioDto;
 import com.onestopsports.dto.PlayerDto;
 import com.onestopsports.model.Player;
 import com.onestopsports.repository.PlayerRepository;
@@ -8,16 +9,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Optional;
 
 // Handles business logic for Players.
 // All player data comes from our database (seeded at startup from football-data.org).
+// Bio enrichment (height, weight, college, draft info) is fetched live from balldontlie.io.
 @Service
 public class PlayerService {
 
     private final PlayerRepository playerRepository;
+    private final BallDontLieService ballDontLieService;
 
-    public PlayerService(PlayerRepository playerRepository) {
+    public PlayerService(PlayerRepository playerRepository, BallDontLieService ballDontLieService) {
         this.playerRepository = playerRepository;
+        this.ballDontLieService = ballDontLieService;
     }
 
     // Returns a single player by their database ID, or throws 404 if not found.
@@ -34,6 +39,19 @@ public class PlayerService {
         return playerRepository.findByTeamId(teamId).stream()
                 .map(this::toDto)
                 .toList();
+    }
+
+    // Looks up biographical data for a player from balldontlie.io.
+    // Returns empty if the player doesn't exist, or if balldontlie has no record
+    // (e.g. football/NFL players who aren't in the NBA database).
+    // Called by GET /api/players/{id}/bio — used on PlayerDetailPage to enrich NBA profiles.
+    public Optional<PlayerBioDto> getPlayerBioById(Long id) {
+        // First confirm the player actually exists in our DB
+        Player player = playerRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found: " + id));
+
+        // Search balldontlie by full name — will return empty for non-NBA players
+        return ballDontLieService.searchPlayerByName(player.getName());
     }
 
     // Returns players whose name contains the query string (case-insensitive).

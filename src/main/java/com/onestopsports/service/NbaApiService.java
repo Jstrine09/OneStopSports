@@ -421,7 +421,9 @@ public class NbaApiService {
                 losses,
                 0,             // goalsFor — not applicable
                 0,             // goalsAgainst — not applicable
-                wins);         // "points" = wins — ranking metric for basketball
+                wins,          // "points" = wins — ranking metric for basketball
+                null,          // conference — NBA doesn't use the grouped layout
+                null);         // division   — NBA doesn't use the grouped layout
     }
 
     // Parses the score string from a competitor — ESPN sends empty string "" before the game starts.

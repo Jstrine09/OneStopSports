@@ -448,7 +448,9 @@ public class ExternalApiService {
                 entry.lost(),
                 entry.goalsFor(),
                 entry.goalsAgainst(),
-                entry.points());
+                entry.points(),
+                null,           // conference — football/soccer leagues don't use this
+                null);          // division   — football/soccer leagues don't use this
     }
 
 }

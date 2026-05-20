@@ -66,11 +66,12 @@ class LeagueServiceTest {
                 .build();
     }
 
-    // A minimal StandingsEntryDto returned by mock API services
+    // A minimal StandingsEntryDto returned by mock API services.
+    // conference and division are null — football/NBA leagues don't use the NFL grouped layout.
     private static final StandingsEntryDto DUMMY_STANDING = new StandingsEntryDto(
             1,
             new TeamDto(1L, "Test FC", "TFC", null, null, null, 7L),
-            10, 7, 1, 2, 18, 9, 22);
+            10, 7, 1, 2, 18, 9, 22, null, null);
 
     // ── getStandings — 404 on unknown league ──────────────────────────────────
 

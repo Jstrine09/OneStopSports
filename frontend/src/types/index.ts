@@ -38,6 +38,17 @@ export interface PlayerDto {
   teamId: number
 }
 
+// Biographical enrichment from balldontlie.io — NBA players only.
+// All fields are optional; undrafted players have null draft fields.
+export interface PlayerBioDto {
+  height: string | null         // e.g. "6-8" (feet-inches)
+  weightPounds: number | null   // e.g. 210
+  college: string | null        // e.g. "Duke" — null for international players
+  draftYear: number | null      // e.g. 2017 — null if undrafted
+  draftRound: number | null     // e.g. 1 — null if undrafted
+  draftNumber: number | null    // e.g. 3 (overall pick) — null if undrafted
+}
+
 export interface MatchDto {
   id: number
   homeTeam: TeamDto
@@ -60,6 +71,10 @@ export interface StandingsEntryDto {
   goalsFor: number
   goalsAgainst: number
   points: number
+  // NFL only — null for football/NBA. When non-null the frontend renders
+  // a conference → division grouped table instead of a flat league table.
+  conference: string | null
+  division: string | null
 }
 
 export interface UserDto {

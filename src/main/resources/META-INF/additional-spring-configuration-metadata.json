@@ -1,0 +1,54 @@
+{
+  "properties": [
+    {
+      "name": "jwt.secret",
+      "type": "java.lang.String",
+      "description": "Base64-encoded HMAC signing key used by JwtUtil to sign and verify JWTs. Override in application-local.yml; never commit a real value."
+    },
+    {
+      "name": "jwt.expiration-ms",
+      "type": "java.lang.Long",
+      "description": "JWT token lifetime in milliseconds. Defaults to 86400000 (24 hours)."
+    },
+    {
+      "name": "external-api.football-data.base-url",
+      "type": "java.lang.String",
+      "description": "Base URL for the football-data.org v4 REST API. Used by ExternalApiService."
+    },
+    {
+      "name": "external-api.football-data.api-key",
+      "type": "java.lang.String",
+      "description": "API key for football-data.org (sent as the X-Auth-Token header). Override in application-local.yml; never commit a real value."
+    },
+    {
+      "name": "external-api.nba.base-url",
+      "type": "java.lang.String",
+      "description": "Base URL for ESPN's unofficial public NBA API. Used by NbaApiService for teams, rosters, and scoreboards. No API key required."
+    },
+    {
+      "name": "external-api.nba.standings-url",
+      "type": "java.lang.String",
+      "description": "Base URL for ESPN's NBA standings endpoint (lives on a different subdomain than the main API). Used by NbaApiService."
+    },
+    {
+      "name": "external-api.nfl.base-url",
+      "type": "java.lang.String",
+      "description": "Base URL for ESPN's unofficial public NFL API. Used by NflApiService for teams, rosters, and scoreboards. No API key required."
+    },
+    {
+      "name": "external-api.nfl.standings-url",
+      "type": "java.lang.String",
+      "description": "Base URL for ESPN's NFL standings endpoint (lives on apis/v2, not apis/site/v2 — same pattern as NBA). Used by NflApiService.fetchStandings(). Defaults to https://site.api.espn.com/apis/v2/sports/football/nfl."
+    },
+    {
+      "name": "external-api.balldontlie.base-url",
+      "type": "java.lang.String",
+      "description": "Base URL for the balldontlie.io v1 REST API. Used by BallDontLieService to fetch NBA player bio data (height, weight, college, draft info). Defaults to https://api.balldontlie.io/v1."
+    },
+    {
+      "name": "external-api.balldontlie.api-key",
+      "type": "java.lang.String",
+      "description": "API key for balldontlie.io (sent as the Authorization header — no Bearer prefix). Free tier gives access to /players and /teams at 5 req/min. Override in application-local.yml; never commit a real value."
+    }
+  ]
+}

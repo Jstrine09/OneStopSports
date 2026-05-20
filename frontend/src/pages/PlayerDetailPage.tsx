@@ -1,10 +1,10 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchPlayer } from '../api/players'
+import { fetchPlayer, fetchPlayerBio } from '../api/players'
 import { getFavoritePlayers, addFavoritePlayer, removeFavoritePlayer } from '../api/auth'
 import { useAuth } from '../context/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { ChevronLeft, Heart, Flag, Cake } from 'lucide-react'
+import { ChevronLeft, Heart, Flag, Cake, Ruler, Weight, GraduationCap, Award } from 'lucide-react'
 import type { PlayerDto } from '../types'
 
 function calculateAge(dob: string | null): { age: string; display: string } {
@@ -54,6 +54,17 @@ export default function PlayerDetailPage() {
   })
 
   const player = statePlayer ?? fetchedPlayer
+
+  // Bio enrichment from balldontlie.io — NBA players only.
+  // We always fire this query; it returns null for non-NBA players (204 from backend).
+  // staleTime is long — bio data almost never changes.
+  const { data: bio = null } = useQuery({
+    queryKey: ['player-bio', playerId],
+    queryFn: () => fetchPlayerBio(playerId),
+    enabled: !!playerId,
+    staleTime: 24 * 60 * 60_000, // 24 hours — player bio doesn't change often
+    retry: false,                 // Don't hammer the API if balldontlie is down
+  })
 
   const { data: favPlayers = [] } = useQuery({
     queryKey: ['favorites', 'players'],
@@ -151,6 +162,57 @@ export default function PlayerDetailPage() {
           </button>
         </div>
       </section>
+
+      {/* Bio card — only rendered for NBA players where balldontlie has data.
+          For football / NFL players the backend returns 204, bio stays null,
+          and this whole section is skipped cleanly. */}
+      {bio && (
+        <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/40">
+          <header className="border-b border-stone-100 px-4 py-3 dark:border-zinc-900">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-400">
+              Bio
+            </h2>
+          </header>
+          <div className="grid grid-cols-2 divide-x divide-y divide-stone-100 dark:divide-zinc-900 sm:grid-cols-4 [&>*:nth-child(n+3)]:border-t-0 sm:[&>*:nth-child(n+3)]:border-t sm:[&>*:nth-child(n+2)]:border-t-0">
+            {/* Height */}
+            {bio.height && (
+              <div className="flex flex-col items-center gap-1 px-4 py-4">
+                <Ruler size={14} className="text-stone-400 dark:text-zinc-500" />
+                <span className="text-base font-bold tabular-nums">{bio.height}</span>
+                <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">Height</span>
+              </div>
+            )}
+            {/* Weight */}
+            {bio.weightPounds && (
+              <div className="flex flex-col items-center gap-1 px-4 py-4">
+                <Weight size={14} className="text-stone-400 dark:text-zinc-500" />
+                <span className="text-base font-bold tabular-nums">{bio.weightPounds} lbs</span>
+                <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">Weight</span>
+              </div>
+            )}
+            {/* College */}
+            {bio.college && (
+              <div className="flex flex-col items-center gap-1 px-4 py-4">
+                <GraduationCap size={14} className="text-stone-400 dark:text-zinc-500" />
+                <span className="text-sm font-semibold text-center leading-tight">{bio.college}</span>
+                <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">College</span>
+              </div>
+            )}
+            {/* Draft info */}
+            {bio.draftYear && (
+              <div className="flex flex-col items-center gap-1 px-4 py-4">
+                <Award size={14} className="text-stone-400 dark:text-zinc-500" />
+                <span className="text-base font-bold tabular-nums">{bio.draftYear}</span>
+                <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">
+                  {bio.draftRound && bio.draftNumber
+                    ? `Rd ${bio.draftRound} · Pick ${bio.draftNumber}`
+                    : 'Draft Year'}
+                </span>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Season stats placeholder — kept honest with the empty state */}
       <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/40">

@@ -37,6 +37,15 @@ external-api:
     # ESPN's unofficial public API — no API key required.
     # This is an undocumented but widely-used endpoint. It's stable but not officially supported.
     base-url: https://site.api.espn.com/apis/site/v2/sports/football/nfl
+    # Standings use a different ESPN URL path (apis/v2, not apis/site/v2 — same difference as NBA)
+    standings-url: https://site.api.espn.com/apis/v2/sports/football/nfl
+  balldontlie:
+    # Official REST API for NBA player bios (free tier: /players and /teams only).
+    # Rate limit: 5 requests per minute on the free plan.
+    base-url: https://api.balldontlie.io/v1
+    # API key sent as a plain Authorization header (no "Bearer" prefix).
+    # Get yours at https://www.balldontlie.io — override in application-local.yml; never commit the real key.
+    api-key: YOUR_BALLDONTLIE_KEY_HERE
 
 jwt:
   secret: bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u
