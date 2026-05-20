@@ -31,6 +31,11 @@
       "description": "Base URL for ESPN's NBA standings endpoint (lives on a different subdomain than the main API). Used by NbaApiService."
     },
     {
+      "name": "external-api.nba.stats-url",
+      "type": "java.lang.String",
+      "description": "Base URL for ESPN's NBA player career stats endpoint. Path pattern: {stats-url}/athletes/{espnAthleteId}/stats. Defaults to https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba."
+    },
+    {
       "name": "external-api.nfl.base-url",
       "type": "java.lang.String",
       "description": "Base URL for ESPN's unofficial public NFL API. Used by NflApiService for teams, rosters, and scoreboards. No API key required."
@@ -39,6 +44,11 @@
       "name": "external-api.nfl.standings-url",
       "type": "java.lang.String",
       "description": "Base URL for ESPN's NFL standings endpoint (lives on apis/v2, not apis/site/v2 — same pattern as NBA). Used by NflApiService.fetchStandings(). Defaults to https://site.api.espn.com/apis/v2/sports/football/nfl."
+    },
+    {
+      "name": "external-api.nfl.stats-url",
+      "type": "java.lang.String",
+      "description": "Base URL for ESPN's NFL player career stats endpoint. Path pattern: {stats-url}/athletes/{espnAthleteId}/stats. Defaults to https://site.web.api.espn.com/apis/common/v3/sports/football/nfl."
     },
     {
       "name": "external-api.balldontlie.base-url",

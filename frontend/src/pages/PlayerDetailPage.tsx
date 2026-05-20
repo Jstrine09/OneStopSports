@@ -1,9 +1,10 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchPlayer, fetchPlayerBio } from '../api/players'
+import { fetchPlayer, fetchPlayerBio, fetchPlayerCareerStats } from '../api/players'
 import { getFavoritePlayers, addFavoritePlayer, removeFavoritePlayer } from '../api/auth'
 import { useAuth } from '../context/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
+import CareerStatsTable from '../components/CareerStatsTable'
 import { ChevronLeft, Heart, Flag, Cake, Ruler, Weight, GraduationCap, Award } from 'lucide-react'
 import type { PlayerDto } from '../types'
 
@@ -64,6 +65,18 @@ export default function PlayerDetailPage() {
     enabled: !!playerId,
     staleTime: 24 * 60 * 60_000, // 24 hours — player bio doesn't change often
     retry: false,                 // Don't hammer the API if balldontlie is down
+  })
+
+  // Career stats — ESPN for NBA/NFL, API-Football for soccer (Phase 6, not live yet).
+  // Returns null for players whose backend route returns 204 (no externalId, no upstream
+  // record, or unsupported sport). The component shows a placeholder in that case.
+  // 24h staleTime: career stats only update once a day at most.
+  const { data: careerStats = null, isLoading: loadingStats } = useQuery({
+    queryKey: ['player-career-stats', playerId],
+    queryFn: () => fetchPlayerCareerStats(playerId),
+    enabled: !!playerId,
+    staleTime: 24 * 60 * 60_000,
+    retry: false,
   })
 
   const { data: favPlayers = [] } = useQuery({

@@ -44,13 +44,18 @@ class NbaApiServiceTest {
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     RestClient standingsClient;
 
+    // Third client added when we introduced player career stats — unused by most tests
+    // but required by the constructor signature.
+    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
+    RestClient statsClient;
+
     // We construct NbaApiService manually using the package-private test constructor
     // (rather than @InjectMocks, which needs @Value to resolve the URL strings)
     NbaApiService nbaApiService;
 
     @BeforeEach
     void setUp() {
-        nbaApiService = new NbaApiService(restClient, standingsClient);
+        nbaApiService = new NbaApiService(restClient, standingsClient, statsClient);
     }
 
     // ── Helpers: build ESPN response objects ──────────────────────────────────

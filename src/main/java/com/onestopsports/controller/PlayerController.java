@@ -1,6 +1,7 @@
 package com.onestopsports.controller;
 
 import com.onestopsports.dto.PlayerBioDto;
+import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.PlayerDto;
 import com.onestopsports.service.PlayerService;
 import org.springframework.http.ResponseEntity;
@@ -39,5 +40,19 @@ public class PlayerController {
         return playerService.getPlayerBioById(id)
                 .map(ResponseEntity::ok)                   // Found — 200 with body
                 .orElse(ResponseEntity.noContent().build()); // Not found — 204 No Content
+    }
+
+    // GET /api/players/{id}/career-stats
+    // Career stats endpoint — routes to ESPN (NBA/NFL) or API-Football (soccer) depending
+    // on the player's sport. Returns 200 + stats body when available, 204 No Content when:
+    //   - the player has no externalId stored (pre-V6 row)
+    //   - the upstream API has no record of them (off-season call-up, retired player, etc.)
+    //   - the sport doesn't have a stats integration yet
+    // The frontend's career stats section is conditional on the 200 response.
+    @GetMapping("/{id}/career-stats")
+    public ResponseEntity<PlayerCareerStatsDto> getPlayerCareerStats(@PathVariable Long id) {
+        return playerService.getPlayerCareerStats(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
     }
 }

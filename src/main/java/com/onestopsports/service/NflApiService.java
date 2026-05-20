@@ -3,6 +3,7 @@ package com.onestopsports.service;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.onestopsports.dto.MatchDto;
+import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.StandingsEntryDto;
 import com.onestopsports.dto.TeamDto;
 import org.slf4j.Logger;
@@ -49,6 +50,9 @@ public class NflApiService {
     // RestClient for standings — ESPN uses a different URL path (apis/v2 not apis/site/v2)
     private final RestClient standingsClient;
 
+    // RestClient for player career stats — yet another ESPN path (common/v3)
+    private final RestClient statsClient;
+
     // NFL divisions are fixed since 2002 — safe to hardcode rather than hit an extra endpoint.
     // Keyed by ESPN team abbreviation (e.g. "NE", "KC", "LAR").
     private static final Map<String, String> DIVISION_BY_ABBR = Map.ofEntries(
@@ -78,10 +82,11 @@ public class NflApiService {
             Map.entry("SF",  "NFC West"),  Map.entry("SEA", "NFC West")
     );
 
-    // Base URL injected from application.yml — allows overriding in tests
+    // Base URLs injected from application.yml — allows overriding in tests
     public NflApiService(
             @Value("${external-api.nfl.base-url}") String baseUrl,
-            @Value("${external-api.nfl.standings-url:https://site.api.espn.com/apis/v2/sports/football/nfl}") String standingsUrl) {
+            @Value("${external-api.nfl.standings-url:https://site.api.espn.com/apis/v2/sports/football/nfl}") String standingsUrl,
+            @Value("${external-api.nfl.stats-url:https://site.web.api.espn.com/apis/common/v3/sports/football/nfl}") String statsUrl) {
         // ESPN's API is public — no auth header needed
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
@@ -89,6 +94,10 @@ public class NflApiService {
         // Standings endpoint lives on a different URL path from the rest of the NFL API
         this.standingsClient = RestClient.builder()
                 .baseUrl(standingsUrl)
+                .build();
+        // Stats endpoint — third ESPN path (common/v3). Pattern: /athletes/{id}/stats
+        this.statsClient = RestClient.builder()
+                .baseUrl(statsUrl)
                 .build();
     }
 
@@ -242,6 +251,38 @@ public class NflApiService {
             @JsonProperty("value") Double value,             // Numeric value
             @JsonProperty("displayValue") String displayValue) {} // Formatted string — e.g. ".824" for win %
 
+    // ── Career stats response records ─────────────────────────────────────────
+    // GET /athletes/{id}/stats returns one or more position-specific categories
+    // (e.g. "passing" for QBs, "rushing" for RBs, "defensive" for defenders). Each:
+    //   { labels[], statistics[ {season, teamSlug, stats[]} ], totals[] }
+    // Same shape as the NBA stats response — just different label vocabularies per category.
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStatsResponse(List<EspnStatCategory> categories) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStatCategory(
+            String name,                          // "passing" | "rushing" | "receiving" | "defensive" | "kicking"
+            String displayName,                   // "Passing" | "Rushing" | ...
+            List<String> labels,                  // column headers — e.g. ["GP", "CMP", "ATT", "YDS", ...]
+            List<EspnStatEntry> statistics,       // one row per season-team
+            List<String> totals)                  // career aggregate row aligned with labels[]
+    {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStatEntry(
+            String teamSlug,                      // e.g. "kansas-city-chiefs"
+            String teamAbbreviation,              // sometimes present, often null — fall back to slug
+            EspnStatSeason season,                // year + displayName
+            List<String> stats)                   // values aligned with parent category's labels[]
+    {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStatSeason(
+            Integer year,                         // e.g. 2024
+            String displayName)                   // e.g. "2024"
+    {}
+
     // ── Public API Methods ────────────────────────────────────────────────────
 
     /**
@@ -372,6 +413,70 @@ public class NflApiService {
             log.warn("[NflApiService] fetchStandings failed: {}", e.getMessage());
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * Fetches an NFL player's full career stats from ESPN.
+     *
+     * Endpoint: GET /athletes/{espnAthleteId}/stats
+     *
+     * Returns null when ESPN doesn't recognise the athlete ID (e.g. an undrafted rookie
+     * who hasn't played yet) or the response is malformed. The caller treats null as
+     * "no stats available" and the controller responds with 204 No Content.
+     *
+     * @param espnAthleteId the player's ESPN athlete ID (e.g. "3139477" for Patrick Mahomes)
+     * @return the parsed stats response, or null on any failure
+     */
+    public PlayerCareerStatsDto fetchCareerStats(String espnAthleteId) {
+        if (espnAthleteId == null || espnAthleteId.isBlank()) return null;
+        try {
+            EspnStatsResponse response = statsClient.get()
+                    .uri("/athletes/{id}/stats", espnAthleteId)
+                    .retrieve()
+                    .body(EspnStatsResponse.class);
+
+            if (response == null || response.categories() == null || response.categories().isEmpty()) {
+                return null;
+            }
+            return toCareerStatsDto(response);
+
+        } catch (RestClientException e) {
+            // 404, 500, timeout — log at WARN and return null. Visiting a stats-less player
+            // shouldn't crash the page; the frontend just hides the stats section.
+            log.warn("[NflApiService] fetchCareerStats failed for athlete={}: {}", espnAthleteId, e.getMessage());
+            return null;
+        }
+    }
+
+    // Converts the ESPN stats response into our sport-agnostic PlayerCareerStatsDto.
+    // Same shape as NbaApiService.toCareerStatsDto — different sport slug and different
+    // category names, but the field layout is identical.
+    private PlayerCareerStatsDto toCareerStatsDto(EspnStatsResponse response) {
+        List<PlayerCareerStatsDto.StatCategory> categories = new ArrayList<>();
+
+        for (EspnStatCategory cat : response.categories()) {
+            if (cat.labels() == null || cat.statistics() == null) continue;
+
+            List<PlayerCareerStatsDto.SeasonRow> seasons = cat.statistics().stream()
+                    .map(entry -> new PlayerCareerStatsDto.SeasonRow(
+                            entry.season() != null ? entry.season().displayName() : null,
+                            entry.teamAbbreviation() != null ? entry.teamAbbreviation() : entry.teamSlug(),
+                            entry.stats() != null ? entry.stats() : Collections.emptyList()))
+                    .toList();
+
+            PlayerCareerStatsDto.SeasonRow career = (cat.totals() != null && !cat.totals().isEmpty())
+                    ? new PlayerCareerStatsDto.SeasonRow(null, null, cat.totals())
+                    : null;
+
+            categories.add(new PlayerCareerStatsDto.StatCategory(
+                    cat.name(),
+                    cat.displayName() != null ? cat.displayName() : cat.name(),
+                    cat.labels(),
+                    seasons,
+                    career));
+        }
+
+        return new PlayerCareerStatsDto("american-football", categories);
     }
 
     // ── Private Mapper Methods ────────────────────────────────────────────────

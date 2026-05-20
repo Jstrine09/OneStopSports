@@ -2,6 +2,7 @@ package com.onestopsports.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.onestopsports.dto.MatchDto;
+import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.StandingsEntryDto;
 import com.onestopsports.dto.TeamDto;
 import org.slf4j.Logger;
@@ -48,25 +49,31 @@ public class NbaApiService {
     // Separate client for the standings endpoint which lives on a different ESPN subdomain
     private final RestClient standingsClient;
 
-    // Both base URLs are injected from application.yml so they can be overridden in tests.
+    // Third client for the career-stats endpoint — yet another ESPN path (common/v3).
+    private final RestClient statsClient;
+
+    // All three base URLs are injected from application.yml so they can be overridden in tests.
     // No API key is needed — ESPN's unofficial API is publicly accessible.
     // @Autowired is required here because we also have a package-private test constructor below —
     // Spring needs to know which constructor to use for production dependency injection.
     @org.springframework.beans.factory.annotation.Autowired
     public NbaApiService(
             @Value("${external-api.nba.base-url}") String baseUrl,
-            @Value("${external-api.nba.standings-url}") String standingsUrl) {
+            @Value("${external-api.nba.standings-url}") String standingsUrl,
+            @Value("${external-api.nba.stats-url}") String statsUrl) {
         // No Authorization header needed — ESPN API is publicly accessible
         this.restClient       = RestClient.builder().baseUrl(baseUrl).build();
         this.standingsClient  = RestClient.builder().baseUrl(standingsUrl).build();
+        this.statsClient      = RestClient.builder().baseUrl(statsUrl).build();
     }
 
     // Package-private test constructor — accepts pre-built RestClient instances.
     // Used by NbaApiServiceTest so we can inject mock clients without starting a real HTTP server.
     // Never called by Spring — only by unit tests in the same package.
-    NbaApiService(RestClient restClient, RestClient standingsClient) {
+    NbaApiService(RestClient restClient, RestClient standingsClient, RestClient statsClient) {
         this.restClient      = restClient;
         this.standingsClient = standingsClient;
+        this.statsClient     = statsClient;
     }
 
     // ── API Response Records ──────────────────────────────────────────────────
@@ -209,6 +216,36 @@ public class NbaApiService {
             String displayValue)  // Formatted string — e.g. "64"
     {}
 
+    // ── Career stats response records ─────────────────────────────────────────
+    // GET /athletes/{id}/stats returns 3 categories ("averages", "totals", "miscellaneous"),
+    // each shaped: { labels[], statistics[ {season, teamSlug, stats[]} ], totals[] }.
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStatsResponse(List<EspnStatCategory> categories) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStatCategory(
+            String name,                          // "averages" | "totals" | "miscellaneous"
+            String displayName,                   // "Averages" | "Totals" | "Miscellaneous"
+            List<String> labels,                  // column headers — e.g. ["GP", "MIN", "PTS", ...]
+            List<EspnStatEntry> statistics,       // one row per season-team
+            List<String> totals)                  // career aggregate row — aligned with labels[]
+    {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStatEntry(
+            String teamSlug,                      // e.g. "los-angeles-lakers" — may be null
+            String teamAbbreviation,              // not always present in ESPN payload — kept for forward-compat
+            EspnStatSeason season,                // year + displayName
+            List<String> stats)                   // values aligned with parent category's labels[]
+    {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EspnStatSeason(
+            Integer year,                         // ending year — e.g. 2025 for the "2024-25" season
+            String displayName)                   // human label — e.g. "2024-25"
+    {}
+
     // ── Public API Methods ────────────────────────────────────────────────────
 
     /**
@@ -319,6 +356,42 @@ public class NbaApiService {
             // The frontend shows "No standings available" rather than crashing.
             log.warn("[NbaApiService] fetchStandings failed for season={}: {}", season, e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Fetches an NBA player's full career stats from ESPN.
+     *
+     * Endpoint: GET /athletes/{espnAthleteId}/stats
+     *
+     * Returns null if ESPN doesn't recognise the athlete ID (e.g. the player has retired
+     * and been removed from active rosters) or if the response is malformed — the caller
+     * treats null as "no stats available" and the API returns 204 No Content.
+     *
+     * Note: this is uncached at the service layer because the controller wraps the result
+     * in a long-TTL cache (career stats only change once a day at most).
+     *
+     * @param espnAthleteId the player's ESPN athlete ID (e.g. "1966" for LeBron James)
+     * @return the parsed stats response, or null on any failure
+     */
+    public PlayerCareerStatsDto fetchCareerStats(String espnAthleteId) {
+        if (espnAthleteId == null || espnAthleteId.isBlank()) return null;
+        try {
+            EspnStatsResponse response = statsClient.get()
+                    .uri("/athletes/{id}/stats", espnAthleteId)
+                    .retrieve()
+                    .body(EspnStatsResponse.class);
+
+            if (response == null || response.categories() == null || response.categories().isEmpty()) {
+                return null;
+            }
+            return toCareerStatsDto(response);
+
+        } catch (RestClientException e) {
+            // 404 (unknown athlete), 500 (ESPN hiccup), connection timeout, etc.
+            // Log at WARN — visiting a player who has no stats shouldn't fail the page.
+            log.warn("[NbaApiService] fetchCareerStats failed for athlete={}: {}", espnAthleteId, e.getMessage());
+            return null;
         }
     }
 
@@ -471,5 +544,41 @@ public class NbaApiService {
             // Everything else (scheduled, pregame, postponed, suspended) = upcoming
             default -> "SCHEDULED";
         };
+    }
+
+    // Converts the ESPN stats response into our sport-agnostic PlayerCareerStatsDto.
+    // ESPN's structure already matches our DTO shape closely — we mostly rename fields
+    // and derive a career SeasonRow from the per-category totals[] array.
+    private PlayerCareerStatsDto toCareerStatsDto(EspnStatsResponse response) {
+        List<PlayerCareerStatsDto.StatCategory> categories = new ArrayList<>();
+
+        for (EspnStatCategory cat : response.categories()) {
+            if (cat.labels() == null || cat.statistics() == null) continue;
+
+            // Per-season rows — chronological order as ESPN returns them.
+            List<PlayerCareerStatsDto.SeasonRow> seasons = cat.statistics().stream()
+                    .map(entry -> new PlayerCareerStatsDto.SeasonRow(
+                            entry.season() != null ? entry.season().displayName() : null,
+                            // ESPN doesn't always populate teamAbbreviation here — fall back to the slug
+                            // (which the frontend can display verbatim or look up by name).
+                            entry.teamAbbreviation() != null ? entry.teamAbbreviation() : entry.teamSlug(),
+                            entry.stats() != null ? entry.stats() : Collections.emptyList()))
+                    .toList();
+
+            // Career total — ESPN puts it on the parent category, not in the per-season list.
+            // Season + team are null because it spans every team the player has been on.
+            PlayerCareerStatsDto.SeasonRow career = (cat.totals() != null && !cat.totals().isEmpty())
+                    ? new PlayerCareerStatsDto.SeasonRow(null, null, cat.totals())
+                    : null;
+
+            categories.add(new PlayerCareerStatsDto.StatCategory(
+                    cat.name(),
+                    cat.displayName() != null ? cat.displayName() : cat.name(),
+                    cat.labels(),
+                    seasons,
+                    career));
+        }
+
+        return new PlayerCareerStatsDto("basketball", categories);
     }
 }

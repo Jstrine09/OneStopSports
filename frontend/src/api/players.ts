@@ -1,5 +1,5 @@
 import client from './client'
-import type { PlayerBioDto, PlayerDto } from '../types'
+import type { PlayerBioDto, PlayerCareerStatsDto, PlayerDto } from '../types'
 
 export const fetchPlayer = (id: number): Promise<PlayerDto> =>
   client.get(`/players/${id}`).then((r) => r.data)
@@ -12,4 +12,15 @@ export const fetchPlayerBio = async (id: number): Promise<PlayerBioDto | null> =
     validateStatus: (s) => s === 200 || s === 204,
   })
   return response.status === 204 ? null : (response.data as PlayerBioDto)
+}
+
+// Fetches a player's career stats. Routes server-side to ESPN (NBA/NFL) or
+// API-Football (soccer). Returns null on 204 (player has no externalId, the
+// upstream API doesn't know them, or the sport has no stats integration).
+// The component treats null as "no stats" and hides the stats card.
+export const fetchPlayerCareerStats = async (id: number): Promise<PlayerCareerStatsDto | null> => {
+  const response = await client.get(`/players/${id}/career-stats`, {
+    validateStatus: (s) => s === 200 || s === 204,
+  })
+  return response.status === 204 ? null : (response.data as PlayerCareerStatsDto)
 }

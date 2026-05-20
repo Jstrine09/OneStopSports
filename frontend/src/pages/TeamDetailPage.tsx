@@ -11,11 +11,21 @@ import { ChevronLeft, MapPin, Globe, Heart } from 'lucide-react'
 import type { PlayerDto } from '../types'
 
 // Position groups — covers football (soccer), basketball, and American football (NFL).
-// Anything that doesn't match falls into the 'Other' bucket.
+// football-data.org returns granular positions (Centre-Back, Attacking Midfield, etc.)
+// rather than generic buckets, so we list them all explicitly.
+// Anything that doesn't match falls into the 'Other' bucket at the bottom.
 const POSITION_ORDER = [
-  // Football (soccer)
-  'Goalkeeper', 'Defender', 'Midfielder', 'Forward',
-  // Basketball (mapped from balldontlie abbreviations in NbaDataLoader)
+  // Football (soccer) — generic buckets used by some leagues / youth squads
+  'Goalkeeper',
+  // Defenders — broad bucket first, then specific roles
+  'Defender', 'Centre-Back', 'Right-Back', 'Left-Back', 'Defence',
+  // Midfielders
+  'Midfielder', 'Defensive Midfield', 'Central Midfield', 'Attacking Midfield', 'Midfield',
+  // Wingers sit between midfield and attack
+  'Right Winger', 'Left Winger',
+  // Forwards
+  'Forward', 'Centre-Forward', 'Offence',
+  // Basketball
   'Guard', 'Guard-Forward', 'Forward-Center', 'Center',
   // NFL offense
   'Quarterback', 'Running Back', 'Fullback', 'Wide Receiver', 'Tight End',
@@ -29,6 +39,52 @@ const POSITION_ORDER = [
   // Catch-all for anything else
   'Other',
 ]
+
+// Section header labels — simple "{pos}s" doesn't work for hyphenated positions,
+// compound words ending in a consonant cluster, or generic youth categories.
+const POSITION_LABEL: Record<string, string> = {
+  'Goalkeeper':         'Goalkeepers',
+  'Defender':           'Defenders',
+  'Centre-Back':        'Centre-Backs',
+  'Right-Back':         'Right-Backs',
+  'Left-Back':          'Left-Backs',
+  'Defence':            'Defenders',            // generic youth bucket from football-data.org
+  'Midfielder':         'Midfielders',
+  'Defensive Midfield': 'Defensive Midfielders',
+  'Central Midfield':   'Central Midfielders',
+  'Attacking Midfield': 'Attacking Midfielders',
+  'Midfield':           'Midfielders',          // generic youth bucket
+  'Right Winger':       'Right Wingers',
+  'Left Winger':        'Left Wingers',
+  'Forward':            'Forwards',
+  'Centre-Forward':     'Centre-Forwards',
+  'Offence':            'Forwards',             // generic youth bucket
+  'Guard':              'Guards',
+  'Guard-Forward':      'Guard-Forwards',
+  'Forward-Center':     'Forward-Centers',
+  'Center':             'Centers',
+  'Quarterback':        'Quarterbacks',
+  'Running Back':       'Running Backs',
+  'Fullback':           'Fullbacks',
+  'Wide Receiver':      'Wide Receivers',
+  'Tight End':          'Tight Ends',
+  'Offensive Tackle':   'Offensive Tackles',
+  'Offensive Guard':    'Offensive Guards',
+  'Defensive End':      'Defensive Ends',
+  'Defensive Tackle':   'Defensive Tackles',
+  'Linebacker':         'Linebackers',
+  'Outside Linebacker': 'Outside Linebackers',
+  'Inside Linebacker':  'Inside Linebackers',
+  'Middle Linebacker':  'Middle Linebackers',
+  'Cornerback':         'Cornerbacks',
+  'Safety':             'Safeties',
+  'Free Safety':        'Free Safeties',
+  'Strong Safety':      'Strong Safeties',
+  'Kicker':             'Kickers',
+  'Punter':             'Punters',
+  'Long Snapper':       'Long Snappers',
+  'Other':              'Other',
+}
 
 function groupByPosition(players: PlayerDto[]): Record<string, PlayerDto[]> {
   return players.reduce<Record<string, PlayerDto[]>>((acc, player) => {
@@ -203,7 +259,7 @@ export default function TeamDetailPage() {
               .map((pos) => (
                 <div key={pos}>
                   <h3 className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-stone-400 dark:text-zinc-600">
-                    {pos}s <span className="ml-1 opacity-60">· {grouped[pos].length}</span>
+                    {POSITION_LABEL[pos] ?? `${pos}s`} <span className="ml-1 opacity-60">· {grouped[pos].length}</span>
                   </h3>
                   <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
                     {grouped[pos].map((player) => {

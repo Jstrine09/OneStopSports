@@ -33,12 +33,17 @@ external-api:
     base-url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba
     # Standings live on a different ESPN subdomain with richer data
     standings-url: https://site.web.api.espn.com/apis/v2/sports/basketball/nba
+    # Career stats endpoint — yet another ESPN path. URL pattern:
+    #   {stats-url}/athletes/{espnAthleteId}/stats
+    stats-url: https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba
   nfl:
     # ESPN's unofficial public API — no API key required.
     # This is an undocumented but widely-used endpoint. It's stable but not officially supported.
     base-url: https://site.api.espn.com/apis/site/v2/sports/football/nfl
     # Standings use a different ESPN URL path (apis/v2, not apis/site/v2 — same difference as NBA)
     standings-url: https://site.api.espn.com/apis/v2/sports/football/nfl
+    # Career stats endpoint — same pattern as NBA but football/nfl path.
+    stats-url: https://site.web.api.espn.com/apis/common/v3/sports/football/nfl
   balldontlie:
     # Official REST API for NBA player bios (free tier: /players and /teams only).
     # Rate limit: 5 requests per minute on the free plan.

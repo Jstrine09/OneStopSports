@@ -17,6 +17,12 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
     // SQL: SELECT COUNT(*) FROM player WHERE team_id = ?
     long countByTeamId(Long teamId);
 
+    // True if any player on this team is missing their external-API ID. Used by the
+    // NBA / NFL data loaders to spot rosters that pre-date the V6 migration so they
+    // can be wiped and re-fetched with externalIds populated.
+    // SQL: SELECT EXISTS(SELECT 1 FROM player WHERE team_id = ? AND external_id IS NULL)
+    boolean existsByTeamIdAndExternalIdIsNull(Long teamId);
+
     // Case-insensitive partial name match — used by the global search feature.
     // SQL: SELECT * FROM player WHERE LOWER(name) LIKE LOWER('%?%')
     List<Player> findByNameContainingIgnoreCase(String query);
