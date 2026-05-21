@@ -227,16 +227,28 @@ export default function PlayerDetailPage() {
         </section>
       )}
 
-      {/* Season stats placeholder — kept honest with the empty state */}
-      <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/40">
-        <header className="border-b border-stone-100 px-4 py-3 dark:border-zinc-900">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-400">Season Stats</h2>
-        </header>
-        <div className="flex flex-col items-center gap-1 py-8 text-stone-400 dark:text-zinc-600">
-          <span className="text-2xl">📊</span>
-          <p className="text-xs">Coming soon</p>
-        </div>
-      </section>
+      {/* Career stats — three paths:
+            1. Stats arrived → render the full table (NBA/NFL via ESPN, football via API-Football)
+            2. Still loading → show the spinner inside the same section frame
+            3. 204 / null → show a polite empty state so the page still looks intentional
+                          (football players currently land here until Phase 6 ships) */}
+      {careerStats ? (
+        <CareerStatsTable stats={careerStats} />
+      ) : loadingStats ? (
+        <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white py-8 dark:border-zinc-900 dark:bg-zinc-900/40">
+          <LoadingSpinner />
+        </section>
+      ) : (
+        <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/40">
+          <header className="border-b border-stone-100 px-4 py-3 dark:border-zinc-900">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-400">Career Stats</h2>
+          </header>
+          <div className="flex flex-col items-center gap-1 py-8 text-stone-400 dark:text-zinc-600">
+            <span className="text-2xl">📊</span>
+            <p className="text-xs">Not available for this player</p>
+          </div>
+        </section>
+      )}
     </div>
   )
 }

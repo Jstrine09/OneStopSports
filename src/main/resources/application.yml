@@ -51,6 +51,15 @@ external-api:
     # API key sent as a plain Authorization header (no "Bearer" prefix).
     # Get yours at https://www.balldontlie.io — override in application-local.yml; never commit the real key.
     api-key: YOUR_BALLDONTLIE_KEY_HERE
+  api-football:
+    # API-SPORTS direct base URL — sends auth via the x-apisports-key header.
+    # If you signed up through RapidAPI instead, swap base-url to
+    #   https://api-football-v1.p.rapidapi.com/v3
+    # and update ApiFootballService to send x-rapidapi-key + x-rapidapi-host headers.
+    base-url: https://v3.football.api-sports.io
+    # Free tier: 100 requests/day. Get yours at https://dashboard.api-football.com.
+    # Override in application-local.yml; never commit the real key.
+    api-key: YOUR_API_FOOTBALL_KEY_HERE
 
 jwt:
   secret: bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u
