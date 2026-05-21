@@ -36,6 +36,14 @@ public class Player {
     private Integer jerseyNumber;  // The number on their shirt
     private String photoUrl;     // Player headshot (currently not populated from the API)
 
+    // External-API identifier used by the career-stats endpoints.
+    // Meaning is sport-specific (see migration V6 for the full breakdown):
+    //   • basketball / american-football → ESPN athlete ID  (set at seed time by NbaDataLoader / NflDataLoader)
+    //   • football (soccer)              → API-Football player ID (set lazily on first stats lookup)
+    // Stored as VARCHAR(64) for flexibility — ESPN IDs are numeric but other APIs use alphanumeric.
+    @Column(name = "external_id", length = 64)
+    private String externalId;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

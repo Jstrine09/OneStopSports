@@ -10,6 +10,30 @@ import { MapPin } from 'lucide-react'
 
 type Tab = 'standings' | 'teams'
 
+// Builds the short text shown in the fallback badge when a league has no logo.
+// Two letters of a long name (e.g. "PR" for "Premier League") looks like a typo —
+// proper league abbreviations are initials of each word, or for single-word names
+// either the whole word (when short) or its first 3 letters.
+//   "Premier League"          → "PL"
+//   "UEFA Champions League"   → "UCL"
+//   "Serie A"                 → "SA"
+//   "Ligue 1"                 → "L1"
+//   "Bundesliga"              → "BUN"
+//   "NBA" / "NFL"             → unchanged
+function leagueAbbreviation(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return ''
+  if (words.length === 1) {
+    // Already-short single words ("NBA", "NFL", "MLB") pass through;
+    // long ones ("Bundesliga", "Eredivisie") get truncated to 3 chars.
+    return words[0].length <= 4
+      ? words[0].toUpperCase()
+      : words[0].slice(0, 3).toUpperCase()
+  }
+  // Multi-word: take the first character of each word.
+  return words.map((w) => w[0]).join('').toUpperCase()
+}
+
 export default function LeaguesPage() {
   // useSearchParams keeps the active sport/league/tab in the URL so navigation
   // (back button, deep links, shared URLs) restore the correct view.
@@ -116,8 +140,8 @@ export default function LeaguesPage() {
                 className="h-16 w-16 shrink-0 object-contain"
               />
             ) : (
-              <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl ${theme.tint} text-lg font-extrabold ${theme.text}`}>
-                {activeLeague.name.slice(0, 2).toUpperCase()}
+              <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl ${theme.tint} text-base font-extrabold tracking-tight ${theme.text}`}>
+                {leagueAbbreviation(activeLeague.name)}
               </div>
             )}
             <div className="min-w-0 flex-1">

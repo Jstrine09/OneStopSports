@@ -34,12 +34,14 @@ import java.util.stream.Collectors;
 //   4. Roster for each team (~15 active players — ESPN returns the current-season roster)
 //
 // Idempotency / re-seed logic:
-//   "Fully seeded" = all 30 teams exist AND have logos AND all have players.
+//   "Fully seeded" = all 30 teams exist AND have logos AND all have players
+//   AND every player has an externalId (ESPN athlete ID — needed for career stats lookups).
 //   This means:
 //   - New install: seeds everything from scratch
 //   - Old balldontlie data (no logos): updates all 30 crestUrls, skips players (they exist)
 //   - After deleting NBA players (roster refresh): teams already have logos, re-seeds only players
-//   - All three cases are handled transparently on the next startup
+//   - Pre-V6 data (players with null externalId): wipes each affected team's roster and re-fetches
+//   - All four cases are handled transparently on the next startup
 @Component
 public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner = runs once at startup
 
@@ -84,7 +86,12 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                     boolean hasLogos   = teams.stream().anyMatch(t -> t.getCrestUrl() != null);
                     boolean hasPlayers = teams.stream().allMatch(t ->
                             playerRepository.countByTeamId(t.getId()) > 0);
-                    return hasLogos && hasPlayers;
+                    // Also require every player to have an externalId — pre-V6 rosters were
+                    // seeded before the column existed, so they're missing ESPN athlete IDs
+                    // and would be invisible to the career-stats endpoint.
+                    boolean allHaveExternalIds = teams.stream().noneMatch(t ->
+                            playerRepository.existsByTeamIdAndExternalIdIsNull(t.getId()));
+                    return hasLogos && hasPlayers && allHaveExternalIds;
                 })
                 .orElse(false);
 
@@ -185,16 +192,30 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                     log.info("[NbaDataLoader]   Updated crest URL for {}", team.getName());
                 }
 
-                // If this team already has players in the DB, skip roster seeding
-                // (we only re-seed players when the DB has been cleared for a refresh)
+                // If this team already has players in the DB, decide whether to skip
+                // or re-fetch based on whether those players have externalIds.
                 if (playerRepository.countByTeamId(team.getId()) > 0) {
-                    log.info("[NbaDataLoader]   {} already seeded, skipping roster.", team.getName());
-                    continue;
-                }
 
-                // Team exists but has zero players — fall through to seed the roster.
-                // This happens when someone deletes NBA players from the DB to force a refresh.
-                log.info("[NbaDataLoader]   {} has no players — seeding roster from ESPN...", team.getName());
+                    // Pre-V6 data: roster exists but at least one player has no externalId.
+                    // Wipe and re-fetch so the new rows carry their ESPN athlete IDs.
+                    // Note: this cascades to favorite_player via ON DELETE CASCADE — acceptable
+                    // because favorites can be re-added and the alternative (broken stats pages)
+                    // is worse. See migration V3 for the FK setup.
+                    if (playerRepository.existsByTeamIdAndExternalIdIsNull(team.getId())) {
+                        log.info("[NbaDataLoader]   {} has stale players (no externalId) — wiping {} rows for re-seed.",
+                                team.getName(), playerRepository.countByTeamId(team.getId()));
+                        playerRepository.deleteAll(playerRepository.findByTeamId(team.getId()));
+                        // fall through to seed the roster below
+                    } else {
+                        log.info("[NbaDataLoader]   {} already seeded, skipping roster.", team.getName());
+                        continue;
+                    }
+
+                } else {
+                    // Team exists but has zero players — fall through to seed the roster.
+                    // This happens when someone deletes NBA players from the DB to force a refresh.
+                    log.info("[NbaDataLoader]   {} has no players — seeding roster from ESPN...", team.getName());
+                }
 
             } else {
                 // ── New team ───────────────────────────────────────────────
@@ -255,6 +276,7 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                                 .nationality(country)       // e.g. "USA"
                                 .jerseyNumber(jerseyNumber) // e.g. 23
                                 .dateOfBirth(dateOfBirth)   // e.g. 1984-12-30
+                                .externalId(athlete.id())   // ESPN athlete ID — used by NBA career stats endpoint
                                 .build());
             }
 

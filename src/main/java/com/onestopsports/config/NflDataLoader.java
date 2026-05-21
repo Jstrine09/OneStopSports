@@ -19,7 +19,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 // NflDataLoader seeds the database with NFL teams and rosters on first startup.
@@ -35,8 +34,10 @@ import java.util.stream.Collectors;
 //   4. Roster for each team (~53 active players each)
 //
 // Idempotency: same strategy as NbaDataLoader
-//   - Skip entirely if all 32 teams already exist
+//   - Skip entirely if all 32 teams exist AND every player has an externalId
 //   - If partially seeded, skip teams that already exist and only seed the missing ones
+//   - Pre-V6 rosters (players with null externalId) get wiped and re-fetched so they
+//     pick up their ESPN athlete IDs — needed for the career-stats endpoint
 @Component
 public class NflDataLoader implements CommandLineRunner {
 
@@ -73,7 +74,14 @@ public class NflDataLoader implements CommandLineRunner {
                         .stream()
                         .filter(l -> "NFL".equals(l.getName()))
                         .findFirst())
-                .map(l -> teamRepository.findByLeagueId(l.getId()).size() >= NFL_TEAM_COUNT)
+                .map(l -> {
+                    List<Team> teams = teamRepository.findByLeagueId(l.getId());
+                    if (teams.size() < NFL_TEAM_COUNT) return false;
+                    // Also require every player to have an externalId — pre-V6 rosters were
+                    // seeded before the column existed, so they're missing ESPN athlete IDs.
+                    return teams.stream().noneMatch(t ->
+                            playerRepository.existsByTeamIdAndExternalIdIsNull(t.getId()));
+                })
                 .orElse(false);
 
         if (fullySeeded) {
@@ -148,19 +156,13 @@ public class NflDataLoader implements CommandLineRunner {
 
         log.info("[NflDataLoader] Fetched {} teams from ESPN", apiTeams.size());
 
-        // Record which team names already exist in the DB so we can skip them
-        Set<String> existingTeamNames = teamRepository.findByLeagueId(nfl.getId())
+        // Build a name → Team lookup so we can decide per-team whether to skip,
+        // re-seed (stale roster), or create fresh.
+        java.util.Map<String, Team> existingTeamsByName = teamRepository.findByLeagueId(nfl.getId())
                 .stream()
-                .map(Team::getName)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toMap(Team::getName, t -> t));
 
         for (EspnTeam apiTeam : apiTeams) {
-
-            // Skip teams that were already successfully seeded in a previous run
-            if (existingTeamNames.contains(apiTeam.displayName())) {
-                log.info("[NflDataLoader]   {} already seeded, skipping.", apiTeam.displayName());
-                continue;
-            }
 
             // Get the first logo URL (default light-mode version) for the crest.
             // Unlike basketball (no free-tier crest), ESPN provides logos for all NFL teams.
@@ -168,16 +170,46 @@ public class NflDataLoader implements CommandLineRunner {
                     ? apiTeam.logos().get(0).href()
                     : null;
 
-            Team team = teamRepository.save(
-                    Team.builder()
-                            .league(nfl)
-                            .name(apiTeam.displayName())  // e.g. "Arizona Cardinals"
-                            .shortName(apiTeam.abbreviation()) // e.g. "ARI"
-                            .country(apiTeam.location())  // e.g. "Arizona" — city/state
-                            .crestUrl(crestUrl)           // ESPN CDN URL — available on free tier
-                            .stadium(null)                // Not available in this API response
-                            .build());
-            log.info("[NflDataLoader]   Saved team: {}", team.getName());
+            Team team;
+
+            if (existingTeamsByName.containsKey(apiTeam.displayName())) {
+                // ── Existing team ──────────────────────────────────────────
+                team = existingTeamsByName.get(apiTeam.displayName());
+
+                if (playerRepository.countByTeamId(team.getId()) > 0) {
+
+                    // Pre-V6 data: roster exists but at least one player has no externalId.
+                    // Wipe and re-fetch so the new rows carry their ESPN athlete IDs.
+                    // Note: this cascades to favorite_player via ON DELETE CASCADE — acceptable
+                    // because favorites can be re-added and the alternative (broken stats pages)
+                    // is worse. See migration V3 for the FK setup.
+                    if (playerRepository.existsByTeamIdAndExternalIdIsNull(team.getId())) {
+                        log.info("[NflDataLoader]   {} has stale players (no externalId) — wiping {} rows for re-seed.",
+                                team.getName(), playerRepository.countByTeamId(team.getId()));
+                        playerRepository.deleteAll(playerRepository.findByTeamId(team.getId()));
+                        // fall through to seed the roster below
+                    } else {
+                        log.info("[NflDataLoader]   {} already seeded, skipping.", team.getName());
+                        continue;
+                    }
+
+                } else {
+                    log.info("[NflDataLoader]   {} has no players — seeding roster from ESPN...", team.getName());
+                }
+
+            } else {
+                // ── New team ───────────────────────────────────────────────
+                team = teamRepository.save(
+                        Team.builder()
+                                .league(nfl)
+                                .name(apiTeam.displayName())  // e.g. "Arizona Cardinals"
+                                .shortName(apiTeam.abbreviation()) // e.g. "ARI"
+                                .country(apiTeam.location())  // e.g. "Arizona" — city/state
+                                .crestUrl(crestUrl)           // ESPN CDN URL — available on free tier
+                                .stadium(null)                // Not available in this API response
+                                .build());
+                log.info("[NflDataLoader]   Saved team: {}", team.getName());
+            }
 
             // ── 4. Players ────────────────────────────────────────────────────
             // Sleep 1.5 seconds between roster fetches as a courtesy to ESPN's servers.
@@ -215,6 +247,7 @@ public class NflDataLoader implements CommandLineRunner {
                                 .nationality(country)       // e.g. "USA"
                                 .jerseyNumber(jerseyNumber) // e.g. 15 — may be null in off-season
                                 .dateOfBirth(null)          // Not provided by this ESPN endpoint
+                                .externalId(athlete.id())   // ESPN athlete ID — used by NFL career stats endpoint
                                 .build());
             }
 

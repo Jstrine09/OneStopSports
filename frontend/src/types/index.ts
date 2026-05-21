@@ -38,6 +38,44 @@ export interface PlayerDto {
   teamId: number
 }
 
+// Biographical enrichment from balldontlie.io — NBA players only.
+// All fields are optional; undrafted players have null draft fields.
+export interface PlayerBioDto {
+  height: string | null         // e.g. "6-8" (feet-inches)
+  weightPounds: number | null   // e.g. 210
+  college: string | null        // e.g. "Duke" — null for international players
+  draftYear: number | null      // e.g. 2017 — null if undrafted
+  draftRound: number | null     // e.g. 1 — null if undrafted
+  draftNumber: number | null    // e.g. 3 (overall pick) — null if undrafted
+}
+
+// Career stats payload — sport-agnostic shape that fits NBA, NFL, and football.
+// One PlayerCareerStatsDto contains 1-3 categories; each category renders as its
+// own table on the frontend (column headers + season rows + optional career row).
+//
+// NBA  → categories: "averages", "totals", "miscellaneous"
+// NFL  → categories: position-driven, e.g. "passing", "rushing", "receiving", "defensive"
+// Football → categories: typically a single "season" block (current season only on free tier)
+export interface PlayerCareerStatsDto {
+  sport: string                        // "basketball" | "american-football" | "football"
+  categories: StatCategoryDto[]
+}
+
+export interface StatCategoryDto {
+  name: string                         // machine name — e.g. "averages"
+  displayName: string                  // human header — e.g. "Per Game"
+  labels: string[]                     // column headers, aligned with each SeasonRow.values
+  seasons: SeasonRowDto[]              // per-season rows, oldest first
+  career: SeasonRowDto | null          // career aggregate (null when upstream doesn't provide it)
+}
+
+export interface SeasonRowDto {
+  season: string | null                // e.g. "2024-25" or null for the career row
+  team: string | null                  // abbreviation or slug, null for the career row
+  competition: string | null           // football: "Ligue 1", "UEFA Champions League"; null for NBA/NFL
+  values: string[]                     // aligned with the parent category's labels[]
+}
+
 export interface MatchDto {
   id: number
   homeTeam: TeamDto
@@ -60,6 +98,10 @@ export interface StandingsEntryDto {
   goalsFor: number
   goalsAgainst: number
   points: number
+  // NFL only — null for football/NBA. When non-null the frontend renders
+  // a conference → division grouped table instead of a flat league table.
+  conference: string | null
+  division: string | null
 }
 
 export interface UserDto {
