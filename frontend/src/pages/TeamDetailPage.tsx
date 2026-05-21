@@ -274,6 +274,22 @@ export default function TeamDetailPage() {
                             {player.jerseyNumber != null ? player.jerseyNumber : '—'}
                           </span>
 
+                          {/* Headshot avatar — only rendered when a photo URL exists.
+                              Sized to match the row height (~36px including padding) so the
+                              row chrome stays consistent. NBA/NFL get this for free via ESPN's
+                              CDN; football players will get it once their stats page has been
+                              visited (lazy capture from API-Football). */}
+                          {player.photoUrl && (
+                            <img
+                              src={player.photoUrl}
+                              alt=""
+                              aria-hidden="true"
+                              className="h-9 w-9 shrink-0 rounded-full bg-stone-100 object-cover object-top dark:bg-zinc-800"
+                              // Broken CDN URL → hide the avatar rather than show a broken-image icon
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                            />
+                          )}
+
                           {/* Name + nationality */}
                           <div className="flex-1 overflow-hidden">
                             <Link
