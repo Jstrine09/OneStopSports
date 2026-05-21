@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -122,12 +123,14 @@ public class ApiFootballService {
     public Optional<Integer> searchPlayerId(String fullName, int apiSportsLeagueId, int season) {
         if (fullName == null || fullName.isBlank()) return Optional.empty();
 
-        // API-SPORTS' search param requires ≥ 4 characters. Try last name first (most
-        // discriminating), fall back to first name if last is too short (e.g. "L. Da").
-        // Skip entirely if both are too short for the API to accept.
+        // API-SPORTS' search param requires ≥ 4 characters AND rejects any non-alphanumeric
+        // character — including accented Latin letters like é, ñ, ø. We strip accents from
+        // the search term ("Dembélé" → "Dembele") so European names with diacritics work.
+        // Name matching against the response is still done against the original (accented)
+        // string, since the API returns names with their accents intact in the response body.
         String[] parts = fullName.trim().split("\\s+");
-        String lastName  = parts[parts.length - 1];
-        String firstName = parts[0];
+        String lastName  = stripAccents(parts[parts.length - 1]);
+        String firstName = stripAccents(parts[0]);
         final String searchTerm =
                 lastName.length() >= 4 ? lastName
                 : firstName.length() >= 4 ? firstName
@@ -276,6 +279,16 @@ public class ApiFootballService {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    // Decompose accented Latin letters into base + combining mark, then drop the marks.
+    // "Dembélé" → "Dembele", "Müller" → "Muller", "Vinícius" → "Vinicius".
+    // API-SPORTS' search field rejects diacritics outright, so this is mandatory for
+    // most European squads. Pass-through for null and for already-clean ASCII strings.
+    private static String stripAccents(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return Normalizer.normalize(s, Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+    }
 
     private static String safe(String s) { return s == null ? "" : s; }
     private static String str(Integer i) { return i == null ? "—" : String.valueOf(i); }
