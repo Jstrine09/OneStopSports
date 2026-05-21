@@ -457,15 +457,18 @@ public class NflApiService {
         for (EspnStatCategory cat : response.categories()) {
             if (cat.labels() == null || cat.statistics() == null) continue;
 
+            // competition is null: NFL has only one competition per row (the NFL itself).
+            // The frontend will hide the column entirely when every row in the category is null.
             List<PlayerCareerStatsDto.SeasonRow> seasons = cat.statistics().stream()
                     .map(entry -> new PlayerCareerStatsDto.SeasonRow(
                             entry.season() != null ? entry.season().displayName() : null,
                             entry.teamAbbreviation() != null ? entry.teamAbbreviation() : entry.teamSlug(),
+                            null,
                             entry.stats() != null ? entry.stats() : Collections.emptyList()))
                     .toList();
 
             PlayerCareerStatsDto.SeasonRow career = (cat.totals() != null && !cat.totals().isEmpty())
-                    ? new PlayerCareerStatsDto.SeasonRow(null, null, cat.totals())
+                    ? new PlayerCareerStatsDto.SeasonRow(null, null, null, cat.totals())
                     : null;
 
             categories.add(new PlayerCareerStatsDto.StatCategory(

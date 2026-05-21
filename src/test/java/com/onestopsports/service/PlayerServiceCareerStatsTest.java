@@ -79,13 +79,14 @@ class PlayerServiceCareerStatsTest {
     }
 
     // Minimal stats DTO returned by the mocked upstream services.
+    // competition is null — NBA/NFL test cases mirror what those services would produce.
     private static final PlayerCareerStatsDto DUMMY_STATS = new PlayerCareerStatsDto(
             "any",
             List.of(new PlayerCareerStatsDto.StatCategory(
                     "averages", "Per Game",
                     List.of("GP", "PTS"),
-                    List.of(new PlayerCareerStatsDto.SeasonRow("2024-25", "BOS", List.of("82", "27.5"))),
-                    new PlayerCareerStatsDto.SeasonRow(null, null, List.of("1000", "26.8"))
+                    List.of(new PlayerCareerStatsDto.SeasonRow("2024-25", "BOS", null, List.of("82", "27.5"))),
+                    new PlayerCareerStatsDto.SeasonRow(null, null, null, List.of("1000", "26.8"))
             )));
 
     // ── 404 path ──────────────────────────────────────────────────────────────

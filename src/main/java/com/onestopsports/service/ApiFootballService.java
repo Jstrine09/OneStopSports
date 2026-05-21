@@ -236,6 +236,9 @@ public class ApiFootballService {
                         // Season label — e.g. "2024-25" reconstructed from the season int.
                         formatSeasonLabel(season),
                         block.team() != null ? block.team().name() : null,
+                        // Competition name — what disambiguates the multiple rows API-Football
+                        // returns per player-season ("Ligue 1", "UEFA Champions League", etc.).
+                        block.league() != null ? block.league().name() : null,
                         valuesFor(block)
                 ));
             }
@@ -323,6 +326,7 @@ public class ApiFootballService {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ApiStatBlock(
             ApiTeam team,
+            ApiLeague league,    // which competition this stat block belongs to
             ApiGames games,
             ApiShots shots,
             ApiGoals goals,
@@ -332,6 +336,12 @@ public class ApiFootballService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ApiTeam(Integer id, String name) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    // The competition this stat block is for — e.g. "Ligue 1", "UEFA Champions League".
+    // Only `name` is used today; id / country / season are kept off the record to skip
+    // unnecessary deserialisation work.
+    public record ApiLeague(String name) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ApiGames(Integer appearences, Integer minutes, String rating, String position) {}

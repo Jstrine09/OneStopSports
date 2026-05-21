@@ -45,6 +45,12 @@ function CategoryTable({ category }: { category: StatCategoryDto }) {
     return null
   }
 
+  // Only show the Competition column when at least one row actually has a value for it.
+  // NBA/NFL rows are always null on this field (only one competition per league), so the
+  // column would just be a wall of em-dashes — hide it entirely for those sports.
+  // Football rows always carry a competition name, so the column appears there.
+  const hasCompetition = category.seasons.some((r) => !!r.competition)
+
   return (
     <div>
       {/* Category sub-header — same uppercase tracking style as the squad section headers
@@ -67,6 +73,11 @@ function CategoryTable({ category }: { category: StatCategoryDto }) {
                 <th className="py-2.5 pr-3 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400 dark:text-zinc-600">
                   Team
                 </th>
+                {hasCompetition && (
+                  <th className="py-2.5 pr-3 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-stone-400 dark:text-zinc-600">
+                    Comp
+                  </th>
+                )}
                 {category.labels.map((label) => (
                   <th
                     key={label}
@@ -81,7 +92,7 @@ function CategoryTable({ category }: { category: StatCategoryDto }) {
             <tbody>
               {category.seasons.map((row, i) => (
                 <tr
-                  key={`${row.season ?? 'unknown'}-${i}`}
+                  key={`${row.season ?? 'unknown'}-${row.competition ?? row.team ?? i}-${i}`}
                   className="border-t border-stone-100 transition-colors hover:bg-stone-50 first:border-0 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
                 >
                   <td className="sticky left-0 bg-white py-2 pl-4 pr-3 font-semibold dark:bg-zinc-900/60">
@@ -90,6 +101,11 @@ function CategoryTable({ category }: { category: StatCategoryDto }) {
                   <td className="py-2 pr-3 uppercase text-stone-500 dark:text-zinc-500">
                     {row.team ?? '—'}
                   </td>
+                  {hasCompetition && (
+                    <td className="whitespace-nowrap py-2 pr-3 text-stone-600 dark:text-zinc-400">
+                      {row.competition ?? '—'}
+                    </td>
+                  )}
                   {row.values.map((value, j) => (
                     <td key={j} className="py-2 pr-3 text-right">
                       {value}
@@ -106,6 +122,9 @@ function CategoryTable({ category }: { category: StatCategoryDto }) {
                     Career
                   </td>
                   <td className="py-2.5 pr-3 text-stone-400 dark:text-zinc-600">—</td>
+                  {hasCompetition && (
+                    <td className="py-2.5 pr-3 text-stone-400 dark:text-zinc-600">—</td>
+                  )}
                   {category.career.values.map((value, j) => (
                     <td key={j} className="py-2.5 pr-3 text-right font-bold">
                       {value}

@@ -72,6 +72,7 @@ export interface StatCategoryDto {
 export interface SeasonRowDto {
   season: string | null                // e.g. "2024-25" or null for the career row
   team: string | null                  // abbreviation or slug, null for the career row
+  competition: string | null           // football: "Ligue 1", "UEFA Champions League"; null for NBA/NFL
   values: string[]                     // aligned with the parent category's labels[]
 }
 

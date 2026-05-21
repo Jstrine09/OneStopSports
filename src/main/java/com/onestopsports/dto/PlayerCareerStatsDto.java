@@ -58,9 +58,16 @@ public record PlayerCareerStatsDto(
             // Season label — e.g. "2024-25" for NBA, "2024" for NFL. Null for the career row.
             String season,
 
-            // Team abbreviation — e.g. "CLE", "LAL". Null for the career row (career
-            // spans multiple teams) and null for football (single team per season).
+            // Team — for NBA it's the team abbreviation (e.g. "CLE", "LAL"); for football
+            // it's the full club name (e.g. "Paris Saint Germain"). Null for the career row.
             String team,
+
+            // Competition / league name — populated for football to disambiguate the multiple
+            // rows API-Football returns per season (Ligue 1, UCL, Coupe de France, etc., all
+            // for the same team). Null for NBA / NFL where there's only one competition per
+            // row. The frontend hides the Competition column when every row in the category
+            // has a null value.
+            String competition,
 
             // Stat values, aligned with the parent category's labels[] by index.
             // Always the same length as labels[].

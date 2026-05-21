@@ -556,19 +556,22 @@ public class NbaApiService {
             if (cat.labels() == null || cat.statistics() == null) continue;
 
             // Per-season rows — chronological order as ESPN returns them.
+            // competition is null: NBA only has one competition per row (the NBA itself), so
+            // there's nothing to disambiguate — the frontend will hide that column entirely.
             List<PlayerCareerStatsDto.SeasonRow> seasons = cat.statistics().stream()
                     .map(entry -> new PlayerCareerStatsDto.SeasonRow(
                             entry.season() != null ? entry.season().displayName() : null,
                             // ESPN doesn't always populate teamAbbreviation here — fall back to the slug
                             // (which the frontend can display verbatim or look up by name).
                             entry.teamAbbreviation() != null ? entry.teamAbbreviation() : entry.teamSlug(),
+                            null,
                             entry.stats() != null ? entry.stats() : Collections.emptyList()))
                     .toList();
 
             // Career total — ESPN puts it on the parent category, not in the per-season list.
-            // Season + team are null because it spans every team the player has been on.
+            // Season + team + competition are all null because it spans every team / year.
             PlayerCareerStatsDto.SeasonRow career = (cat.totals() != null && !cat.totals().isEmpty())
-                    ? new PlayerCareerStatsDto.SeasonRow(null, null, cat.totals())
+                    ? new PlayerCareerStatsDto.SeasonRow(null, null, null, cat.totals())
                     : null;
 
             categories.add(new PlayerCareerStatsDto.StatCategory(
