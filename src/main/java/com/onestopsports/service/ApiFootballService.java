@@ -156,23 +156,27 @@ public class ApiFootballService {
                 return Optional.empty();
             }
 
-            // Find the entry whose full name best matches our query. We prefer an exact
-            // case-insensitive match on the concatenated "firstname lastname"; fall back
-            // to any entry whose lastname matches; finally take the first result.
-            String normalisedQuery = fullName.trim().toLowerCase();
+            // Find the entry whose full name best matches our query. Both sides are
+            // accent-stripped + lowercased so "Vinícius" (DB) matches "Vinicius" (API)
+            // and vice-versa. We prefer an exact match on the concatenated
+            // "firstname lastname"; fall back to any entry whose lastname matches;
+            // finally take the first result.
+            String normalisedQuery = stripAccents(fullName.trim()).toLowerCase();
             for (ApiPlayerEntry entry : response.response()) {
                 if (entry.player() == null) continue;
-                String candidate = (safe(entry.player().firstname()) + " " + safe(entry.player().lastname())).trim().toLowerCase();
+                String candidate = stripAccents(
+                        (safe(entry.player().firstname()) + " " + safe(entry.player().lastname())).trim()
+                ).toLowerCase();
                 if (candidate.equals(normalisedQuery)) {
                     return Optional.of(entry.player().id());
                 }
             }
             // Loose fallback: lastname match. Helpful when DB has "L. Messi" / API has full name.
-            String lastNameLc = parts[parts.length - 1].toLowerCase();
+            String lastNameLc = stripAccents(parts[parts.length - 1]).toLowerCase();
             for (ApiPlayerEntry entry : response.response()) {
                 if (entry.player() != null
                         && entry.player().lastname() != null
-                        && entry.player().lastname().toLowerCase().equals(lastNameLc)) {
+                        && stripAccents(entry.player().lastname()).toLowerCase().equals(lastNameLc)) {
                     return Optional.of(entry.player().id());
                 }
             }

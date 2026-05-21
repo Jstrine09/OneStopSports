@@ -21,7 +21,7 @@ The app is a thin orchestration layer over **five** external APIs. None are full
 - **Hard daily cap: 100 requests/day on free tier.** Used for football player career stats. Every uncached page view consumes the budget — see *Operational concerns* for the missing server-side cache.
 - **Season cap: free plan only serves up to season 2024.** Hard-coded `FREE_TIER_MAX_SEASON = 2024` (`ApiFootballService.java:92`). As of mid-2026 we serve the 2024-25 season label instead of the in-progress 2025-26 season — **silently incorrect data** for any user expecting current-season stats.
 - **League search filter mandatory on free tier.** We map our football-data.org competition IDs to API-SPORTS league IDs via a hand-maintained `Map.of()` of six entries (`ApiFootballService.java:52-59`). Any competition outside this map (domestic cups, lower divisions) returns no stats with no user-facing explanation.
-- **Diacritic stripping is implemented but the rest of the name-matching pipeline is still ASCII-naive.** `stripAccents()` (`ApiFootballService.java:290`) is applied to the *search* term, but the loose fallback match at line 171-178 compares against the original accented lastname from the DB. If the DB stores "Dembélé" and API-SPORTS returns "Dembele", the lowercase string match fails. The exact-match branch above does compare full names case-insensitively but again against accented DB values. **Verdict: partial fix — works for exact-match cases, can still miss diacritic players in the fallback path.** Worth a follow-up pass to normalise both sides before comparison.
+- **Diacritic stripping is fully applied across the name-matching pipeline.** `stripAccents()` (`ApiFootballService.java`) normalises both the search term and both sides of the post-fetch comparisons (exact-match and loose-lastname fallback). Players like "Vinícius" / "Dembélé" / "Lukáš" match correctly regardless of which side carries the accents.
 - **Stats only cover one season at a time on free tier.** The DTO's `careerRow` is always `null` for football — flagged in code, but means UI parity with NBA/NFL career stats is impossible.
 - Mid-season transfers produce multiple rows per player-season; only `competition name` disambiguates them in the UI.
 
@@ -66,7 +66,7 @@ The app is a thin orchestration layer over **five** external APIs. None are full
   3. `null` fallback
   
   Football players never visited have no photo. NBA/NFL photos require the CDN URL pattern to stay stable (it has for years, but it's still external state we don't control). Code comments acknowledge layer 1 is a "follow-up" — read carefully, `fetchFootballStats` does not currently write `photoUrl`, only `externalId`. **Football player photos will never populate until that write is added.**
-- **Lazy externalId backfill can fail silently.** If `searchPlayerId` misses (rate-limited, name typo, non-mapped league, no league filter match), the column stays null and the stats card is hidden forever for that player with no re-try mechanism. Manual DB edit required to recover. See *Style/maintainability* — diacritic stripping is partial.
+- **Lazy externalId backfill can fail silently.** If `searchPlayerId` misses (rate-limited, name typo, non-mapped league, no league filter match), the column stays null and the stats card is hidden forever for that player with no re-try mechanism. Manual DB edit required to recover.
 - **`UserAccount` not `User`** — correct workaround (`user` is reserved in Postgres) but worth flagging because the JPA entity name vs. table name vs. controller path triad (`/api/users/...`) is mildly confusing.
 - **`ON DELETE CASCADE` on `favorite_player(player_id)` and `favorite_team(team_id)`.** Means any roster re-seed (NBA/NFL data loaders explicitly delete pre-V6 stale rows in `NbaDataLoader.java:204-208`) **silently wipes users' favourites**. Documented in code comments but no user-facing notification, no undo. Acceptable on a personal-project demo; unacceptable in production.
 - **No `external_id` uniqueness constraint on `player`.** Two seed runs that misfire could theoretically duplicate rows. Defended in practice by the "skip if seeded" guards in the data loaders, but no DB-level safety net.
@@ -121,7 +121,7 @@ The app is a thin orchestration layer over **five** external APIs. None are full
 | `PlayerService` (career stats branch) | ✅ partial — `PlayerServiceCareerStatsTest` exists | covers routing only, not `resolvePhotoUrl` or `toDto` |
 | `NflApiService` | ❌ none | 650 LOC, multi-level standings parsing, no coverage |
 | `ExternalApiService` | ❌ none | 456 LOC, biggest single integration point — uncovered |
-| `ApiFootballService` | ❌ none | Includes the partial diacritic-stripping logic |
+| `ApiFootballService` | ❌ none | Includes diacritic-stripping + multi-strategy name matching — worth covering |
 | `BallDontLieService` | ❌ none | First-name-search-with-lastname-filter logic has multiple branches and a fallback — easy to break |
 | `UserService` | ❌ none | Favourites CRUD — relatively simple, still uncovered |
 | `TeamService`, `SportService`, `PlayerService.toDto` | ❌ none | Including `resolvePhotoUrl`'s three-layer logic |
@@ -134,7 +134,7 @@ The app is a thin orchestration layer over **five** external APIs. None are full
 
 1. `GlobalExceptionHandler` — small, deterministic, prevents a known regression.
 2. `PlayerService.resolvePhotoUrl` — three branches, easy to assert on, central to the user-visible photo experience.
-3. `ApiFootballService.searchPlayerId` — multiple match strategies + diacritic handling, currently the most likely silent-failure surface.
+3. `ApiFootballService.searchPlayerId` — multiple match strategies + diacritic handling; the most likely silent-failure surface (network, name mismatch, rate limit).
 4. `MatchService.refreshLiveMatchCache` snapshot-change detection — currently uncovered, controls every WebSocket push.
 
 ---
@@ -146,7 +146,6 @@ The CLAUDE.md "Stubbed" and "Remaining Tasks" sections name these explicitly:
 - **`MatchService.getMatchStats()` returns `Map.of()`** (`MatchService.java:140`). Free tier limitation. Endpoint exists, controller exists, UI renders "coming soon".
 - **`MatchService.getMatchLineups()` returns `Map.of()`** (`MatchService.java:146`). Same story.
 - **Football player photos** — `Player.photoUrl` is intended to be populated from API-Football's `player.photo` field on the first stats visit. **The write is not actually wired up in `fetchFootballStats`** — only `externalId` is saved (`PlayerService.java:154`). The code comment at line 188-189 says this is "added in a follow-up" but the follow-up never landed. Footballers will never display a photo unless this is finished.
-- **Diacritic-stripping fix is half-done** in `ApiFootballService` — `Normalizer` is imported (line 12) and `stripAccents()` exists (line 290), but the fallback name-match at lines 171-178 still compares against accented strings. Either complete it (normalise both sides) or remove the import and document the limitation.
 - **NFL standings frontend** — CLAUDE.md flags this as a remaining task, but `StandingsTable.tsx:88-179` does in fact have a conference→division grouped layout that renders when any entry has a non-null `division` field. **CLAUDE.md is outdated**; this item is done and should be removed from the Remaining Tasks list.
 - **No NFL career stats UI test path** — backend `fetchCareerStats` exists; visual verification of the rendered table for an off-season player would be valuable.
 - **Push notifications for favourite teams** — listed as nice-to-have. No infrastructure (no FCM/APN integration, no service worker on the frontend).
@@ -197,7 +196,6 @@ The CLAUDE.md "Stubbed" and "Remaining Tasks" sections name these explicitly:
 ## Style / Maintainability
 
 - **Comments are excellent.** The codebase reads like a teaching project, with detailed inline explanations matching the user's stated style preference (junior-developer-friendly). This is a strength worth preserving.
-- **`ApiFootballService.java:12` imports `java.text.Normalizer`** for the `stripAccents` helper. The helper exists; it's called in `searchPlayerId` (lines 132-133). The "mid-flight unfinished" framing in the meta-prompt is **slightly outdated** — diacritic stripping *is* in use for the search term. **But:** the loose lastname fallback at lines 171-178 still compares against the accented DB value (`parts[parts.length - 1].toLowerCase()`). For a player like "Vinícius" the search succeeds (sends "Vinicius") but the fallback match would compare API result "Vinicius" against DB "vinícius" and fail. Worth completing the fix by normalising both sides.
 - **Service class size is creeping up.** `NflApiService` is 650 LOC, `NbaApiService` 587, `ExternalApiService` 456. All are doing fetching + DTO mapping + standings/scoreboard parsing in one class. The shape mirrors the upstream API; not unreasonable, but a maintainer onboarding to NFL has to load all 650 lines into their head.
 - **Duplicated patterns across NBA/NFL services**: ET timezone conversion (`OffsetDateTime.parse(...).atZoneSameInstant(...)`), the three-RestClient-instances-per-service shape, ESPN status code → our status enum mapping. A small shared `EspnTimezoneUtil` or `EspnStatusMapper` would DRY this up.
 - **Inner records named `EspnXxx` collide across services.** Both `NbaApiService` and `NflApiService` declare `EspnTeamsResponse`, `EspnSport`, `EspnLeague`, etc. They're package-private inside each service, so no compile clash — but readers grep'ing for `EspnAthlete` get hits in two files with slightly different shapes (NFL `EspnAthlete` lives inside an `EspnPositionGroup.items`; NBA is flat). Documented in CLAUDE.md.
