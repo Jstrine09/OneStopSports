@@ -84,16 +84,25 @@ public class ApiFootballService {
         return FOOTBALL_DATA_TO_API_SPORTS_LEAGUE.get(footballDataLeagueId);
     }
 
+    // Free-tier cap on the `season` parameter. API-SPORTS' free plan only serves
+    // seasons 2022, 2023, and 2024 — any higher year returns:
+    //   { "errors": { "plan": "Free plans do not have access to this season, ..." } }
+    // Bump this (or remove the cap entirely) if/when the account is upgraded.
+    private static final int FREE_TIER_MAX_SEASON = 2024;
+
     /**
-     * Returns the current European football season as API-SPORTS represents it.
-     * Their season parameter is the year the season STARTS, so the 2024-25 season = 2024.
+     * Returns the European football season we should query API-SPORTS for, as their API
+     * represents it (the year the season STARTS — so the 2024-25 season = 2024).
      *
-     * European football seasons run roughly August → May. Anything before July belongs to
-     * the previous season's label, anything July onwards is the new season.
+     * Naively this would be: month ≥ 7 → year; otherwise → year - 1. But the free tier
+     * caps out at 2024, so we clamp to FREE_TIER_MAX_SEASON. As of mid-2026 this means
+     * we serve the 2024-25 season (the most recent fully-played season available to us)
+     * rather than the in-progress 2025-26 season.
      */
     int currentSeason() {
         LocalDate today = LocalDate.now();
-        return today.getMonthValue() >= 7 ? today.getYear() : today.getYear() - 1;
+        int naturalSeason = today.getMonthValue() >= 7 ? today.getYear() : today.getYear() - 1;
+        return Math.min(naturalSeason, FREE_TIER_MAX_SEASON);
     }
 
     /**
