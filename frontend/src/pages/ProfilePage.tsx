@@ -142,7 +142,7 @@ export default function ProfilePage() {
           <div className="space-y-1">
             {favPlayers.map((player) => (
               <div
-                key={player.id}
+                key={player.id!}
                 className="flex items-center gap-3 rounded-lg bg-white px-3 py-2.5 dark:bg-zinc-800"
               >
                 {/* Jersey number placeholder */}
@@ -150,10 +150,12 @@ export default function ProfilePage() {
                   {player.jerseyNumber ?? '—'}
                 </span>
 
-                {/* Name + nationality */}
+                {/* Name + nationality.
+                    Favourite players always come from the DB so id is never null here.
+                    The ! assertion is safe: only historical ESPN players have null id. */}
                 <div className="flex-1 overflow-hidden">
                   <Link
-                    to={`/players/${player.id}`}
+                    to={`/players/${player.id!}`}
                     state={player}
                     className="truncate text-sm font-medium hover:text-amber-600 transition-colors dark:hover:text-amber-400"
                   >
@@ -166,7 +168,7 @@ export default function ProfilePage() {
 
                 {/* Remove */}
                 <button
-                  onClick={() => handleRemovePlayer(player.id)}
+                  onClick={() => handleRemovePlayer(player.id!)}
                   className="flex h-[44px] w-[44px] items-center justify-center rounded-full text-stone-400 transition hover:bg-red-500/20 hover:text-red-400 dark:text-zinc-500"
                   aria-label="Remove from favourites"
                 >

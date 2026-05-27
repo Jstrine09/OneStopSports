@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -34,10 +35,26 @@ public class TeamController {
     }
 
     // GET /api/teams/{id}/players
-    // Returns all players on this team from our database.
-    // Used to display the squad roster on TeamDetailPage, grouped by position.
+    // GET /api/teams/{id}/players?season=2022
+    //
+    // Without ?season: returns the current squad from our database.
+    //   Used to display the live roster on TeamDetailPage.
+    //
+    // With ?season=YYYY: returns the historical roster for that season from ESPN.
+    //   season = start year of the season (e.g. 2022 for "2022-23") — ESPN convention.
+    //   Works for NBA and NFL only — football-data.org free tier has no historical rosters.
+    //   Returned PlayerDtos have null id — historical players may not exist in our DB.
     @GetMapping("/{id}/players")
-    public ResponseEntity<List<PlayerDto>> getPlayers(@PathVariable Long id) {
+    public ResponseEntity<List<PlayerDto>> getPlayers(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer season) {
+
+        if (season != null) {
+            // Delegate to TeamService which handles sport routing to the correct ESPN API
+            return ResponseEntity.ok(teamService.getRosterForSeason(id, season));
+        }
+
+        // No season — serve the current roster from our own database
         return ResponseEntity.ok(playerService.getPlayersByTeam(id));
     }
 }

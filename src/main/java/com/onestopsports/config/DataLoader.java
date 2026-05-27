@@ -145,7 +145,11 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
             for (int j = 0; j < teamLimit; j++) {
                 ApiTeam apiTeam = apiTeams.get(j);
 
-                // Save the team to the database
+                // Save the team to the database.
+                // externalId = football-data.org integer team ID, stored as a String for uniformity with ESPN IDs.
+                // Used to identify the team in future API calls (e.g. fetching squad separately).
+                // Note: football historical rosters are NOT available on the free tier,
+                // so this ID is stored for completeness but isn't used for season picker lookup.
                 Team team = teamRepository.save(
                         Team.builder()
                                 .league(league)
@@ -154,6 +158,7 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
                                 .crestUrl(apiTeam.crest())
                                 .stadium(apiTeam.venue())
                                 .country(country)
+                                .externalId(String.valueOf(apiTeam.id())) // football-data.org team ID → stored as String
                                 .build());
                 log.info("[DataLoader]     Saved team: {}", team.getName());
 

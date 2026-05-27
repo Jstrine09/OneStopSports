@@ -2,6 +2,7 @@ package com.onestopsports.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.onestopsports.dto.BoxScoreDto;
+import com.onestopsports.dto.PlayerDto;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.StandingsEntryDto;
@@ -280,6 +281,79 @@ public class NbaApiService {
 
         // NBA roster is already a flat list — no grouping to flatten (unlike NFL)
         return response.athletes();
+    }
+
+    /**
+     * Fetches a historical NBA roster for a given season, mapped directly to PlayerDtos.
+     *
+     * Called by TeamService when the frontend requests a past season's roster.
+     * Uses the same ESPN endpoint as fetchPlayersByTeam but adds the ?season= query param.
+     * ESPN's season parameter is the START year of the season — e.g. 2022 for "2022-23".
+     *
+     * Returned PlayerDtos have null id and teamId because historical players may not
+     * exist in our database — the frontend treats them as display-only (no profile links).
+     *
+     * @param espnTeamId ESPN's string team ID — stored as Team.externalId since V7
+     * @param season     Start year of the season — e.g. 2022 for "2022-23"
+     */
+    public List<PlayerDto> fetchRosterDtos(String espnTeamId, Integer season) {
+        try {
+            EspnRosterResponse response = restClient.get()
+                    .uri("/teams/{id}/roster?season={season}", espnTeamId, season)
+                    .retrieve()
+                    .body(EspnRosterResponse.class);
+
+            if (response == null || response.athletes() == null) return Collections.emptyList();
+
+            // Map each ESPN athlete to a PlayerDto — same field mapping as the data loader,
+            // but we output PlayerDtos instead of persisting Player entities.
+            List<PlayerDto> result = new ArrayList<>();
+            for (EspnAthlete athlete : response.athletes()) {
+                result.add(espnAthleteToDto(athlete));
+            }
+            return result;
+
+        } catch (RestClientException e) {
+            // ESPN may return 400/404 for seasons before the team existed or very old data.
+            // Return empty rather than crashing — the frontend shows a "no data" message.
+            log.warn("[NbaApiService] Could not fetch roster for team {} season {}: {}",
+                    espnTeamId, season, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Maps an ESPN athlete record to a PlayerDto for display without DB involvement.
+     * id and teamId are null — the player may not exist in our database (historical seasons).
+     * photoUrl uses the deterministic ESPN CDN headshot pattern.
+     */
+    private PlayerDto espnAthleteToDto(EspnAthlete athlete) {
+        // Jersey number comes as a String (e.g. "23") — parse to Integer, ignore if blank/non-numeric
+        Integer jerseyNumber = null;
+        if (athlete.jersey() != null && !athlete.jersey().isBlank()) {
+            try { jerseyNumber = Integer.parseInt(athlete.jersey()); } catch (NumberFormatException ignored) {}
+        }
+
+        // Date of birth is ISO-8601 — e.g. "1984-12-30T07:00Z". We only need the date part.
+        LocalDate dateOfBirth = null;
+        if (athlete.dateOfBirth() != null && athlete.dateOfBirth().length() >= 10) {
+            try { dateOfBirth = LocalDate.parse(athlete.dateOfBirth().substring(0, 10)); } catch (Exception ignored) {}
+        }
+
+        String position = (athlete.position() != null) ? athlete.position().name() : null;
+        String country  = (athlete.birthPlace() != null) ? athlete.birthPlace().country() : null;
+
+        // ESPN NBA headshot URL — deterministic, no API call needed.
+        // Same pattern used by PlayerService.resolvePhotoUrl for current-season players.
+        String photoUrl = (athlete.id() != null)
+                ? "https://a.espncdn.com/i/headshots/nba/players/full/" + athlete.id() + ".png"
+                : null;
+
+        // id=null, teamId=null: historical player rows aren't linked to DB records.
+        // The frontend checks for null id to disable the "view profile" link.
+        return new PlayerDto(null, athlete.fullName(), position, country, dateOfBirth, jerseyNumber, photoUrl, null);
     }
 
     /**

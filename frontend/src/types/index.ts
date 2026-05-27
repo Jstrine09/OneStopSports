@@ -28,14 +28,17 @@ export interface TeamDto {
 }
 
 export interface PlayerDto {
-  id: number
+  // id is null for historical-season players fetched from ESPN — they may not exist in our DB.
+  // The frontend checks for null id to disable the profile link and favourite toggle.
+  id: number | null
   name: string
   position: string | null
   nationality: string | null
   dateOfBirth: string | null
   jerseyNumber: number | null
   photoUrl: string | null
-  teamId: number
+  // teamId is null for historical-season players (not tied to a specific DB team row)
+  teamId: number | null
 }
 
 // Biographical enrichment from balldontlie.io — NBA players only.

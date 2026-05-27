@@ -3,6 +3,7 @@ package com.onestopsports.service;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.onestopsports.dto.BoxScoreDto;
+import com.onestopsports.dto.PlayerDto;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.StandingsEntryDto;
@@ -320,6 +321,76 @@ public class NflApiService {
             }
         }
         return allPlayers;
+    }
+
+    /**
+     * Fetches a historical NFL roster for a given season, mapped directly to PlayerDtos.
+     *
+     * Called by TeamService when the frontend requests a past season's roster.
+     * ESPN's season parameter is the START year — e.g. 2024 for the "2024" regular season.
+     *
+     * NFL rosters from ESPN are grouped by side of ball (offense/defense/specialTeam).
+     * This method flattens all three groups, same as fetchPlayersByTeam.
+     *
+     * Returned PlayerDtos have null id and teamId because historical players may not
+     * exist in our database — the frontend treats them as display-only (no profile links).
+     *
+     * @param espnTeamId ESPN's string team ID — stored as Team.externalId since V7
+     * @param season     NFL season year — e.g. 2024 (single year, unlike NBA which uses start year)
+     */
+    public List<PlayerDto> fetchRosterDtos(String espnTeamId, Integer season) {
+        try {
+            EspnRosterResponse response = restClient.get()
+                    .uri("/teams/{id}/roster?season={season}", espnTeamId, season)
+                    .retrieve()
+                    .body(EspnRosterResponse.class);
+
+            if (response == null || response.athletes() == null) return Collections.emptyList();
+
+            // Flatten all position groups (offense/defense/specialTeam) and map to PlayerDto
+            List<PlayerDto> result = new ArrayList<>();
+            for (EspnPositionGroup group : response.athletes()) {
+                if (group.items() == null) continue;
+                for (EspnAthlete athlete : group.items()) {
+                    result.add(espnAthleteToDto(athlete));
+                }
+            }
+            return result;
+
+        } catch (RestClientException e) {
+            // ESPN may return 400/404 for seasons before the franchise existed or far-back data.
+            log.warn("[NflApiService] Could not fetch roster for team {} season {}: {}",
+                    espnTeamId, season, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Maps an ESPN NFL athlete record to a PlayerDto for display without DB involvement.
+     * id and teamId are null — the player may not exist in our DB (historical seasons).
+     * photoUrl uses the deterministic ESPN CDN headshot pattern.
+     */
+    private PlayerDto espnAthleteToDto(EspnAthlete athlete) {
+        // Jersey number comes as a String — parse to Integer, ignore non-numeric values
+        Integer jerseyNumber = null;
+        if (athlete.jersey() != null && !athlete.jersey().isBlank()) {
+            try { jerseyNumber = Integer.parseInt(athlete.jersey()); } catch (NumberFormatException ignored) {}
+        }
+
+        String position = (athlete.position() != null) ? athlete.position().name() : null;
+        String country  = (athlete.birthPlace() != null) ? athlete.birthPlace().country() : null;
+
+        // ESPN NFL headshot URL — deterministic, no API call needed.
+        // Same pattern used by PlayerService.resolvePhotoUrl for current-season players.
+        String photoUrl = (athlete.id() != null)
+                ? "https://a.espncdn.com/i/headshots/nfl/players/full/" + athlete.id() + ".png"
+                : null;
+
+        // dateOfBirth = null for NFL — the ESPN NFL roster endpoint does not return it.
+        // id=null, teamId=null: not linked to DB records (historical).
+        return new PlayerDto(null, athlete.fullName(), position, country, null, jerseyNumber, photoUrl, null);
     }
 
     /**

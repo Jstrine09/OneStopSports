@@ -1,23 +1,33 @@
 package com.onestopsports.service;
 
+import com.onestopsports.dto.PlayerDto;
 import com.onestopsports.dto.TeamDto;
 import com.onestopsports.model.Team;
 import com.onestopsports.repository.TeamRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
 // Handles business logic for Teams.
 // All data comes from our own database (seeded from football-data.org at startup).
+// For NBA/NFL, also calls ESPN to serve historical season rosters.
 @Service
 public class TeamService {
 
     private final TeamRepository teamRepository;
+    private final NbaApiService  nbaApiService;
+    private final NflApiService  nflApiService;
 
-    public TeamService(TeamRepository teamRepository) {
+    // Manual constructor injection — kept explicit for clarity (see project conventions).
+    public TeamService(TeamRepository teamRepository,
+                       NbaApiService nbaApiService,
+                       NflApiService nflApiService) {
         this.teamRepository = teamRepository;
+        this.nbaApiService  = nbaApiService;
+        this.nflApiService  = nflApiService;
     }
 
     // Returns a single team by its database ID, or throws 404 if not found.
@@ -45,6 +55,47 @@ public class TeamService {
                 .limit(8)
                 .map(this::toDto)
                 .toList();
+    }
+
+    /**
+     * Returns the roster for a given team in a specific historical season.
+     *
+     * Routing by sport slug — same dispatch pattern used in MatchService and LeagueService:
+     *   basketball        → NbaApiService.fetchRosterDtos (ESPN unofficial API)
+     *   american-football → NflApiService.fetchRosterDtos (ESPN unofficial API)
+     *   football          → empty list (football-data.org free tier has no historical rosters)
+     *
+     * @Transactional(readOnly = true) is required because we walk the lazy relationship chain
+     * team → league → sport → slug. Without a transaction, Hibernate closes the session after
+     * the repository call and throws a LazyInitializationException on the first lazy access.
+     *
+     * The returned PlayerDtos have null id and teamId — historical players may not be in our
+     * database. The frontend checks for null id to disable the profile link.
+     *
+     * @param teamId  our internal database team ID
+     * @param season  start year of the season (e.g. 2022 for "2022-23") — ESPN convention
+     */
+    @Transactional(readOnly = true)
+    public List<PlayerDto> getRosterForSeason(Long teamId, Integer season) {
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Team not found: " + teamId));
+
+        // externalId is the ESPN (or football-data.org) team ID, stored since V7.
+        // If it's null, the team was seeded before V7 and the backfill hasn't run yet.
+        String externalId = team.getExternalId();
+        if (externalId == null) {
+            return List.of(); // Can't call ESPN without an ID — tell the frontend "no data"
+        }
+
+        // Walk the lazy relationship chain — safe inside this @Transactional method
+        String sportSlug = team.getLeague().getSport().getSlug();
+
+        return switch (sportSlug) {
+            case "basketball"        -> nbaApiService.fetchRosterDtos(externalId, season);
+            case "american-football" -> nflApiService.fetchRosterDtos(externalId, season);
+            default                  -> List.of(); // Football: no historical roster API on free tier
+        };
     }
 
     // Package-private (no access modifier) so UserService can also use it

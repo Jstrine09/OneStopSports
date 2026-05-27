@@ -35,6 +35,13 @@ public class Team {
     private String stadium;   // Stadium name — e.g. "Etihad Stadium"
     private String country;   // Country — e.g. "England"
 
+    // The upstream provider's team ID — stored so we can fetch historical rosters
+    // without re-fetching the full team list at runtime.
+    // NBA/NFL: ESPN string ID (e.g. "1"). Football: football-data.org integer as string.
+    // Null for rows seeded before V7; data loaders backfill on next startup.
+    @Column(name = "external_id", length = 50)
+    private String externalId;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
