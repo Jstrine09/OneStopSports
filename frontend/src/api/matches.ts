@@ -1,5 +1,5 @@
 import client from './client'
-import type { MatchDto, MatchEventDto } from '../types'
+import type { BoxScoreDto, MatchDto, MatchEventDto } from '../types'
 
 export const fetchLiveMatches = (): Promise<MatchDto[]> =>
   client.get('/matches/live').then((r) => r.data)
@@ -15,3 +15,12 @@ export const fetchMatchesByLeagueAndDate = (
 
 export const fetchMatchEvents = (id: number): Promise<MatchEventDto[]> =>
   client.get(`/matches/${id}/events`).then((r) => r.data)
+
+// Fetches the box score for a match (team stats + per-player stat tables).
+// leagueId is required so the backend can route to the correct external API.
+// Returns undefined (not an error) when the backend responds with 204 No Content —
+// this happens when the game hasn't been played yet or ESPN returned no data.
+export const fetchBoxScore = (id: number, leagueId: number): Promise<BoxScoreDto | undefined> =>
+  client.get(`/matches/${id}/boxscore`, { params: { leagueId } }).then((r) =>
+    r.status === 204 ? undefined : r.data
+  )

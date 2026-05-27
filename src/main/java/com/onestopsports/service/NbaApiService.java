@@ -1,6 +1,7 @@
 package com.onestopsports.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.onestopsports.dto.BoxScoreDto;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.StandingsEntryDto;
@@ -584,4 +585,159 @@ public class NbaApiService {
 
         return new PlayerCareerStatsDto("basketball", categories);
     }
+
+    // ── Box Score ──────────────────────────────────────────────────────────────
+    // ESPN's /summary endpoint returns a full game box score for any historical
+    // or in-progress NBA game. The event ID we pass here is the same Long that
+    // lives in MatchDto.id for NBA games (parsed from ESPN's string event ID in
+    // parseId() earlier in this file).
+    //
+    // URL pattern: /summary?event={eventId}
+    // Full URL example: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401705847
+    //
+    // The response has a "boxscore" object with two arrays:
+    //   teams   — one entry per team with aggregate stats (total points, rebounds, etc.)
+    //   players — one entry per team with per-player stat tables
+    //
+    // We return null (not an exception) when the game hasn't started yet or ESPN
+    // doesn't have box score data — the controller turns null into HTTP 204.
+
+    public BoxScoreDto fetchBoxScore(Long eventId) {
+        try {
+            EspnSummaryResponse response = restClient.get()
+                    .uri("/summary?event={id}", eventId)
+                    .retrieve()
+                    .body(EspnSummaryResponse.class);
+
+            if (response == null || response.boxscore() == null) {
+                log.debug("[NbaApiService] fetchBoxScore: no boxscore data for event {}", eventId);
+                return null;
+            }
+
+            EspnBoxscoreData boxscore = response.boxscore();
+
+            // Map the two team stat groups (home + away)
+            List<BoxScoreDto.TeamBoxScore> teams = new ArrayList<>();
+            if (boxscore.teams() != null) {
+                for (EspnTeamStatGroup group : boxscore.teams()) {
+                    if (group.team() == null) continue;
+                    boolean isHome = "home".equalsIgnoreCase(group.homeAway());
+                    List<BoxScoreDto.StatLine> stats = group.statistics() == null
+                            ? Collections.emptyList()
+                            : group.statistics().stream()
+                                    .map(s -> new BoxScoreDto.StatLine(s.label(), s.displayValue()))
+                                    .toList();
+                    teams.add(new BoxScoreDto.TeamBoxScore(
+                            parseId(group.team().id()),
+                            group.team().displayName(),
+                            group.team().abbreviation(),
+                            isHome,
+                            stats));
+                }
+                // Ensure home team is always at index 0
+                teams.sort(Comparator.comparing(t -> t.isHome() ? 0 : 1));
+            }
+
+            // Map per-player stat tables (one group per team)
+            List<BoxScoreDto.PlayerStatGroup> playerStats = new ArrayList<>();
+            if (boxscore.players() != null) {
+                for (EspnPlayerTeamGroup group : boxscore.players()) {
+                    if (group.team() == null || group.statistics() == null || group.statistics().isEmpty()) continue;
+                    boolean isHome = "home".equalsIgnoreCase(group.homeAway());
+
+                    // ESPN wraps player stats in a "statistics" array — NBA uses only one
+                    // element (index 0) containing the stat table for all players.
+                    EspnPlayerStatTable table = group.statistics().get(0);
+                    List<String> columns = table.names() != null ? table.names() : Collections.emptyList();
+
+                    List<BoxScoreDto.PlayerStatRow> rows = new ArrayList<>();
+                    if (table.athletes() != null) {
+                        for (EspnPlayerStatLine line : table.athletes()) {
+                            if (line.athlete() == null) continue;
+                            // Skip players marked didNotPlay — no stats to show
+                            if (Boolean.TRUE.equals(line.didNotPlay())) continue;
+                            rows.add(new BoxScoreDto.PlayerStatRow(
+                                    line.athlete().displayName(),
+                                    parseId(line.athlete().id()),
+                                    Boolean.TRUE.equals(line.athlete().starter()),
+                                    line.stats() != null ? line.stats() : Collections.emptyList()));
+                        }
+                    }
+
+                    playerStats.add(new BoxScoreDto.PlayerStatGroup(
+                            parseId(group.team().id()),
+                            group.team().displayName(),
+                            isHome,
+                            columns,
+                            rows));
+                }
+                // Ensure home team players are at index 0
+                playerStats.sort(Comparator.comparing(g -> g.isHome() ? 0 : 1));
+            }
+
+            return new BoxScoreDto("basketball", teams, playerStats);
+
+        } catch (RestClientException e) {
+            log.warn("[NbaApiService] fetchBoxScore failed for event {}: {}", eventId, e.getMessage());
+            return null;
+        }
+    }
+
+    // ── ESPN Summary inner records ─────────────────────────────────────────────
+    // These mirror the JSON structure returned by /summary?event={id}.
+    // @JsonIgnoreProperties(ignoreUnknown = true) on every record is essential —
+    // the summary response is very large (play-by-play, news, injuries, etc.) and
+    // we only care about the "boxscore" section.
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnSummaryResponse(EspnBoxscoreData boxscore) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnBoxscoreData(
+            List<EspnTeamStatGroup> teams,
+            List<EspnPlayerTeamGroup> players) {}
+
+    // One entry per team in the teams array — aggregate stats (points, rebounds, etc.)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnTeamStatGroup(
+            EspnBoxscoreTeam team,
+            String homeAway,                       // "home" or "away"
+            List<EspnTeamStat> statistics) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnBoxscoreTeam(
+            String id,
+            String displayName,
+            String abbreviation) {}
+
+    // A single aggregate stat for a team (e.g. name="points", label="Points", displayValue="112")
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnTeamStat(String name, String label, String displayValue) {}
+
+    // One entry per team in the players array — per-player stat tables
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnPlayerTeamGroup(
+            EspnBoxscoreTeam team,
+            String homeAway,
+            List<EspnPlayerStatTable> statistics) {}
+
+    // The stat table for one team: column headers + player rows
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnPlayerStatTable(
+            List<String> names,                     // column header labels
+            List<EspnPlayerStatLine> athletes) {}
+
+    // One player's stat row
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnPlayerStatLine(
+            EspnAthleteRef athlete,
+            List<String> stats,                     // values aligned with table.names
+            Boolean didNotPlay) {}
+
+    // Minimal athlete info needed for the box score row
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnAthleteRef(
+            String id,
+            String displayName,
+            Boolean starter) {}
 }

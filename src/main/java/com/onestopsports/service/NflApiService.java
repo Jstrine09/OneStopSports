@@ -2,6 +2,7 @@ package com.onestopsports.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.onestopsports.dto.BoxScoreDto;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.StandingsEntryDto;
@@ -647,4 +648,157 @@ public class NflApiService {
             default -> "SCHEDULED";
         };
     }
+
+    // ── Box Score ──────────────────────────────────────────────────────────────
+    // ESPN's /summary endpoint returns a full game box score for any historical
+    // or in-progress NFL game. The shape is identical to NBA — same "boxscore"
+    // object with "teams" (aggregate) and "players" (per-player tables).
+    //
+    // URL pattern: /summary?event={eventId}
+    // Full URL example: https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401671695
+    //
+    // NFL player stats will contain columns like "C/ATT", "YDS", "TD", "INT"
+    // for QBs; "CAR", "YDS", "TD" for RBs; etc. ESPN groups them differently
+    // per position but we pass the raw column/value arrays straight through —
+    // the frontend renders whatever ESPN sends.
+
+    public BoxScoreDto fetchBoxScore(Long eventId) {
+        try {
+            EspnSummaryResponse response = restClient.get()
+                    .uri("/summary?event={id}", eventId)
+                    .retrieve()
+                    .body(EspnSummaryResponse.class);
+
+            if (response == null || response.boxscore() == null) {
+                log.debug("[NflApiService] fetchBoxScore: no boxscore data for event {}", eventId);
+                return null;
+            }
+
+            EspnBoxscoreData boxscore = response.boxscore();
+
+            // Map aggregate team stats (home + away)
+            List<BoxScoreDto.TeamBoxScore> teams = new ArrayList<>();
+            if (boxscore.teams() != null) {
+                for (EspnTeamStatGroup group : boxscore.teams()) {
+                    if (group.team() == null) continue;
+                    boolean isHome = "home".equalsIgnoreCase(group.homeAway());
+                    List<BoxScoreDto.StatLine> stats = group.statistics() == null
+                            ? Collections.emptyList()
+                            : group.statistics().stream()
+                                    .map(s -> new BoxScoreDto.StatLine(s.label(), s.displayValue()))
+                                    .toList();
+                    teams.add(new BoxScoreDto.TeamBoxScore(
+                            parseId(group.team().id()),
+                            group.team().displayName(),
+                            group.team().abbreviation(),
+                            isHome,
+                            stats));
+                }
+                teams.sort(Comparator.comparing(t -> t.isHome() ? 0 : 1));
+            }
+
+            // Map per-player stat tables.
+            // NFL groups players by position (QB, RB, WR, etc.) within each team —
+            // the "statistics" array for a team has multiple EspnPlayerStatTable entries,
+            // one per position group. We flatten them into one PlayerStatGroup per team
+            // using the first non-empty table's columns and combining all rows.
+            // Each position-group table may have different columns, so we take the first
+            // table's columns and mark them as the group columns. If column counts differ
+            // across position groups the stats list for those rows will be shorter —
+            // the frontend guards against that with optional chaining.
+            List<BoxScoreDto.PlayerStatGroup> playerStats = new ArrayList<>();
+            if (boxscore.players() != null) {
+                for (EspnPlayerTeamGroup group : boxscore.players()) {
+                    if (group.team() == null || group.statistics() == null || group.statistics().isEmpty()) continue;
+                    boolean isHome = "home".equalsIgnoreCase(group.homeAway());
+
+                    // Collect all players across all position tables for this team
+                    List<String> columns = Collections.emptyList();
+                    List<BoxScoreDto.PlayerStatRow> rows = new ArrayList<>();
+
+                    for (EspnPlayerStatTable table : group.statistics()) {
+                        // Use the first table's column headers as the canonical columns
+                        if (columns.isEmpty() && table.names() != null) {
+                            columns = table.names();
+                        }
+                        if (table.athletes() == null) continue;
+                        for (EspnPlayerStatLine line : table.athletes()) {
+                            if (line.athlete() == null) continue;
+                            if (Boolean.TRUE.equals(line.didNotPlay())) continue;
+                            rows.add(new BoxScoreDto.PlayerStatRow(
+                                    line.athlete().displayName(),
+                                    parseId(line.athlete().id()),
+                                    Boolean.TRUE.equals(line.athlete().starter()),
+                                    line.stats() != null ? line.stats() : Collections.emptyList()));
+                        }
+                    }
+
+                    playerStats.add(new BoxScoreDto.PlayerStatGroup(
+                            parseId(group.team().id()),
+                            group.team().displayName(),
+                            isHome,
+                            columns,
+                            rows));
+                }
+                playerStats.sort(Comparator.comparing(g -> g.isHome() ? 0 : 1));
+            }
+
+            return new BoxScoreDto("american-football", teams, playerStats);
+
+        } catch (RestClientException e) {
+            log.warn("[NflApiService] fetchBoxScore failed for event {}: {}", eventId, e.getMessage());
+            return null;
+        }
+    }
+
+    // ── ESPN Summary inner records ─────────────────────────────────────────────
+    // Identical shape to the NBA summary records — ESPN uses the same JSON
+    // structure for both sports. Defined separately here so each service is
+    // self-contained and doesn't have cross-service coupling.
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnSummaryResponse(EspnBoxscoreData boxscore) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnBoxscoreData(
+            List<EspnTeamStatGroup> teams,
+            List<EspnPlayerTeamGroup> players) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnTeamStatGroup(
+            EspnBoxscoreTeam team,
+            String homeAway,
+            List<EspnTeamStat> statistics) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnBoxscoreTeam(
+            String id,
+            String displayName,
+            String abbreviation) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnTeamStat(String name, String label, String displayValue) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnPlayerTeamGroup(
+            EspnBoxscoreTeam team,
+            String homeAway,
+            List<EspnPlayerStatTable> statistics) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnPlayerStatTable(
+            List<String> names,
+            List<EspnPlayerStatLine> athletes) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnPlayerStatLine(
+            EspnAthleteRef athlete,
+            List<String> stats,
+            Boolean didNotPlay) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record EspnAthleteRef(
+            String id,
+            String displayName,
+            Boolean starter) {}
 }
