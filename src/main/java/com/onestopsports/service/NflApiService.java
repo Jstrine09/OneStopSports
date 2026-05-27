@@ -799,7 +799,7 @@ public class NflApiService {
                             rows.add(new BoxScoreDto.PlayerStatRow(
                                     line.athlete().displayName(),
                                     parseId(line.athlete().id()),
-                                    Boolean.TRUE.equals(line.athlete().starter()),
+                                    Boolean.TRUE.equals(line.starter()),  // starter is on the line, not inside athlete
                                     line.stats() != null ? line.stats() : Collections.emptyList()));
                         }
                     }
@@ -826,50 +826,59 @@ public class NflApiService {
     // Identical shape to the NBA summary records — ESPN uses the same JSON
     // structure for both sports. Defined separately here so each service is
     // self-contained and doesn't have cross-service coupling.
+    //
+    // IMPORTANT: These must be package-private (not `private`). Java 21 makes
+    // a `private record`'s canonical constructor private too, which blocks
+    // Jackson from deserializing — body() returns null and every box score shows
+    // "unavailable". The `starter` field belongs on EspnPlayerStatLine (the outer
+    // row), not inside EspnAthleteRef — that's where ESPN actually sends it.
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnSummaryResponse(EspnBoxscoreData boxscore) {}
+    record EspnSummaryResponse(EspnBoxscoreData boxscore) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnBoxscoreData(
+    record EspnBoxscoreData(
             List<EspnTeamStatGroup> teams,
             List<EspnPlayerTeamGroup> players) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnTeamStatGroup(
+    record EspnTeamStatGroup(
             EspnBoxscoreTeam team,
             String homeAway,
             List<EspnTeamStat> statistics) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnBoxscoreTeam(
+    record EspnBoxscoreTeam(
             String id,
             String displayName,
             String abbreviation) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnTeamStat(String name, String label, String displayValue) {}
+    record EspnTeamStat(String name, String label, String displayValue) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnPlayerTeamGroup(
+    record EspnPlayerTeamGroup(
             EspnBoxscoreTeam team,
             String homeAway,
             List<EspnPlayerStatTable> statistics) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnPlayerStatTable(
+    record EspnPlayerStatTable(
             List<String> names,
             List<EspnPlayerStatLine> athletes) {}
 
+    // `starter` is at this level in ESPN's JSON, not nested inside the athlete object.
+    // ESPN sends: { "athlete": {"id":"...", "displayName":"..."}, "stats":[...], "starter": true }
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnPlayerStatLine(
+    record EspnPlayerStatLine(
             EspnAthleteRef athlete,
             List<String> stats,
+            Boolean starter,      // true = player was in the starting lineup
             Boolean didNotPlay) {}
 
+    // Only id + displayName — `starter` is NOT here, it's on EspnPlayerStatLine above
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnAthleteRef(
+    record EspnAthleteRef(
             String id,
-            String displayName,
-            Boolean starter) {}
+            String displayName) {}
 }

@@ -733,7 +733,7 @@ public class NbaApiService {
                             rows.add(new BoxScoreDto.PlayerStatRow(
                                     line.athlete().displayName(),
                                     parseId(line.athlete().id()),
-                                    Boolean.TRUE.equals(line.athlete().starter()),
+                                    Boolean.TRUE.equals(line.starter()),  // starter is on the line, not inside athlete
                                     line.stats() != null ? line.stats() : Collections.emptyList()));
                         }
                     }
@@ -763,55 +763,65 @@ public class NbaApiService {
     // the summary response is very large (play-by-play, news, injuries, etc.) and
     // we only care about the "boxscore" section.
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnSummaryResponse(EspnBoxscoreData boxscore) {}
+    // ── IMPORTANT: These records must be package-private (NOT private). ──────────
+    // In Java 21, a `private record`'s canonical constructor is also private,
+    // which means Jackson cannot instantiate it during JSON deserialization.
+    // Every other ESPN record in this file is already package-private and works
+    // correctly. Making these `private` caused body() to silently return null,
+    // which made every box score show "unavailable" on the frontend.
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnBoxscoreData(
+    record EspnSummaryResponse(EspnBoxscoreData boxscore) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record EspnBoxscoreData(
             List<EspnTeamStatGroup> teams,
             List<EspnPlayerTeamGroup> players) {}
 
     // One entry per team in the teams array — aggregate stats (points, rebounds, etc.)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnTeamStatGroup(
+    record EspnTeamStatGroup(
             EspnBoxscoreTeam team,
             String homeAway,                       // "home" or "away"
             List<EspnTeamStat> statistics) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnBoxscoreTeam(
+    record EspnBoxscoreTeam(
             String id,
             String displayName,
             String abbreviation) {}
 
     // A single aggregate stat for a team (e.g. name="points", label="Points", displayValue="112")
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnTeamStat(String name, String label, String displayValue) {}
+    record EspnTeamStat(String name, String label, String displayValue) {}
 
     // One entry per team in the players array — per-player stat tables
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnPlayerTeamGroup(
+    record EspnPlayerTeamGroup(
             EspnBoxscoreTeam team,
             String homeAway,
             List<EspnPlayerStatTable> statistics) {}
 
     // The stat table for one team: column headers + player rows
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnPlayerStatTable(
+    record EspnPlayerStatTable(
             List<String> names,                     // column header labels
             List<EspnPlayerStatLine> athletes) {}
 
-    // One player's stat row
+    // One player's stat row.
+    // IMPORTANT: `starter` lives HERE at the line level, NOT inside EspnAthleteRef.
+    // ESPN's JSON looks like: { "athlete": {...}, "stats": [...], "starter": true, "didNotPlay": false }
+    // If you put `starter` inside EspnAthleteRef it will always deserialize as null.
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnPlayerStatLine(
+    record EspnPlayerStatLine(
             EspnAthleteRef athlete,
             List<String> stats,                     // values aligned with table.names
+            Boolean starter,                        // true for players in the starting lineup
             Boolean didNotPlay) {}
 
-    // Minimal athlete info needed for the box score row
+    // Minimal athlete info needed for the box score row (id + name only — no starter here!)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EspnAthleteRef(
+    record EspnAthleteRef(
             String id,
-            String displayName,
-            Boolean starter) {}
+            String displayName) {}
 }
