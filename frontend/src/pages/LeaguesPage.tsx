@@ -1,14 +1,26 @@
+import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchSports, fetchLeaguesBySport } from '../api/sports'
 import { fetchStandings, fetchTeamsByLeague } from '../api/leagues'
+import { fetchMatchesByLeagueAndDate } from '../api/matches'
 import StandingsTable from '../components/StandingsTable'
+import MatchCard from '../components/MatchCard'
+import DateNav from '../components/DateNav'
 import LoadingSpinner from '../components/LoadingSpinner'
 import StadiumBackdrop from '../components/StadiumBackdrop'
 import { getLeagueTheme } from '../lib/leagueTheme'
 import { MapPin } from 'lucide-react'
 
-type Tab = 'standings' | 'teams'
+type Tab = 'standings' | 'teams' | 'results'
+
+// Returns yesterday's date as YYYY-MM-DD.
+// Results tab defaults to yesterday because today's matches are usually still in progress.
+function yesterdayStr() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
 
 // Builds the short text shown in the fallback badge when a league has no logo.
 // Two letters of a long name (e.g. "PR" for "Premier League") looks like a typo —
@@ -39,6 +51,11 @@ export default function LeaguesPage() {
   // (back button, deep links, shared URLs) restore the correct view.
   const [searchParams, setSearchParams] = useSearchParams()
 
+  // Results tab date state — kept in component state (not URL) since it's a
+  // transient navigation choice, not something worth persisting in the URL.
+  // Defaults to yesterday so there are actually finished matches to show.
+  const [resultsDate, setResultsDate] = useState(yesterdayStr)
+
   const { data: sports = [], isLoading: loadingSports } = useQuery({
     queryKey: ['sports'],
     queryFn: fetchSports,
@@ -48,6 +65,7 @@ export default function LeaguesPage() {
   const sportSlug    = searchParams.get('sport')  ?? sports[0]?.slug ?? null
   const activeLeagueId = searchParams.get('league') ? Number(searchParams.get('league')) : null
   const activeTab    = (searchParams.get('tab') ?? 'standings') as Tab
+
 
   const { data: leagues = [], isLoading: loadingLeagues } = useQuery({
     queryKey: ['leagues', sportSlug],
@@ -69,6 +87,17 @@ export default function LeaguesPage() {
     queryKey: ['teams', leagueId],
     queryFn: () => fetchTeamsByLeague(leagueId!),
     enabled: leagueId !== null && activeTab === 'teams',
+    staleTime: 5 * 60_000,
+  })
+
+  // Results tab — fetch matches for the selected league on the selected date.
+  // Same endpoint as HomePage: GET /api/matches?league={id}&date={date}.
+  // staleTime: 5 minutes — finished results don't change, but we don't need Infinity
+  // here since the user may be browsing different dates and we want reasonable freshness.
+  const { data: results = [], isLoading: loadingResults } = useQuery({
+    queryKey: ['matches', leagueId, resultsDate],
+    queryFn: () => fetchMatchesByLeagueAndDate(leagueId!, resultsDate),
+    enabled: leagueId !== null && activeTab === 'results',
     staleTime: 5 * 60_000,
   })
 
@@ -182,10 +211,9 @@ export default function LeaguesPage() {
         </div>
       )}
 
-      {/* Standings / Teams toggle — segmented control on a flat surface.
-          Stays neutral (zinc-100 fill) — it's a control, not identity. */}
+      {/* Standings / Teams / Results toggle — segmented control on a flat surface. */}
       <div className="inline-flex rounded-lg border border-stone-200 p-0.5 dark:border-zinc-900">
-        {(['standings', 'teams'] as Tab[]).map((tab) => (
+        {(['standings', 'teams', 'results'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setTab(tab)}
@@ -213,7 +241,7 @@ export default function LeaguesPage() {
             }
           />
         )
-      ) : (
+      ) : activeTab === 'teams' ? (
         loadingTeams ? (
           <LoadingSpinner />
         ) : teams.length === 0 ? (
@@ -247,6 +275,29 @@ export default function LeaguesPage() {
             ))}
           </div>
         )
+      ) : (
+        // Results tab — date picker + match cards for the selected league and date.
+        // Clicking any match card navigates to MatchDetailPage where the box score is shown.
+        // The DateNav here is scoped to this tab — it doesn't affect the HomePage date.
+        <div className="space-y-3">
+          <DateNav date={resultsDate} onChange={setResultsDate} />
+
+          {loadingResults ? (
+            <LoadingSpinner />
+          ) : results.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-stone-400 dark:text-zinc-600">
+              <span className="text-3xl">📅</span>
+              <p className="text-sm">No matches on this date</p>
+            </div>
+          ) : (
+            // Match cards grouped in a card — same style as the homepage sections
+            <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+              {results.map((match) => (
+                <MatchCard key={match.id} match={match} />
+              ))}
+            </section>
+          )}
+        </div>
       )}
     </div>
   )
