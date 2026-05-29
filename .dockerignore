@@ -1,0 +1,24 @@
+# Keep the Docker build context small and avoid copying host-built artifacts
+# into the image (the image rebuilds everything from source itself).
+
+# Backend build output
+target/
+
+# Frontend dependencies and build output (rebuilt inside the frontend stage)
+frontend/node_modules/
+frontend/dist/
+
+# Secrets — never bake these into an image (env vars are injected at runtime)
+.env
+**/application-local.yml
+
+# VCS / IDE / planning noise
+.git/
+.idea/
+.vscode/
+.planning/
+.agents/
+.claude/
+
+# OS junk
+.DS_Store

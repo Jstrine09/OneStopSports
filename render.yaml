@@ -1,0 +1,39 @@
+# Render Blueprint — defines the OneStopSports web service.
+# https://render.com/docs/blueprint-spec
+#
+# This builds the Dockerfile (frontend + backend in one image) and runs it as a
+# free web service. The database lives on Neon (free, durable) — its connection
+# details are provided via the env vars below (entered in the Render dashboard,
+# never committed).
+#
+# To use: in Render, New → Blueprint, point it at this repo. Render will prompt
+# for the values of the env vars marked `sync: false`.
+
+services:
+  - type: web
+    name: onestopsports
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # A public GET endpoint that returns 200 as soon as the app is up (even
+    # before the data loaders finish seeding). Used by Render to detect health.
+    healthCheckPath: /api/sports
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      # ── Secrets / connection details — entered in the Render dashboard ──
+      # Neon Postgres JDBC URL, e.g.
+      #   jdbc:postgresql://ep-xxx.us-east-2.aws.neon.tech/onestopsports?sslmode=require
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+      # Free key from https://www.football-data.org
+      - key: FOOTBALL_DATA_API_KEY
+        sync: false
+      # Base64 secret — generate with: openssl rand -base64 64
+      - key: JWT_SECRET
+        sync: false

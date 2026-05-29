@@ -52,7 +52,14 @@ public class SecurityConfig {
                         // without this, Spring Security returns 401 and the UI never loads.
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/users/me/**").authenticated()     // Profile / favourites require login
-                        .anyRequest().authenticated()                            // Everything else requires login
+                        // Serve the React single-page app (index.html, hashed assets, icons,
+                        // and client-side routes like /leagues or /live) to everyone. These are
+                        // GET requests for the frontend shell — the API endpoints above stay
+                        // individually secured, and any protected action still goes through an
+                        // authenticated /api call. Without this, .anyRequest().authenticated()
+                        // would return 401 for the app's own HTML and JS.
+                        .requestMatchers(HttpMethod.GET, "/**").permitAll()
+                        .anyRequest().authenticated()                            // Everything else (POST/PUT/DELETE) requires login
                 )
 
                 // Add our JWT filter BEFORE Spring's default username/password filter.
