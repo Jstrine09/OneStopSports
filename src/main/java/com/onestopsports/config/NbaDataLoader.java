@@ -89,9 +89,12 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                     // Also require every player to have an externalId — pre-V6 rosters were
                     // seeded before the column existed, so they're missing ESPN athlete IDs
                     // and would be invisible to the career-stats endpoint.
-                    boolean allHaveExternalIds = teams.stream().noneMatch(t ->
+                    boolean allPlayersHaveExternalIds = teams.stream().noneMatch(t ->
                             playerRepository.existsByTeamIdAndExternalIdIsNull(t.getId()));
-                    return hasLogos && hasPlayers && allHaveExternalIds;
+                    // Also require every team to have an externalId (V7) — needed for historical
+                    // roster lookups. Pre-V7 teams have null; data loader backfills on this check.
+                    boolean allTeamsHaveExternalIds = teams.stream().allMatch(t -> t.getExternalId() != null);
+                    return hasLogos && hasPlayers && allPlayersHaveExternalIds && allTeamsHaveExternalIds;
                 })
                 .orElse(false);
 
@@ -188,8 +191,14 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                 // Update the crest URL if it was null (migration from old balldontlie data)
                 if (team.getCrestUrl() == null && crestUrl != null) {
                     team.setCrestUrl(crestUrl);
-                    teamRepository.save(team);
-                    log.info("[NbaDataLoader]   Updated crest URL for {}", team.getName());
+                }
+                // Backfill the ESPN team ID (V7) if it wasn't saved on first seed
+                if (team.getExternalId() == null) {
+                    team.setExternalId(apiTeam.id());
+                }
+                teamRepository.save(team);
+                if (team.getCrestUrl() != null || team.getExternalId() != null) {
+                    log.info("[NbaDataLoader]   Updated team metadata for {}", team.getName());
                 }
 
                 // If this team already has players in the DB, decide whether to skip
@@ -223,11 +232,12 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                 team = teamRepository.save(
                         Team.builder()
                                 .league(nba)
-                                .name(apiTeam.displayName())   // e.g. "Boston Celtics"
-                                .shortName(apiTeam.abbreviation()) // e.g. "BOS"
-                                .country(apiTeam.location())   // e.g. "Boston" (city)
-                                .crestUrl(crestUrl)             // ESPN CDN logo URL
-                                .stadium(null)                  // Not provided by ESPN teams endpoint
+                                .name(apiTeam.displayName())        // e.g. "Boston Celtics"
+                                .shortName(apiTeam.abbreviation())  // e.g. "BOS"
+                                .country(apiTeam.location())        // e.g. "Boston" (city)
+                                .crestUrl(crestUrl)                 // ESPN CDN logo URL
+                                .externalId(apiTeam.id())           // ESPN team ID — used for historical roster lookups
+                                .stadium(null)                      // Not provided by ESPN teams endpoint
                                 .build());
                 log.info("[NbaDataLoader]   Saved team: {}", team.getName());
             }

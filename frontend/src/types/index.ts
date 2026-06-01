@@ -28,14 +28,17 @@ export interface TeamDto {
 }
 
 export interface PlayerDto {
-  id: number
+  // id is null for historical-season players fetched from ESPN — they may not exist in our DB.
+  // The frontend checks for null id to disable the profile link and favourite toggle.
+  id: number | null
   name: string
   position: string | null
   nationality: string | null
   dateOfBirth: string | null
   jerseyNumber: number | null
   photoUrl: string | null
-  teamId: number
+  // teamId is null for historical-season players (not tied to a specific DB team row)
+  teamId: number | null
 }
 
 // Biographical enrichment from balldontlie.io — NBA players only.
@@ -137,6 +140,50 @@ export interface MatchEventDto {
   playerName: string | null
   assistName: string | null
   teamName: string | null
+}
+
+// ── Box Score ─────────────────────────────────────────────────────────────────
+// Mirrors BoxScoreDto.java and its nested records.
+// Returned by GET /api/matches/{id}/boxscore?leagueId={leagueId}
+// The frontend receives 204 (no body) when the game hasn't been played yet
+// or the external API returns nothing — handled by the query returning undefined.
+
+export interface BoxScoreDto {
+  sport: string                          // "basketball" | "american-football" | "football"
+  teams: TeamBoxScoreDto[]               // always 2: index 0 = home, index 1 = away
+  playerStats: PlayerStatGroupDto[]      // one per team: index 0 = home, index 1 = away
+}
+
+// Aggregate team stats for one side of the match
+export interface TeamBoxScoreDto {
+  teamId: number
+  teamName: string
+  abbreviation: string | null
+  isHome: boolean
+  stats: StatLineDto[]                   // label/value pairs in display order
+}
+
+// One stat: e.g. { label: "Points", value: "112" }
+export interface StatLineDto {
+  label: string
+  value: string
+}
+
+// All player rows for one team
+export interface PlayerStatGroupDto {
+  teamId: number
+  teamName: string
+  isHome: boolean
+  columns: string[]                      // column header labels (e.g. ["MIN","PTS","REB","AST"])
+  players: PlayerStatRowDto[]            // one row per player
+}
+
+// One player's stat line — stats[i] aligns with columns[i]
+export interface PlayerStatRowDto {
+  playerName: string
+  playerId: number | null                // null for football derived box scores
+  starter: boolean
+  stats: string[]                        // values aligned with PlayerStatGroupDto.columns
 }
 
 // ── Match status helpers ───────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 package com.onestopsports.controller;
 
+import com.onestopsports.dto.BoxScoreDto;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.MatchEventDto;
 import com.onestopsports.service.MatchService;
@@ -76,5 +77,27 @@ public class MatchController {
     @GetMapping("/{id}/lineups")
     public ResponseEntity<Map<String, Object>> getMatchLineups(@PathVariable Long id) {
         return ResponseEntity.ok(matchService.getMatchLineups(id));
+    }
+
+    // GET /api/matches/{id}/boxscore?leagueId={leagueId}
+    //
+    // Returns the full box score (team stats + per-player stat table) for a match.
+    //
+    // Why leagueId is a required query param:
+    //   Match IDs are sport-specific (ESPN event ID for NBA/NFL; football-data.org ID for football).
+    //   Without knowing the league we can't route the request to the right external API.
+    //   The frontend always has the leagueId available from the match object it already loaded.
+    //
+    // Response codes:
+    //   200 — box score data available (game played and API returned data)
+    //   204 — no content (game hasn't been played yet, or API returned nothing)
+    @GetMapping("/{id}/boxscore")
+    public ResponseEntity<BoxScoreDto> getBoxScore(
+            @PathVariable Long id,
+            @RequestParam Long leagueId) {
+        BoxScoreDto boxScore = matchService.getBoxScore(id, leagueId);
+        return boxScore != null
+                ? ResponseEntity.ok(boxScore)
+                : ResponseEntity.noContent().build();
     }
 }

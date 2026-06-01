@@ -7,6 +7,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -20,6 +21,12 @@ import java.time.Duration;
 // we store the result in Redis for 30 seconds so repeated requests are instant.
 @Configuration
 @EnableCaching // Activates Spring's @Cacheable annotation support
+// Active in every profile EXCEPT prod. The free production deploy runs without a
+// Redis server to keep hosting at $0 — there, Spring Boot's in-memory "simple"
+// cache (configured in application-prod.yml) backs @Cacheable instead. The live
+// scores scheduler overwrites the cached value every 30s either way, so behaviour
+// is equivalent for a single instance.
+@Profile("!prod")
 public class RedisConfig {
 
     @Bean

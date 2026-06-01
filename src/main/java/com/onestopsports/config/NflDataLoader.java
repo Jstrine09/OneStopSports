@@ -79,8 +79,12 @@ public class NflDataLoader implements CommandLineRunner {
                     if (teams.size() < NFL_TEAM_COUNT) return false;
                     // Also require every player to have an externalId — pre-V6 rosters were
                     // seeded before the column existed, so they're missing ESPN athlete IDs.
-                    return teams.stream().noneMatch(t ->
+                    boolean allPlayersHaveExternalIds = teams.stream().noneMatch(t ->
                             playerRepository.existsByTeamIdAndExternalIdIsNull(t.getId()));
+                    // Also require every team to have an externalId (V7) — needed for historical
+                    // roster lookups. Pre-V7 teams have null; data loader backfills on this check.
+                    boolean allTeamsHaveExternalIds = teams.stream().allMatch(t -> t.getExternalId() != null);
+                    return allPlayersHaveExternalIds && allTeamsHaveExternalIds;
                 })
                 .orElse(false);
 
@@ -176,6 +180,13 @@ public class NflDataLoader implements CommandLineRunner {
                 // ── Existing team ──────────────────────────────────────────
                 team = existingTeamsByName.get(apiTeam.displayName());
 
+                // Backfill the ESPN team ID (V7) if it wasn't saved on first seed
+                if (team.getExternalId() == null) {
+                    team.setExternalId(apiTeam.id());
+                    teamRepository.save(team);
+                    log.info("[NflDataLoader]   Backfilled externalId for {}", team.getName());
+                }
+
                 if (playerRepository.countByTeamId(team.getId()) > 0) {
 
                     // Pre-V6 data: roster exists but at least one player has no externalId.
@@ -202,11 +213,12 @@ public class NflDataLoader implements CommandLineRunner {
                 team = teamRepository.save(
                         Team.builder()
                                 .league(nfl)
-                                .name(apiTeam.displayName())  // e.g. "Arizona Cardinals"
+                                .name(apiTeam.displayName())       // e.g. "Arizona Cardinals"
                                 .shortName(apiTeam.abbreviation()) // e.g. "ARI"
-                                .country(apiTeam.location())  // e.g. "Arizona" — city/state
-                                .crestUrl(crestUrl)           // ESPN CDN URL — available on free tier
-                                .stadium(null)                // Not available in this API response
+                                .country(apiTeam.location())       // e.g. "Arizona" — city/state
+                                .crestUrl(crestUrl)                // ESPN CDN URL — available on free tier
+                                .externalId(apiTeam.id())          // ESPN team ID — used for historical roster lookups
+                                .stadium(null)                     // Not available in this API response
                                 .build());
                 log.info("[NflDataLoader]   Saved team: {}", team.getName());
             }

@@ -1,6 +1,7 @@
 package com.onestopsports.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.onestopsports.dto.BoxScoreDto;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.MatchEventDto;
 import com.onestopsports.dto.StandingsEntryDto;
@@ -451,6 +452,122 @@ public class ExternalApiService {
                 entry.points(),
                 null,           // conference — football/soccer leagues don't use this
                 null);          // division   — football/soccer leagues don't use this
+    }
+
+    // ── Football Box Score (free-tier derivation) ──────────────────────────────
+    // The football-data.org free tier does NOT expose per-player stats, possession,
+    // shots, or advanced metrics. What we DO have from GET /matches/{id} is:
+    //   - goals list (scorer, minute, type — regular / own goal / penalty)
+    //   - bookings list (player, minute, card type — YELLOW / RED)
+    //   - substitutions list (player in, player out, minute)
+    //
+    // From these three lists we derive:
+    //   TeamBoxScore.stats — goals, yellow cards, red cards (one row per team)
+    //   PlayerStatGroup    — player event rows: who scored, who got booked
+    //
+    // This is a "best effort" box score — it's honest about what the free tier gives us.
+    // When/if the project upgrades to API-Football Pro, this method can be replaced with
+    // a real stats fetch from /fixtures/{id}/statistics.
+    //
+    // Returns null if the API returns no detail (unknown match ID).
+
+    public BoxScoreDto fetchFootballBoxScore(Long matchId) {
+        ApiMatchDetail detail;
+        try {
+            // GET /matches/{id} is the same endpoint used by fetchMatchEventDtos() and
+            // fetchMatchById() — we reuse it here to avoid a redundant API call pattern.
+            detail = restClient.get()
+                    .uri("/matches/{id}", matchId)
+                    .retrieve()
+                    .body(ApiMatchDetail.class);
+        } catch (Exception e) {
+            log.warn("[ExternalApiService] fetchFootballBoxScore failed for match {}: {}", matchId, e.getMessage());
+            return null;
+        }
+
+        if (detail == null || detail.homeTeam() == null || detail.awayTeam() == null) return null;
+
+        ApiMatchTeam homeTeam = detail.homeTeam();
+        ApiMatchTeam awayTeam = detail.awayTeam();
+
+        // ── Count events per team ──────────────────────────────────────────────
+        // We tally goals (by team ID), yellow cards, and red cards separately.
+        // Own goals count for the OPPOSING team (the team that benefits, not the team whose
+        // player scored it) — that's already how football-data.org labels the team on an own goal.
+        int homeGoals = 0, awayGoals = 0;
+        int homeYellow = 0, awayYellow = 0;
+        int homeRed = 0, awayRed = 0;
+
+        // Track player events for the player table rows
+        // Format: teamId → list of BoxScoreDto.PlayerStatRow
+        List<BoxScoreDto.PlayerStatRow> homeRows = new ArrayList<>();
+        List<BoxScoreDto.PlayerStatRow> awayRows = new ArrayList<>();
+
+        if (detail.goals() != null) {
+            for (ApiGoal g : detail.goals()) {
+                if (g.team() == null) continue;
+                boolean isHome = homeTeam.id().equals(g.team().id());
+                if (isHome) homeGoals++; else awayGoals++;
+
+                // Add a goal-scorer row if we have a scorer name
+                if (g.scorer() != null) {
+                    String label = g.minute() != null ? g.minute() + "'" : "";
+                    String goalType = "OWN_GOAL".equals(g.type()) ? "(OG)"
+                                   : "PENALTY".equals(g.type()) ? "(Pen)" : "";
+                    // stats columns: ["Minute", "Event", "Type"]
+                    List<String> stats = List.of(label, "Goal " + goalType, "GOAL");
+                    BoxScoreDto.PlayerStatRow row = new BoxScoreDto.PlayerStatRow(
+                            g.scorer().name(), g.scorer().id(), false, stats);
+                    if (isHome) homeRows.add(row); else awayRows.add(row);
+                }
+            }
+        }
+
+        if (detail.bookings() != null) {
+            for (ApiBooking b : detail.bookings()) {
+                if (b.team() == null) continue;
+                boolean isHome = homeTeam.id().equals(b.team().id());
+                String cardType = b.card() != null ? b.card() : "";
+                if (cardType.contains("YELLOW")) {
+                    if (isHome) homeYellow++; else awayYellow++;
+                } else if (cardType.contains("RED")) {
+                    if (isHome) homeRed++; else awayRed++;
+                }
+                if (b.player() != null) {
+                    String label = b.minute() != null ? b.minute() + "'" : "";
+                    String cardDisplay = cardType.contains("YELLOW") ? "Yellow Card" : "Red Card";
+                    List<String> stats = List.of(label, cardDisplay, "CARD");
+                    BoxScoreDto.PlayerStatRow row = new BoxScoreDto.PlayerStatRow(
+                            b.player().name(), b.player().id(), false, stats);
+                    if (isHome) homeRows.add(row); else awayRows.add(row);
+                }
+            }
+        }
+
+        // ── Build TeamBoxScore entries ─────────────────────────────────────────
+        List<BoxScoreDto.StatLine> homeStats = List.of(
+                new BoxScoreDto.StatLine("Goals", String.valueOf(homeGoals)),
+                new BoxScoreDto.StatLine("Yellow Cards", String.valueOf(homeYellow)),
+                new BoxScoreDto.StatLine("Red Cards", String.valueOf(homeRed)));
+
+        List<BoxScoreDto.StatLine> awayStats = List.of(
+                new BoxScoreDto.StatLine("Goals", String.valueOf(awayGoals)),
+                new BoxScoreDto.StatLine("Yellow Cards", String.valueOf(awayYellow)),
+                new BoxScoreDto.StatLine("Red Cards", String.valueOf(awayRed)));
+
+        List<BoxScoreDto.TeamBoxScore> teams = List.of(
+                new BoxScoreDto.TeamBoxScore(homeTeam.id(), homeTeam.name(), homeTeam.shortName(), true, homeStats),
+                new BoxScoreDto.TeamBoxScore(awayTeam.id(), awayTeam.name(), awayTeam.shortName(), false, awayStats));
+
+        // ── Build PlayerStatGroup entries ──────────────────────────────────────
+        // Columns: Minute | Event | Type — the three values in each stat row above
+        List<String> columns = List.of("Minute", "Event", "Type");
+
+        List<BoxScoreDto.PlayerStatGroup> playerStats = List.of(
+                new BoxScoreDto.PlayerStatGroup(homeTeam.id(), homeTeam.name(), true, columns, homeRows),
+                new BoxScoreDto.PlayerStatGroup(awayTeam.id(), awayTeam.name(), false, columns, awayRows));
+
+        return new BoxScoreDto("football", teams, playerStats);
     }
 
 }

@@ -1,0 +1,57 @@
+# Production profile — loaded when SPRING_PROFILES_ACTIVE=prod.
+#
+# Designed for a free single-instance deploy (Render web service + Neon Postgres,
+# no Redis). Everything sensitive comes from environment variables set in the
+# hosting dashboard; this file is safe to commit (only ${VAR} placeholders).
+
+server:
+  # The host (e.g. Render) injects PORT and routes traffic to whatever the app
+  # binds. Falls back to 8081 if PORT isn't set (e.g. running the prod jar locally).
+  port: ${PORT:8081}
+
+spring:
+  datasource:
+    # Full JDBC URL of the managed Postgres, e.g.
+    #   jdbc:postgresql://ep-xxx.us-east-2.aws.neon.tech/onestopsports?sslmode=require
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Flyway owns the schema; Hibernate only validates against it.
+      ddl-auto: validate
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  # No Redis in production. Use Spring's in-memory ConcurrentMapCacheManager so
+  # @Cacheable still works (the live-scores scheduler overwrites the cached value
+  # every 30s, so this behaves like the Redis cache for a single instance).
+  cache:
+    type: simple
+
+  # Don't let Spring Boot try to auto-configure (and connect to) Redis. Without
+  # this the app would fail at startup attempting to reach a Redis server that
+  # doesn't exist. Mirrors the test profile. RedisConfig itself is @Profile("!prod").
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+
+external-api:
+  football-data:
+    # Free key from football-data.org — set FOOTBALL_DATA_API_KEY in the host env.
+    api-key: ${FOOTBALL_DATA_API_KEY}
+  # NBA + NFL use ESPN's keyless public API (base URLs in application.yml).
+  # balldontlie and api-football keys are optional — those features degrade
+  # gracefully without them, so they're left as the application.yml placeholders.
+
+jwt:
+  # Base64-encoded HMAC secret — set JWT_SECRET in the host env.
+  # Generate one with: openssl rand -base64 64
+  secret: ${JWT_SECRET}
+  expiration-ms: 86400000

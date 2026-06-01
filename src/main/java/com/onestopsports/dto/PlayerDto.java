@@ -11,6 +11,10 @@ public record PlayerDto(
         String nationality,       // e.g. "Norway"
         LocalDate dateOfBirth,    // Used to calculate age in the frontend
         Integer jerseyNumber,     // Shirt number — shown on the squad roster
-        String photoUrl,          // Player headshot (currently always null — not populated from API)
+        // Player headshot URL. Populated by PlayerService.resolvePhotoUrl:
+        //   • basketball / american-football → ESPN CDN URL derived from externalId
+        //   • football → API-Football photo URL (captured on first stats visit), else null
+        // Always null until then, so the frontend must handle the null case with a fallback.
+        String photoUrl,
         Long teamId               // Which team this player belongs to
 ) {}

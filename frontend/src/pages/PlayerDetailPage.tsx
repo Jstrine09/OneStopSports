@@ -128,11 +128,38 @@ export default function PlayerDetailPage() {
         <div className="pointer-events-none absolute -right-12 -top-16 h-56 w-56 rounded-full bg-amber-500/[0.04] blur-3xl" />
 
         <div className="relative flex items-center gap-5 sm:gap-7">
-          {/* Jersey number — the player's signature */}
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-stone-100 dark:bg-zinc-800 sm:h-28 sm:w-28">
-            <span className="text-5xl font-black tabular-nums leading-none tracking-tight text-stone-900 dark:text-zinc-100 sm:text-6xl">
-              {player.jerseyNumber ?? '–'}
-            </span>
+          {/* Identity tile — photo when available, jersey-number tile as the fallback.
+              When both are present the jersey becomes a small badge anchored bottom-right
+              so the photo stays the dominant element (Fotmob-style). The tile dimensions
+              stay constant (h-24/w-24 → h-28/w-28) so the rest of the layout doesn't shift. */}
+          <div className="relative h-24 w-24 shrink-0 sm:h-28 sm:w-28">
+            {player.photoUrl ? (
+              <>
+                <img
+                  src={player.photoUrl}
+                  alt={player.name}
+                  // ESPN headshots are PNGs with transparent backgrounds — the stone/zinc
+                  // tile underneath provides visual grounding so the head isn't floating.
+                  // object-cover crops to fill; object-top keeps faces high in the frame.
+                  className="h-full w-full rounded-2xl bg-stone-100 object-cover object-top dark:bg-zinc-800"
+                  // Gracefully degrade if the CDN URL ever 404s — swap to the jersey
+                  // fallback by clearing the src and surfacing a data-attr the next render
+                  // could pick up. Simplest fix: just hide the broken image.
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                />
+                {player.jerseyNumber != null && (
+                  <span className="absolute -bottom-1 -right-1 flex h-7 min-w-[28px] items-center justify-center rounded-full bg-stone-900 px-1.5 text-xs font-extrabold tabular-nums text-white ring-2 ring-white dark:bg-zinc-100 dark:text-zinc-900 dark:ring-zinc-900 sm:h-8 sm:min-w-[32px] sm:text-sm">
+                    {player.jerseyNumber}
+                  </span>
+                )}
+              </>
+            ) : (
+              <div className="flex h-full w-full items-center justify-center rounded-2xl bg-stone-100 dark:bg-zinc-800">
+                <span className="text-5xl font-black tabular-nums leading-none tracking-tight text-stone-900 dark:text-zinc-100 sm:text-6xl">
+                  {player.jerseyNumber ?? '–'}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Name + position + meta */}

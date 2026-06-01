@@ -104,8 +104,8 @@ export default function SearchPage() {
           <div className="space-y-1.5">
             {data.players.map((player) => (
               <Link
-                key={player.id}
-                to={`/players/${player.id}`}
+                key={player.id!}
+                to={`/players/${player.id!}`}
                 className="flex items-center gap-3 rounded-xl bg-white px-4 py-3
                            transition hover:bg-stone-50 active:scale-[0.98]
                            dark:bg-zinc-800 dark:hover:bg-zinc-700"

@@ -1,5 +1,6 @@
 package com.onestopsports.service;
 
+import com.onestopsports.dto.BoxScoreDto;
 import com.onestopsports.dto.MatchDto;
 import com.onestopsports.dto.MatchEventDto;
 import com.onestopsports.model.League;
@@ -145,6 +146,34 @@ public class MatchService {
     // Returns an empty map as a placeholder — shown as "coming soon" in the frontend.
     public Map<String, Object> getMatchLineups(Long matchId) {
         return Map.of();
+    }
+
+    // Returns the full box score for a match — team aggregate stats + per-player stat tables.
+    //
+    // Why leagueId is required: match IDs are sport-specific (ESPN event ID for NBA/NFL,
+    // football-data.org match ID for football). We need the leagueId to look up the sport
+    // slug so we can route the call to the correct service. This is the same pattern used
+    // in getMatchesByLeagueAndDate().
+    //
+    // Returns null when:
+    //   - matchId or leagueId is null
+    //   - the league doesn't exist in our DB
+    //   - the external API returns no box score (game not yet played, or API error)
+    // The controller converts null → HTTP 204 No Content so the frontend can show a placeholder.
+    @Transactional(readOnly = true)
+    // readOnly = true because we only read from the DB (the league lookup) — no writes.
+    // This also keeps the Hibernate session alive long enough to lazily load league.getSport().
+    public BoxScoreDto getBoxScore(Long matchId, Long leagueId) {
+        if (matchId == null || leagueId == null) return null;
+
+        return leagueRepository.findById(leagueId).map(league -> {
+            String sportSlug = league.getSport().getSlug(); // lazy load — works inside @Transactional
+            return switch (sportSlug) {
+                case "basketball"        -> nbaApiService.fetchBoxScore(matchId);
+                case "american-football" -> nflApiService.fetchBoxScore(matchId);
+                default                  -> externalApiService.fetchFootballBoxScore(matchId);
+            };
+        }).orElse(null);
     }
 
     // ── Scheduled Tasks ───────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchTeam, fetchTeamPlayers } from '../api/teams'
@@ -120,6 +121,16 @@ export default function TeamDetailPage() {
   const queryClient = useQueryClient()
   const teamId = Number(id)
 
+  // selectedSeason: null = current roster from DB; number = historical season from ESPN.
+  // Season = start year of the season — e.g. 2022 for "2022-23" (ESPN convention for NBA).
+  // For NFL the season is a single year (e.g. 2024).
+  const [selectedSeason, setSelectedSeason] = useState<number | null>(null)
+
+  // Build the year list once: current year down to 2000.
+  // Only the current year through 2000 — ESPN roster data doesn't reliably go further back.
+  const currentYear = new Date().getFullYear()
+  const seasonYears = Array.from({ length: currentYear - 1999 }, (_, i) => currentYear - i)
+
   const { data: team, isLoading: loadingTeam } = useQuery({
     queryKey: ['team', teamId],
     queryFn: () => fetchTeam(teamId),
@@ -127,10 +138,13 @@ export default function TeamDetailPage() {
   })
 
   const { data: players = [], isLoading: loadingPlayers } = useQuery({
-    queryKey: ['team-players', teamId],
-    queryFn: () => fetchTeamPlayers(teamId),
+    // Include selectedSeason in the query key so changing the season fetches fresh data
+    // and each season's result is cached independently (staleTime: 24h for historical).
+    queryKey: ['team-players', teamId, selectedSeason],
+    queryFn: () => fetchTeamPlayers(teamId, selectedSeason ?? undefined),
     enabled: !!teamId,
-    staleTime: 5 * 60_000,
+    // Historical rosters never change — cache for 24h. Current roster refreshes every 5m.
+    staleTime: selectedSeason != null ? 24 * 60 * 60_000 : 5 * 60_000,
   })
 
   const { data: favTeams = [] } = useQuery({
@@ -239,19 +253,43 @@ export default function TeamDetailPage() {
           Position groups stack as sections with tight uppercase labels, players
           sit as flat rows inside a single rounded surface per group. */}
       <section>
-        <div className="mb-3 flex items-baseline justify-between px-1">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-400">
-            Squad
-          </h2>
-          {players.length > 0 && (
-            <span className="text-xs tabular-nums text-stone-400 dark:text-zinc-600">{players.length} players</span>
-          )}
+        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-400">
+              Squad
+            </h2>
+            {players.length > 0 && (
+              <span className="text-xs tabular-nums text-stone-400 dark:text-zinc-600">{players.length} players</span>
+            )}
+          </div>
+
+          {/* Season picker — lets users browse historical rosters via ESPN's API.
+              Works for NBA and NFL only (football-data.org free tier has no historical roster endpoint).
+              Selecting a season triggers a new query with ?season=YYYY on the backend.
+              "Current Roster" (null) reverts to the live DB roster. */}
+          <select
+            value={selectedSeason ?? ''}
+            onChange={(e) => setSelectedSeason(e.target.value === '' ? null : Number(e.target.value))}
+            className="shrink-0 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-600 transition focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+            aria-label="Select season"
+          >
+            <option value="">Current Roster</option>
+            {seasonYears.map((year) => (
+              <option key={year} value={year}>
+                {year}–{String(year + 1).slice(2)} Season
+              </option>
+            ))}
+          </select>
         </div>
 
         {loadingPlayers ? (
           <LoadingSpinner />
         ) : players.length === 0 ? (
-          <p className="py-8 text-center text-sm text-stone-500 dark:text-zinc-500">No squad data available</p>
+          <p className="py-8 text-center text-sm text-stone-500 dark:text-zinc-500">
+            {selectedSeason != null
+              ? 'No roster data available for this season. Try another year, or only NBA and NFL teams have historical roster support.'
+              : 'No squad data available'}
+          </p>
         ) : (
           <div className="space-y-4">
             {POSITION_ORDER
@@ -262,11 +300,17 @@ export default function TeamDetailPage() {
                     {POSITION_LABEL[pos] ?? `${pos}s`} <span className="ml-1 opacity-60">· {grouped[pos].length}</span>
                   </h3>
                   <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
-                    {grouped[pos].map((player) => {
-                      const playerFav = favPlayerIds.has(player.id)
+                    {grouped[pos].map((player, idx) => {
+                      // Historical players have null id — they can't be favourited or navigated to.
+                      // Current-roster players always have an id.
+                      const isHistorical = player.id == null
+                      const playerFav = !isHistorical && favPlayerIds.has(player.id!)
+                      // Use index as fallback key when id is null (historical season).
+                      // This is safe because the list is re-fetched fresh on each season change.
+                      const rowKey = player.id ?? `hist-${idx}`
                       return (
                         <div
-                          key={player.id}
+                          key={rowKey}
                           className="flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-0 transition-colors hover:bg-stone-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
                         >
                           {/* Jersey number — small but bold, the player's identifier */}
@@ -274,31 +318,55 @@ export default function TeamDetailPage() {
                             {player.jerseyNumber != null ? player.jerseyNumber : '—'}
                           </span>
 
-                          {/* Name + nationality */}
+                          {/* Headshot avatar — only rendered when a photo URL exists.
+                              Sized to match the row height (~36px including padding) so the
+                              row chrome stays consistent. NBA/NFL get this for free via ESPN's
+                              CDN; football players will get it once their stats page has been
+                              visited (lazy capture from API-Football). */}
+                          {player.photoUrl && (
+                            <img
+                              src={player.photoUrl}
+                              alt=""
+                              aria-hidden="true"
+                              className="h-9 w-9 shrink-0 rounded-full bg-stone-100 object-cover object-top dark:bg-zinc-800"
+                              // Broken CDN URL → hide the avatar rather than show a broken-image icon
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                            />
+                          )}
+
+                          {/* Name + nationality.
+                              Current-season players: clickable Link → PlayerDetailPage.
+                              Historical players (id=null): plain text — no DB record to navigate to. */}
                           <div className="flex-1 overflow-hidden">
-                            <Link
-                              to={`/players/${player.id}`}
-                              state={player}
-                              className="truncate text-sm font-semibold transition-colors hover:text-amber-600 dark:hover:text-amber-400"
-                            >
-                              {player.name}
-                            </Link>
+                            {isHistorical ? (
+                              <p className="truncate text-sm font-semibold">{player.name}</p>
+                            ) : (
+                              <Link
+                                to={`/players/${player.id}`}
+                                state={player}
+                                className="truncate text-sm font-semibold transition-colors hover:text-amber-600 dark:hover:text-amber-400"
+                              >
+                                {player.name}
+                              </Link>
+                            )}
                             {player.nationality && (
                               <p className="truncate text-xs text-stone-500 dark:text-zinc-500">{player.nationality}</p>
                             )}
                           </div>
 
-                          {/* Favourite toggle */}
-                          <button
-                            onClick={() => togglePlayerFav(player.id)}
-                            className="shrink-0 rounded-full p-1.5 transition active:scale-90 hover:bg-stone-100 dark:hover:bg-zinc-800"
-                            aria-label={playerFav ? 'Remove from favourites' : 'Add to favourites'}
-                          >
-                            <Heart
-                              size={14}
-                              className={playerFav ? 'fill-red-500 text-red-500' : 'text-stone-300 dark:text-zinc-700'}
-                            />
-                          </button>
+                          {/* Favourite toggle — hidden for historical players (no DB id to store) */}
+                          {!isHistorical && (
+                            <button
+                              onClick={() => togglePlayerFav(player.id!)}
+                              className="shrink-0 rounded-full p-1.5 transition active:scale-90 hover:bg-stone-100 dark:hover:bg-zinc-800"
+                              aria-label={playerFav ? 'Remove from favourites' : 'Add to favourites'}
+                            >
+                              <Heart
+                                size={14}
+                                className={playerFav ? 'fill-red-500 text-red-500' : 'text-stone-300 dark:text-zinc-700'}
+                              />
+                            </button>
+                          )}
                         </div>
                       )
                     })}

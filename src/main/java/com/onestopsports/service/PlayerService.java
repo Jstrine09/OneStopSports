@@ -178,7 +178,49 @@ public class PlayerService {
                 player.getNationality(),
                 player.getDateOfBirth(),
                 player.getJerseyNumber(),
-                player.getPhotoUrl(),
+                resolvePhotoUrl(player),
                 player.getTeam().getId()); // Triggers a lazy load of the Team — expected here
+    }
+
+    // Photo URL resolution — three layers, returning the first hit:
+    //
+    //   1. A persisted Player.photoUrl on the row. This is how football players get a photo:
+    //      when their stats page is first opened we capture API-Football's player.photo URL
+    //      and save it (see PlayerService.fetchFootballStats — added in a follow-up).
+    //
+    //   2. ESPN's deterministic headshot CDN URL, derived from the sport + externalId.
+    //      Pattern: https://a.espncdn.com/i/headshots/{sport}/players/full/{espnAthleteId}.png
+    //      This covers every NBA / NFL player without us storing or fetching anything —
+    //      the URL is reconstructable from data we already have.
+    //
+    //   3. null — used for football players whose stats page hasn't been visited yet
+    //      (no photoUrl stored, no ESPN equivalent). The frontend falls back to initials.
+    //
+    // Reads .team.league.sport.slug — three lazy hops through the OSIV-managed Hibernate
+    // session. All callers of toDto() run inside a web request, so OSIV keeps the session
+    // alive long enough to resolve them.
+    private static String resolvePhotoUrl(Player player) {
+        // Layer 1: stored value wins (football players post-first-stats-visit)
+        if (player.getPhotoUrl() != null && !player.getPhotoUrl().isBlank()) {
+            return player.getPhotoUrl();
+        }
+
+        // Layer 2: ESPN CDN — only meaningful when we have an ESPN athlete ID
+        String externalId = player.getExternalId();
+        if (externalId == null || externalId.isBlank()) return null;
+
+        // Walk the chain defensively — bad seed data shouldn't crash this mapper.
+        if (player.getTeam() == null
+                || player.getTeam().getLeague() == null
+                || player.getTeam().getLeague().getSport() == null) {
+            return null;
+        }
+        String sportSlug = player.getTeam().getLeague().getSport().getSlug();
+
+        return switch (sportSlug) {
+            case "basketball"        -> "https://a.espncdn.com/i/headshots/nba/players/full/" + externalId + ".png";
+            case "american-football" -> "https://a.espncdn.com/i/headshots/nfl/players/full/" + externalId + ".png";
+            default                  -> null; // football handled by Layer 1 once stats visited; others unsupported
+        };
     }
 }
