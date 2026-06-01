@@ -16,17 +16,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 
 // DataLoader populates the database with real football data on first startup.
-// It only runs once — if all leagues are already in the database, it skips everything.
 // Data comes from football-data.org via ExternalApiService.
 //
 // Seeding order: Sport → Leagues → Teams → Players
 // Rate limit: football-data.org allows 10 requests/minute on the free tier,
-// so we sleep 6.2 seconds between each competition fetch.
+// so we sleep ~6.2 seconds between each competition fetch. A full seed therefore
+// takes roughly 10-15 minutes — the app is already serving while this runs in the
+// background, and Futbol fills in league by league.
+//
+// Resumable & self-healing: the loader only seeds the football competitions that
+// are missing (checked by their football-data.org externalId), so a partial seed
+// is finished on the next restart rather than being skipped forever.
 @Component // Marks this as a Spring-managed component so it gets picked up automatically
 public class DataLoader implements CommandLineRunner { // CommandLineRunner means run() is called once at startup
 
@@ -46,11 +53,22 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
     // Cap on how many teams to save per league (some competitions list more than 20)
     private static final int MAX_TEAMS_PER_LEAGUE = 20;
 
+    // How long to sleep between rate-limited calls (free tier = 10 req/min → 6s minimum)
+    private static final long RATE_LIMIT_SLEEP_MS = 6_200;
+
+    // Max attempts for a single competition fetch when hitting transient errors (429 / 5xx)
+    private static final int MAX_FETCH_ATTEMPTS = 3;
+
     private final ExternalApiService externalApiService;
     private final SportRepository    sportRepository;
     private final LeagueRepository   leagueRepository;
     private final TeamRepository     teamRepository;
     private final PlayerRepository   playerRepository;
+
+    // Running totals for the end-of-seed summary
+    private int leaguesSaved;
+    private int teamsSaved;
+    private int playersSaved;
 
     public DataLoader(ExternalApiService externalApiService,
                     SportRepository sportRepository,
@@ -66,30 +84,68 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
 
     @Override
     public void run(String... args) {
-        // Check if all expected leagues are already in the database.
-        // If we have fewer leagues than expected, some are missing — run the seeder.
-        // This lets us add new leagues later without wiping and re-seeding from scratch.
-        if (leagueRepository.count() >= COMPETITION_IDS.length) {
-            log.info("[DataLoader] All {} leagues already seeded — skipping.", COMPETITION_IDS.length);
+        // Count how many of OUR football competitions are already in the DB (by their
+        // football-data.org externalId). This is football-specific on purpose: counting
+        // ALL leagues would mix in NBA/NFL and could wrongly decide football is "done"
+        // when some football leagues are actually still missing.
+        long alreadySeeded = Arrays.stream(COMPETITION_IDS)
+                .filter(id -> leagueRepository.findByExternalId(id).isPresent())
+                .count();
+
+        if (alreadySeeded == COMPETITION_IDS.length) {
+            log.info("[DataLoader] All {} football leagues already seeded — skipping.", COMPETITION_IDS.length);
             return;
         }
+        if (alreadySeeded > 0) {
+            log.info("[DataLoader] Resuming football seed — {}/{} leagues already present, fetching the rest.",
+                    alreadySeeded, COMPETITION_IDS.length);
+        }
 
-        log.info("[DataLoader] Seeding database from football-data.org...");
+        log.info("[DataLoader] ============================================================");
+        log.info("[DataLoader] Seeding football data from football-data.org.");
+        log.info("[DataLoader] Free tier = 10 req/min, so this sleeps between calls and");
+        log.info("[DataLoader] takes ~10-15 min. The app is already up; Futbol fills in");
+        log.info("[DataLoader] league by league as this runs in the background.");
+        log.info("[DataLoader] ============================================================");
+
+        long startMs = System.currentTimeMillis();
         try {
             seed();
+            long mins = (System.currentTimeMillis() - startMs) / 60_000;
+            log.info("[DataLoader] Done in ~{} min. Saved this run: {} leagues, {} teams, {} players.",
+                    mins, leaguesSaved, teamsSaved, playersSaved);
+        } catch (RestClientResponseException e) {
+            // A non-2xx HTTP response from football-data.org. The most important case to
+            // surface loudly is a bad/missing API key — otherwise it looks like a mystery
+            // "Futbol is empty" bug with no obvious cause.
+            int status = e.getStatusCode().value();
+            if (isAuthError(e)) {
+                log.error("[DataLoader] ############################################################");
+                log.error("[DataLoader] FOOTBALL SEEDING ABORTED — football-data.org rejected the key.");
+                log.error("[DataLoader] HTTP {}: {}", status, oneLine(e.getResponseBodyAsString()));
+                log.error("[DataLoader] >> Set a valid FOOTBALL_DATA_API_KEY and restart. Until then,");
+                log.error("[DataLoader] >> Futbol leagues/teams/scores will be EMPTY (NBA & NFL are");
+                log.error("[DataLoader] >> unaffected — they use a keyless API).");
+                log.error("[DataLoader] >> Free key: https://www.football-data.org/client/register");
+                log.error("[DataLoader] ############################################################");
+            } else if (status == 429) {
+                log.error("[DataLoader] Football seeding hit the rate limit (HTTP 429) and stopped. " +
+                        "Any leagues fetched so far are saved — restart to resume the rest.");
+            } else {
+                log.error("[DataLoader] Football seeding failed (HTTP {}): {}. " +
+                        "Partial data may be saved — restart to resume.", status, oneLine(e.getResponseBodyAsString()));
+            }
         } catch (Exception e) {
-            // If something goes wrong (e.g. API is down), log the error but let the app start anyway.
-            // Re-run the app to retry seeding.
-            log.error("[DataLoader] Seeding failed — app will still start but DB will be empty. " +
-                    "Re-run to retry. Cause: {}", e.getMessage());
+            log.error("[DataLoader] Football seeding failed — app still starts but Futbol may be " +
+                    "incomplete. Restart to resume. Cause: {}", e.getMessage());
         }
     }
 
     private void seed() throws InterruptedException {
 
         // Find-or-create the Futbol sport — named "Futbol" (not "Football") to distinguish it
-        // from American Football (NFL) which will be added as a separate sport.
-        // The slug stays "football" so existing API routes (/api/sports/football/leagues) keep working.
+        // from American Football (NFL) which is a separate sport. The slug stays "football" so
+        // existing API routes (/api/sports/football/leagues) keep working.
         // Idempotent: safe to call on every startup — skips creation if already present.
         Sport football = sportRepository.findBySlug("football")
                 .orElseGet(() -> sportRepository.save(
@@ -98,22 +154,25 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
                                 .slug("football")
                                 .iconUrl("https://crests.football-data.org/FL.svg")
                                 .build()));
-        log.info("[DataLoader] Saved sport: {}", football.getName());
+        log.info("[DataLoader] Sport ready: {}", football.getName());
 
         // Loop through each competition ID and seed its league, teams, and players
         for (int i = 0; i < COMPETITION_IDS.length; i++) {
             int competitionId = COMPETITION_IDS[i];
-            log.info("[DataLoader] Fetching competition {}...", competitionId);
 
-            // Skip this league if it's already in the database.
-            // This means on a re-run we only fetch the new leagues, not the existing ones.
+            // Skip this league if it's already in the database (resume support).
             if (leagueRepository.findByExternalId(competitionId).isPresent()) {
-                log.info("[DataLoader] League {} already seeded, skipping.", competitionId);
-                continue; // Jump to the next competition
+                log.info("[DataLoader] League {}/{} (competition {}) already seeded — skipping.",
+                        i + 1, COMPETITION_IDS.length, competitionId);
+                continue;
             }
 
-            // Fetch all teams (and their squad lists) for this competition from the API
-            ApiTeamsResponse response = externalApiService.fetchTeamsByCompetition(competitionId);
+            log.info("[DataLoader] League {}/{}: fetching competition {}...",
+                    i + 1, COMPETITION_IDS.length, competitionId);
+
+            // Fetch all teams (and their squad lists) for this competition, retrying on
+            // transient errors (rate-limit / server hiccups). Auth errors bubble straight up.
+            ApiTeamsResponse response = fetchTeamsWithRetry(competitionId);
 
             // Get the country name from the API response, or fall back to a hardcoded value
             String country = (response.competition().area() != null)
@@ -137,6 +196,7 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
                             .country(country)
                             .season("2024/25")
                             .build());
+            leaguesSaved++;
             log.info("[DataLoader]   Saved league: {}", league.getName());
 
             List<ApiTeam> apiTeams = response.teams();
@@ -145,11 +205,8 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
             for (int j = 0; j < teamLimit; j++) {
                 ApiTeam apiTeam = apiTeams.get(j);
 
-                // Save the team to the database.
-                // externalId = football-data.org integer team ID, stored as a String for uniformity with ESPN IDs.
-                // Used to identify the team in future API calls (e.g. fetching squad separately).
-                // Note: football historical rosters are NOT available on the free tier,
-                // so this ID is stored for completeness but isn't used for season picker lookup.
+                // Save the team. externalId = football-data.org integer team ID, stored as a
+                // String for uniformity with ESPN IDs.
                 Team team = teamRepository.save(
                         Team.builder()
                                 .league(league)
@@ -160,16 +217,17 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
                                 .country(country)
                                 .externalId(String.valueOf(apiTeam.id())) // football-data.org team ID → stored as String
                                 .build());
+                teamsSaved++;
                 log.info("[DataLoader]     Saved team: {}", team.getName());
 
                 // Try to get the squad from the competition response
                 List<ApiPlayer> squad = apiTeam.squad();
 
-                // Some competitions (especially UCL) don't include squad data in the competition endpoint.
-                // In that case, make a separate API call directly to the team's own endpoint.
+                // Some competitions (especially UCL) don't include squad data in the competition
+                // endpoint. In that case, make a separate API call to the team's own endpoint.
                 if (squad == null || squad.isEmpty()) {
                     log.info("[DataLoader]       No squad in competition response for {}, fetching individually...", team.getName());
-                    Thread.sleep(6_200); // Sleep to stay within the 10 req/min rate limit
+                    Thread.sleep(RATE_LIMIT_SLEEP_MS); // Sleep to stay within the 10 req/min rate limit
                     try {
                         ApiTeam fullTeam = externalApiService.fetchTeamById(apiTeam.id());
                         squad = (fullTeam != null) ? fullTeam.squad() : null;
@@ -201,6 +259,7 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
                                         .nationality(apiPlayer.nationality())
                                         .dateOfBirth(dob)
                                         .build());
+                        playersSaved++;
                     }
                     log.info("[DataLoader]       Saved {} players for {}", squad.size(), team.getName());
                 }
@@ -209,11 +268,55 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
             // Sleep between competitions to stay within the API rate limit (10 requests per minute).
             // Skip the sleep after the last competition since there's no next request to delay.
             if (i < COMPETITION_IDS.length - 1) {
-                log.info("[DataLoader] Waiting 6 s (rate limit)...");
-                Thread.sleep(6_200);
+                log.info("[DataLoader] Waiting {}s (rate limit) before the next league...", RATE_LIMIT_SLEEP_MS / 1000);
+                Thread.sleep(RATE_LIMIT_SLEEP_MS);
             }
         }
+    }
 
-        log.info("[DataLoader] Done! Database seeded with real football data.");
+    // Fetches a competition's teams, retrying only on TRANSIENT failures (HTTP 429 rate
+    // limit or 5xx server errors) with an increasing back-off. Auth/other 4xx errors are
+    // rethrown immediately so run() can surface them loudly — retrying a bad key is pointless.
+    private ApiTeamsResponse fetchTeamsWithRetry(int competitionId) throws InterruptedException {
+        int attempt = 0;
+        while (true) {
+            try {
+                return externalApiService.fetchTeamsByCompetition(competitionId);
+            } catch (RestClientResponseException e) {
+                int status = e.getStatusCode().value();
+                boolean isTransient = (status == 429 || status >= 500);
+                attempt++;
+                if (!isTransient || attempt >= MAX_FETCH_ATTEMPTS) {
+                    throw e; // auth/permanent error, or out of retries → let run() handle it
+                }
+                long backoffMs = RATE_LIMIT_SLEEP_MS * 2L * attempt;
+                log.warn("[DataLoader] Transient error (HTTP {}) fetching competition {} — " +
+                                "retry {}/{} in {}s.",
+                        status, competitionId, attempt, MAX_FETCH_ATTEMPTS - 1, backoffMs / 1000);
+                Thread.sleep(backoffMs);
+            }
+        }
+    }
+
+    // True when the response looks like an authentication/authorisation problem with the API
+    // key. football-data.org returns 401/403 for permission issues and, notably, 400 with
+    // "Your API token is invalid." for a bad or missing key.
+    private static boolean isAuthError(RestClientResponseException e) {
+        int status = e.getStatusCode().value();
+        if (status == 401 || status == 403) {
+            return true;
+        }
+        String body = e.getResponseBodyAsString();
+        return status == 400 && body != null && body.toLowerCase().contains("token");
+    }
+
+    // Collapses a (possibly multi-line) response body to a single trimmed line, capped in
+    // length, so error logs stay readable.
+    private static String oneLine(String body) {
+        if (body == null || body.isBlank()) {
+            return "(no response body)";
+        }
+        String collapsed = body.replaceAll("\\s+", " ").trim();
+        return collapsed.length() > 200 ? collapsed.substring(0, 200) + "…" : collapsed;
     }
 }
