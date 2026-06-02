@@ -58,3 +58,65 @@
     scrollbar-width: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PitchBackdrop — drifting X's and O's on the soccer pitch background.
+
+   Only `transform` is animated here, which the browser composites on the GPU
+   (no layout or paint work per frame — the cheap kind of animation). Each
+   marker class uses a different duration so the cluster never moves in lockstep;
+   it reads as players shifting position rather than one synced loop.
+
+   The translate values are in the pitch's SVG user units (its viewBox is the
+   portrait 480×900), so a value around 10 is a small, calm drift — not a sweep.
+
+   Accessibility: every rule below is switched off under prefers-reduced-motion,
+   so the pitch becomes a still tactics diagram for anyone who opts out of motion.
+   Keep this guard in sync if you add more `pitch-*` animations.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@keyframes pitch-drift-a {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(12px, -9px); }
+}
+@keyframes pitch-drift-b {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(-13px, 8px); }
+}
+@keyframes pitch-drift-c {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(9px, 11px); }
+}
+@keyframes pitch-drift-d {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(-10px, -7px); }
+}
+
+/* The ball travels a longer, slower loop DOWN the pitch (vertical orientation),
+   with a little side-to-side sway so it doesn't move in a dead-straight line. */
+@keyframes pitch-ball {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-14px, 70px); }
+  50%  { transform: translate(8px, 130px); }
+  75%  { transform: translate(-10px, 70px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* will-change hints the compositor to give each marker its own layer. Safe here
+   because the marker count is tiny (eight markers + one ball). */
+.pitch-marker { will-change: transform; }
+.pitch-marker--a { animation: pitch-drift-a  9s ease-in-out infinite; }
+.pitch-marker--b { animation: pitch-drift-b 11s ease-in-out infinite; }
+.pitch-marker--c { animation: pitch-drift-c 13s ease-in-out infinite; }
+.pitch-marker--d { animation: pitch-drift-d 10s ease-in-out infinite; }
+.pitch-ball      { will-change: transform; animation: pitch-ball 18s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pitch-marker--a,
+  .pitch-marker--b,
+  .pitch-marker--c,
+  .pitch-marker--d,
+  .pitch-ball {
+    animation: none;
+  }
+}
