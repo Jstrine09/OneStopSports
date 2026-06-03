@@ -3,7 +3,7 @@ import { fetchLiveMatches } from '../api/matches'
 import { useLiveScores } from '../hooks/useLiveScores'
 import MatchCard from '../components/MatchCard'
 import LoadingSpinner from '../components/LoadingSpinner'
-import StadiumBackdrop from '../components/StadiumBackdrop'
+import SportFieldBackdrop from '../components/SportFieldBackdrop'
 import { getLeagueTheme, type LeagueTheme } from '../lib/leagueTheme'
 import { Radio } from 'lucide-react'
 import type { MatchDto } from '../types'
@@ -19,6 +19,7 @@ type SportGroup = {
   label: string
   emoji: string
   theme: LeagueTheme
+  variant: 'bowl' | 'court' | 'gridiron'
   matches: MatchDto[]
 }
 
@@ -36,6 +37,7 @@ function groupBySport(matches: MatchDto[]): SportGroup[] {
     label: 'Football',
     emoji: '⚽',
     theme: getLeagueTheme(null, 'football'),
+    variant: 'bowl',
     matches: football,
   })
   // American sports are mixed NBA + NFL on the live feed; we use NBA's theme
@@ -45,6 +47,7 @@ function groupBySport(matches: MatchDto[]): SportGroup[] {
     label: 'American Sports',
     emoji: '🏀',
     theme: getLeagueTheme(null, 'basketball'),
+    variant: 'court',
     matches: american,
   })
   return groups
@@ -124,13 +127,18 @@ export default function LivePage() {
                   {group.matches.length}
                 </span>
               </div>
-              <div className="relative overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+              <div className="relative overflow-hidden rounded-2xl border border-stone-200 dark:border-zinc-800">
                 {/* Top accent — thin colored bar identifies the sport */}
                 <div className={`absolute inset-x-0 top-0 h-0.5 ${group.theme.bg} opacity-80 z-10`} />
-                {/* Stadium backdrop sits behind the matches — kept subtle so
-                    score legibility is preserved */}
-                <StadiumBackdrop colorClass={group.theme.text} intensity="subtle" />
-                <div className="relative">
+                {/* Sport field behind the matches, themed to the sport; the rows
+                    sit on glass so the field reads through. Hidden on phones. */}
+                <SportFieldBackdrop
+                  colorClass={group.theme.text}
+                  variant={group.variant}
+                  intensity="strong"
+                  className="hidden md:block"
+                />
+                <div className="relative glass-card">
                   {group.matches.map((match) => (
                     <MatchCard key={match.id} match={match} />
                   ))}

@@ -7,7 +7,7 @@ import { fetchMatchesByLeagueAndDate, fetchBoxScore } from '../api/matches'
 import StandingsTable from '../components/StandingsTable'
 import DateNav from '../components/DateNav'
 import LoadingSpinner from '../components/LoadingSpinner'
-import StadiumBackdrop from '../components/StadiumBackdrop'
+import SportFieldBackdrop, { fieldVariantForSport } from '../components/SportFieldBackdrop'
 import { getLeagueTheme } from '../lib/leagueTheme'
 import type { MatchDto, BoxScoreDto, PlayerStatGroupDto } from '../types'
 import { getMatchState } from '../types'
@@ -316,13 +316,19 @@ export default function LeaguesPage() {
       )}
 
       {/* League identity header — the league is the subject of this page.
-          The StadiumBackdrop component renders floodlight glows + bowl silhouette
-          + crowd-dot texture, all themed to the league's brand color. This is the
-          "live feels alive" + "sport over chrome" principles working together:
-          the chrome IS the sport. */}
+          SportFieldBackdrop renders the sport's playing field (pitch / court /
+          gridiron) + breathing floodlights + drifting markers, themed to the
+          league's brand color. The chrome IS the sport. */}
       {activeLeague && (
         <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
-          <StadiumBackdrop colorClass={theme.text} intensity="strong" />
+          {/* Sport-aware playing field themed to the league colour (pitch / court /
+              gridiron). Hidden on phones where there isn't room for it to read. */}
+          <SportFieldBackdrop
+            colorClass={theme.text}
+            variant={fieldVariantForSport(sportSlug)}
+            intensity="strong"
+            className="hidden md:block"
+          />
 
           {/* Top accent — a thin colored bar across the very top of the header.
               Reinforces league identity without using the banned side-stripe pattern. */}
@@ -398,15 +404,28 @@ export default function LeaguesPage() {
       {/* Tab content */}
       {activeTab === 'standings' ? (
         loadingStandings ? <LoadingSpinner /> : (
-          <StandingsTable
-            entries={standings}
-            // showZones only for domestic football leagues — Champions League
-            // has no relegation, basketball uses a different ranking system.
-            showZones={
-              sportSlug === 'football' &&
-              !activeLeague?.name?.toLowerCase().includes('champions')
-            }
-          />
+          // Field-backed panel: the sport's field sits behind the table, themed to
+          // the league colour; the table is glass so the field reads through.
+          <div className="relative overflow-hidden rounded-2xl">
+            <SportFieldBackdrop
+              colorClass={theme.text}
+              variant={fieldVariantForSport(sportSlug)}
+              intensity="strong"
+              className="hidden md:block"
+            />
+            <div className="relative">
+              <StandingsTable
+                entries={standings}
+                // showZones only for domestic football leagues — Champions League
+                // has no relegation, basketball uses a different ranking system.
+                showZones={
+                  sportSlug === 'football' &&
+                  !activeLeague?.name?.toLowerCase().includes('champions')
+                }
+                glass
+              />
+            </div>
+          </div>
         )
       ) : activeTab === 'teams' ? (
         loadingTeams ? (
@@ -415,16 +434,23 @@ export default function LeaguesPage() {
           <p className="py-8 text-center text-sm text-stone-500 dark:text-zinc-500">No teams found</p>
         ) : (
           // Squad-wall layout. Hover uses the league's theme color so the brand
-          // continuity carries through into the interaction state.
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+          // continuity carries through into the interaction state. The sport field
+          // sits behind the grid; tiles are glass so the field reads through.
+          <div className="relative overflow-hidden rounded-2xl">
+            <SportFieldBackdrop
+              colorClass={theme.text}
+              variant={fieldVariantForSport(sportSlug)}
+              intensity="strong"
+              className="hidden md:block"
+            />
+            <div className="relative grid grid-cols-2 gap-2 p-2 md:grid-cols-3 lg:grid-cols-4">
             {teams.map((team) => (
               <Link
                 key={team.id}
                 to={`/teams/${team.id}`}
                 state={{ fromLeagues: true, sportSlug, leagueId }}
-                className={`group flex flex-col items-center gap-3 rounded-xl border border-transparent bg-white px-3 py-5 transition
-                           ${theme.hoverBorder} ${theme.hoverTint} active:scale-[0.97]
-                           dark:bg-zinc-900/60`}
+                className={`group flex flex-col items-center gap-3 rounded-xl border border-transparent glass-card px-3 py-5 transition
+                           ${theme.hoverBorder} ${theme.hoverTint} active:scale-[0.97]`}
               >
                 {team.crestUrl
                   ? <img src={team.crestUrl} alt={team.name} className="h-14 w-14 object-contain transition-transform group-hover:scale-105" />
@@ -440,6 +466,7 @@ export default function LeaguesPage() {
                 </div>
               </Link>
             ))}
+            </div>
           </div>
         )
       ) : (

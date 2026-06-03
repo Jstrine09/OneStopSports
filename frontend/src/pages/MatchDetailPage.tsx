@@ -12,7 +12,7 @@ import {
 } from '../types'
 import { fetchBoxScore, fetchMatchEvents } from '../api/matches'
 import LoadingSpinner from '../components/LoadingSpinner'
-import StadiumBackdrop from '../components/StadiumBackdrop'
+import SportFieldBackdrop, { fieldVariantForSport } from '../components/SportFieldBackdrop'
 import { getLeagueTheme } from '../lib/leagueTheme'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -320,9 +320,14 @@ export default function MatchDetailPage() {
         className={`relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-4 py-8 dark:border-zinc-900 dark:bg-zinc-900/60 sm:py-10
           ${state === 'live' ? 'bg-gradient-to-b from-green-50 to-white dark:bg-gradient-to-b dark:from-green-500/[0.08] dark:to-zinc-900/40' : ''}`}
       >
-        {/* Sport-themed stadium atmosphere — strong in non-live matches, subtle
-            during live so the green live treatment can dominate the section */}
-        <StadiumBackdrop colorClass={theme.text} intensity={state === 'live' ? 'subtle' : 'strong'} />
+        {/* Sport-themed field — strong in non-live matches, subtle during live so
+            the green live treatment can dominate the section. Hidden on phones. */}
+        <SportFieldBackdrop
+          colorClass={theme.text}
+          variant={fieldVariantForSport(sportSlug)}
+          intensity={state === 'live' ? 'subtle' : 'strong'}
+          className="hidden md:block"
+        />
 
         {/* Top accent — sport color (or green when live) */}
         <div className={`absolute inset-x-0 top-0 h-0.5 opacity-80 ${state === 'live' ? 'bg-green-500' : theme.bg}`} />

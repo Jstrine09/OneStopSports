@@ -16,7 +16,7 @@ export interface LeagueTheme {
   tint: string        // soft background tint — for card washes / pill bgs (light: 100, dark: 500/10)
   ring: string        // ring border — for active selectors (light: 500/50, dark: 400/40)
   border: string      // visible 1px border — for accents (light: 500/40, dark: 400/40)
-  glow: string        // radial wash bg — used by StadiumBackdrop's currentColor (works either mode)
+  glow: string        // radial wash bg — soft halo accent (works either mode)
   topAccent: string   // border-top color class — works in both modes
   hoverBorder: string // hover border state with `hover:` prefix baked in (both modes)
   hoverTint: string   // hover bg state with `hover:` prefix baked in (both modes)

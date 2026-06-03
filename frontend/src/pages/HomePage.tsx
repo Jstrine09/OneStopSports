@@ -5,6 +5,8 @@ import { fetchMatchesByLeagueAndDate } from '../api/matches'
 import MatchCard from '../components/MatchCard'
 import DateNav from '../components/DateNav'
 import LoadingSpinner from '../components/LoadingSpinner'
+import SportFieldBackdrop, { fieldVariantForSport } from '../components/SportFieldBackdrop'
+import { getLeagueTheme } from '../lib/leagueTheme'
 import type { LeagueDto, MatchDto } from '../types'
 
 function todayStr() {
@@ -44,6 +46,11 @@ export default function HomePage() {
   })
 
   const isLoading = leagueQueries.some((q) => q.isLoading) || matchQueries.some((q) => q.isLoading)
+
+  // Map a league back to its sport slug so each group can render the right field
+  // (pitch / court / gridiron). Leagues only carry sportId, so we resolve via the
+  // sports list we already fetched.
+  const sportSlugById = new Map(sports.map((s) => [s.id, s.slug]))
 
   // Build filtered sections
   const sections = allLeagues
@@ -107,23 +114,43 @@ export default function HomePage() {
           <p className="text-sm">No matches on this date</p>
         </div>
       ) : (
-        sections.map(({ league, matches }) => (
-          <section key={league.id} className="space-y-2">
-            <div className="flex items-center gap-2 px-1">
-              {league.logoUrl && (
-                <img src={league.logoUrl} alt={league.name} className="h-4 w-4 object-contain" />
-              )}
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-zinc-400">
-                {league.country} · {league.name}
-              </h2>
-            </div>
-            <div className="space-y-1.5">
-              {matches.map((match) => (
-                <MatchCard key={match.id} match={match} />
-              ))}
-            </div>
-          </section>
-        ))
+        sections.map(({ league, matches }) => {
+          const slug = sportSlugById.get(league.sportId)
+          const theme = getLeagueTheme(league.name, slug)
+          const variant = fieldVariantForSport(slug)
+          return (
+            <section key={league.id} className="space-y-2">
+              <div className="flex items-center gap-2 px-1">
+                {league.logoUrl ? (
+                  <img src={league.logoUrl} alt={league.name} className="h-4 w-4 object-contain" />
+                ) : (
+                  // Colour bullet keyed to the league when there's no crest
+                  <span className={`inline-block h-2.5 w-2.5 rounded-sm ${theme.bg}`} />
+                )}
+                <h2 className={`text-xs font-bold uppercase tracking-wider ${theme.text}`}>
+                  {league.country} · {league.name}
+                </h2>
+              </div>
+
+              {/* Match panel — the sport's field sits behind, themed to the league
+                  colour; the rows sit on a glass surface so the field reads through.
+                  The field is hidden on phones (handled inside SportFieldBackdrop). */}
+              <div className="relative overflow-hidden rounded-2xl border border-stone-200 dark:border-zinc-800">
+                <SportFieldBackdrop
+                  colorClass={theme.text}
+                  variant={variant}
+                  intensity="strong"
+                  className="hidden md:block"
+                />
+                <div className="relative glass-card">
+                  {matches.map((match) => (
+                    <MatchCard key={match.id} match={match} />
+                  ))}
+                </div>
+              </div>
+            </section>
+          )
+        })
       )}
     </div>
   )
