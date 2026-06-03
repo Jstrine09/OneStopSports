@@ -63,12 +63,19 @@ function eventLabel(event: MatchEventDto): string {
 
 // ── Box Score sub-components ───────────────────────────────────────────────────
 
-// Team stats comparison table — classic ESPN / Fotmob style:
-//   home value | STAT LABEL | away value
-// Each row shows one stat for both teams side-by-side.
-function TeamStatsTable({ home, away }: { home: TeamBoxScoreDto; away: TeamBoxScoreDto }) {
+// Pulls the first number out of a stat string ("60%", "14", "453 yds") so we can
+// draw a proportional comparison bar. Returns null when there's no number to read.
+function statNumber(s: string): number | null {
+  const m = String(s).match(/-?\d+(?:\.\d+)?/)
+  return m ? parseFloat(m[0]) : null
+}
+
+// Team stats comparison — Fotmob style: home value | STAT LABEL | away value,
+// with a proportional split bar beneath each row. The bar uses the match accent
+// (home = full color, away = same color faded) so the dominant team reads at a
+// glance. Rows whose values aren't numeric (e.g. "—") skip the bar gracefully.
+function TeamStatsTable({ home, away, accentClass }: { home: TeamBoxScoreDto; away: TeamBoxScoreDto; accentClass: string }) {
   // Both teams should have the same set of stats in the same order.
-  // We zip them by index since the backend guarantees parallel arrays.
   const rows = home.stats.map((stat, i) => ({
     label: stat.label,
     homeValue: stat.value,
@@ -78,23 +85,38 @@ function TeamStatsTable({ home, away }: { home: TeamBoxScoreDto; away: TeamBoxSc
   if (rows.length === 0) return null
 
   return (
-    <div className="divide-y divide-stone-100 dark:divide-zinc-800">
-      {rows.map(({ label, homeValue, awayValue }) => (
-        <div key={label} className="grid grid-cols-3 items-center py-2 px-4 text-sm">
-          {/* Home value — right-aligned so it reads toward the label */}
-          <span className="text-right font-semibold tabular-nums text-stone-900 dark:text-zinc-100">
-            {homeValue}
-          </span>
-          {/* Stat label — centred and subdued */}
-          <span className="text-center text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-zinc-500">
-            {label}
-          </span>
-          {/* Away value — left-aligned so it reads toward the label */}
-          <span className="text-left font-semibold tabular-nums text-stone-900 dark:text-zinc-100">
-            {awayValue}
-          </span>
-        </div>
-      ))}
+    <div className="divide-y divide-stone-100 px-4 dark:divide-zinc-800">
+      {rows.map(({ label, homeValue, awayValue }) => {
+        const h = statNumber(homeValue)
+        const a = statNumber(awayValue)
+        const total = (h ?? 0) + (a ?? 0)
+        const showBar = h != null && a != null && total > 0
+        const homePct = showBar ? (h! / total) * 100 : 50
+        return (
+          <div key={label} className="py-2.5">
+            <div className="grid grid-cols-3 items-center text-sm">
+              {/* Home value — right-aligned so it reads toward the label */}
+              <span className="text-right font-semibold tabular-nums text-stone-900 dark:text-zinc-100">
+                {homeValue}
+              </span>
+              {/* Stat label — centred and subdued */}
+              <span className="text-center text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-zinc-500">
+                {label}
+              </span>
+              {/* Away value — left-aligned so it reads toward the label */}
+              <span className="text-left font-semibold tabular-nums text-stone-900 dark:text-zinc-100">
+                {awayValue}
+              </span>
+            </div>
+            {showBar && (
+              <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-zinc-800">
+                <div className={accentClass} style={{ width: `${homePct}%` }} />
+                <div className={`${accentClass} opacity-50`} style={{ width: `${100 - homePct}%` }} />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -165,7 +187,7 @@ function PlayerStatsTable({ group }: { group: PlayerStatGroupDto }) {
 
 // Full box score panel — team stats comparison at the top, then tabbed player stats.
 // Tabs let you switch between home and away player tables without doubling the height.
-function BoxScorePanel({ boxScore, match }: { boxScore: BoxScoreDto; match: MatchDto }) {
+function BoxScorePanel({ boxScore, match, accentClass }: { boxScore: BoxScoreDto; match: MatchDto; accentClass: string }) {
   // activeTeam 0 = home, 1 = away — mirrors how the backend orders both arrays
   const [activeTeam, setActiveTeam] = useState<0 | 1>(0)
 
@@ -199,7 +221,7 @@ function BoxScorePanel({ boxScore, match }: { boxScore: BoxScoreDto; match: Matc
         </header>
 
         {home && away ? (
-          <TeamStatsTable home={home} away={away} />
+          <TeamStatsTable home={home} away={away} accentClass={accentClass} />
         ) : (
           <p className="py-6 text-center text-xs text-stone-400 dark:text-zinc-600">
             Team stats not available
@@ -452,7 +474,7 @@ export default function MatchDetailPage() {
         </section>
       ) : boxScore ? (
         // Real data — render the full box score panel
-        <BoxScorePanel boxScore={boxScore} match={match} />
+        <BoxScorePanel boxScore={boxScore} match={match} accentClass={theme.bg} />
       ) : (
         // API returned 204 — game played but no data (ESPN sometimes lags)
         <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/40">

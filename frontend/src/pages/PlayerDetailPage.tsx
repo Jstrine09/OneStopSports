@@ -213,43 +213,33 @@ export default function PlayerDetailPage() {
               Bio
             </h2>
           </header>
-          <div className="grid grid-cols-2 divide-x divide-y divide-stone-100 dark:divide-zinc-900 sm:grid-cols-4 [&>*:nth-child(n+3)]:border-t-0 sm:[&>*:nth-child(n+3)]:border-t sm:[&>*:nth-child(n+2)]:border-t-0">
-            {/* Height */}
-            {bio.height && (
-              <div className="flex flex-col items-center gap-1 px-4 py-4">
-                <Ruler size={14} className="text-stone-400 dark:text-zinc-500" />
-                <span className="text-base font-bold tabular-nums">{bio.height}</span>
-                <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">Height</span>
-              </div>
-            )}
-            {/* Weight */}
-            {bio.weightPounds && (
-              <div className="flex flex-col items-center gap-1 px-4 py-4">
-                <Weight size={14} className="text-stone-400 dark:text-zinc-500" />
-                <span className="text-base font-bold tabular-nums">{bio.weightPounds} lbs</span>
-                <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">Weight</span>
-              </div>
-            )}
-            {/* College */}
-            {bio.college && (
-              <div className="flex flex-col items-center gap-1 px-4 py-4">
-                <GraduationCap size={14} className="text-stone-400 dark:text-zinc-500" />
-                <span className="text-sm font-semibold text-center leading-tight">{bio.college}</span>
-                <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">College</span>
-              </div>
-            )}
-            {/* Draft info */}
-            {bio.draftYear && (
-              <div className="flex flex-col items-center gap-1 px-4 py-4">
-                <Award size={14} className="text-stone-400 dark:text-zinc-500" />
-                <span className="text-base font-bold tabular-nums">{bio.draftYear}</span>
-                <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">
-                  {bio.draftRound && bio.draftNumber
-                    ? `Rd ${bio.draftRound} · Pick ${bio.draftNumber}`
-                    : 'Draft Year'}
-                </span>
-              </div>
-            )}
+          {/* Always render four balanced cells (— for anything missing) so the
+              divided grid stays even: 2×2 on mobile, 1×4 on sm+. */}
+          <div className="grid grid-cols-2 divide-x divide-y divide-stone-100 dark:divide-zinc-900 sm:grid-cols-4 sm:divide-y-0">
+            <div className="flex flex-col items-center gap-1 px-4 py-4">
+              <Ruler size={14} className="text-stone-400 dark:text-zinc-500" />
+              <span className="text-base font-bold tabular-nums">{bio.height ?? '—'}</span>
+              <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">Height</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 px-4 py-4">
+              <Weight size={14} className="text-stone-400 dark:text-zinc-500" />
+              <span className="text-base font-bold tabular-nums">{bio.weightPounds ? `${bio.weightPounds} lbs` : '—'}</span>
+              <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">Weight</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 px-4 py-4">
+              <GraduationCap size={14} className="text-stone-400 dark:text-zinc-500" />
+              <span className="text-center text-sm font-semibold leading-tight">{bio.college ?? '—'}</span>
+              <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">College</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 px-4 py-4">
+              <Award size={14} className="text-stone-400 dark:text-zinc-500" />
+              <span className="text-base font-bold tabular-nums">{bio.draftYear ?? '—'}</span>
+              <span className="text-[10px] uppercase tracking-wider text-stone-400 dark:text-zinc-500">
+                {bio.draftYear && bio.draftRound && bio.draftNumber
+                  ? `Rd ${bio.draftRound} · Pick ${bio.draftNumber}`
+                  : 'Draft'}
+              </span>
+            </div>
           </div>
         </section>
       )}

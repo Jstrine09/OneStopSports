@@ -287,7 +287,25 @@ export default function LeaguesPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <>
+      {/* Full-bleed sport field — ONE field spanning the whole content pane (into
+          the side gutters, behind the header), themed to the active league. The
+          page content floats on top (relative z-10) with glass surfaces so the
+          field reads through everything. Fixed so it stays put while the page
+          scrolls; offset past the desktop sidebar; hidden on phones. */}
+      {activeLeague && (
+        <div className="pointer-events-none fixed inset-0 z-0 hidden md:block lg:left-56">
+          <SportFieldBackdrop
+            colorClass={theme.text}
+            variant={fieldVariantForSport(sportSlug)}
+            intensity="strong"
+          />
+          {/* Faint accent wash over the whole pane (matches the Design). */}
+          <div className={`absolute inset-0 ${theme.bg} opacity-[0.04]`} />
+        </div>
+      )}
+
+      <div className="relative z-10 space-y-5">
       {/* Sport selector — underline tab style, active tab takes the active league's theme color.
           When you switch sports mid-flow the underline color refreshes too, since the theme
           resolves from sport when no league is yet chosen. */}
@@ -315,21 +333,10 @@ export default function LeaguesPage() {
         </div>
       )}
 
-      {/* League identity header — the league is the subject of this page.
-          SportFieldBackdrop renders the sport's playing field (pitch / court /
-          gridiron) + breathing floodlights + drifting markers, themed to the
-          league's brand color. The chrome IS the sport. */}
+      {/* League identity header — glass so the full-bleed field behind the pane
+          reads through it. */}
       {activeLeague && (
-        <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
-          {/* Sport-aware playing field themed to the league colour (pitch / court /
-              gridiron). Hidden on phones where there isn't room for it to read. */}
-          <SportFieldBackdrop
-            colorClass={theme.text}
-            variant={fieldVariantForSport(sportSlug)}
-            intensity="strong"
-            className="hidden md:block"
-          />
-
+        <header className="glass-card relative overflow-hidden rounded-3xl border border-stone-200 px-6 py-7 dark:border-zinc-800/60">
           {/* Top accent — a thin colored bar across the very top of the header.
               Reinforces league identity without using the banned side-stripe pattern. */}
           <div className={`absolute inset-x-0 top-0 h-0.5 ${theme.bg} opacity-80`} />
@@ -404,28 +411,17 @@ export default function LeaguesPage() {
       {/* Tab content */}
       {activeTab === 'standings' ? (
         loadingStandings ? <LoadingSpinner /> : (
-          // Field-backed panel: the sport's field sits behind the table, themed to
-          // the league colour; the table is glass so the field reads through.
-          <div className="relative overflow-hidden rounded-2xl">
-            <SportFieldBackdrop
-              colorClass={theme.text}
-              variant={fieldVariantForSport(sportSlug)}
-              intensity="strong"
-              className="hidden md:block"
-            />
-            <div className="relative">
-              <StandingsTable
-                entries={standings}
-                // showZones only for domestic football leagues — Champions League
-                // has no relegation, basketball uses a different ranking system.
-                showZones={
-                  sportSlug === 'football' &&
-                  !activeLeague?.name?.toLowerCase().includes('champions')
-                }
-                glass
-              />
-            </div>
-          </div>
+          // Glass table reads over the full-bleed field behind the pane.
+          <StandingsTable
+            entries={standings}
+            // showZones only for domestic football leagues — Champions League
+            // has no relegation, basketball uses a different ranking system.
+            showZones={
+              sportSlug === 'football' &&
+              !activeLeague?.name?.toLowerCase().includes('champions')
+            }
+            glass
+          />
         )
       ) : activeTab === 'teams' ? (
         loadingTeams ? (
@@ -433,17 +429,9 @@ export default function LeaguesPage() {
         ) : teams.length === 0 ? (
           <p className="py-8 text-center text-sm text-stone-500 dark:text-zinc-500">No teams found</p>
         ) : (
-          // Squad-wall layout. Hover uses the league's theme color so the brand
-          // continuity carries through into the interaction state. The sport field
-          // sits behind the grid; tiles are glass so the field reads through.
-          <div className="relative overflow-hidden rounded-2xl">
-            <SportFieldBackdrop
-              colorClass={theme.text}
-              variant={fieldVariantForSport(sportSlug)}
-              intensity="strong"
-              className="hidden md:block"
-            />
-            <div className="relative grid grid-cols-2 gap-2 p-2 md:grid-cols-3 lg:grid-cols-4">
+          // Squad-wall layout. Glass tiles read over the full-bleed field; hover
+          // uses the league's theme color so the brand continuity carries through.
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
             {teams.map((team) => (
               <Link
                 key={team.id}
@@ -466,7 +454,6 @@ export default function LeaguesPage() {
                 </div>
               </Link>
             ))}
-            </div>
           </div>
         )
       ) : (
@@ -486,7 +473,8 @@ export default function LeaguesPage() {
           ) : (
             // Expandable result rows — finished matches can be expanded inline
             // to show starters + team stats. Box score is lazy-fetched on expand.
-            <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+            // Glass so the full-bleed field reads through.
+            <section className="glass-card overflow-hidden rounded-2xl border border-stone-200 dark:border-zinc-800/60">
               {results.map((match) => (
                 <ResultRow key={match.id} match={match} leagueId={leagueId!} />
               ))}
@@ -494,6 +482,7 @@ export default function LeaguesPage() {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }

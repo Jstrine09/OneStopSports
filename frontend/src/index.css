@@ -108,6 +108,22 @@
 @keyframes ossFloodA { 0%, 100% { opacity: 0.62; } 50% { opacity: 1; } }
 @keyframes ossFloodB { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
+/* Score-change flash — a green pop on the digit that just changed (live updates).
+   Applied transiently by MatchCard for ~1s when a WebSocket update bumps a score.
+   Gated on prefers-reduced-motion so it's a plain (instant) update for those users. */
+@media (prefers-reduced-motion: no-preference) {
+  .oss-flash {
+    border-radius: 5px;
+    padding: 0 2px;
+    animation: ossFlash 0.95s ease-out;
+  }
+}
+@keyframes ossFlash {
+  0%   { background: rgba(34, 197, 94, 0);    }
+  18%  { background: rgba(34, 197, 94, 0.38); }
+  100% { background: rgba(34, 197, 94, 0);    }
+}
+
 /* Base hints — `will-change` gives each animated element its own compositor layer
    (cheap here: a handful of markers + two glows per backdrop). */
 .pitch-marker,

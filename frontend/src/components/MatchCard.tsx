@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMatchState, type MatchDto } from '../types'
 
@@ -27,11 +28,31 @@ function TeamCrest({ url, name }: { url: string | null; name: string }) {
 
 export default function MatchCard({ match }: Props) {
   const state = getMatchState(match.status)
+  const scheduled = state === 'scheduled'
 
-  const scoreline =
-    state === 'scheduled'
-      ? match.startTime ? formatKickoff(match.startTime, match.timezone) : '--:--'
-      : `${match.homeScore ?? 0} – ${match.awayScore ?? 0}`
+  const kickoff = scheduled
+    ? match.startTime ? formatKickoff(match.startTime, match.timezone) : '--:--'
+    : null
+
+  // Score-change flash — when a live WebSocket update changes a score, briefly
+  // pop the side that scored (green flash, see .oss-flash in index.css). We track
+  // the previous scores in refs and compare on each render. The first render
+  // (refs seeded with the initial value) never flashes — only genuine changes do.
+  const [flash, setFlash] = useState<'home' | 'away' | null>(null)
+  const prevHome = useRef(match.homeScore)
+  const prevAway = useRef(match.awayScore)
+  useEffect(() => {
+    let side: 'home' | 'away' | null = null
+    if (prevHome.current != null && match.homeScore != null && match.homeScore !== prevHome.current) side = 'home'
+    else if (prevAway.current != null && match.awayScore != null && match.awayScore !== prevAway.current) side = 'away'
+    prevHome.current = match.homeScore
+    prevAway.current = match.awayScore
+    if (side) {
+      setFlash(side)
+      const t = setTimeout(() => setFlash(null), 1000)
+      return () => clearTimeout(t)
+    }
+  }, [match.homeScore, match.awayScore])
 
   // Live badge pulses green. Half-time is amber. FT is muted — it happened, it's done.
   const badge = (() => {
@@ -64,11 +85,19 @@ export default function MatchCard({ match }: Props) {
         <span className={`text-lg font-extrabold tabular-nums tracking-tight
           ${state === 'live'
             ? 'text-green-600 dark:text-green-400'
-            : state === 'scheduled'
+            : scheduled
               ? 'text-stone-500 dark:text-zinc-400'
               : 'text-stone-900 dark:text-zinc-100'}`}
         >
-          {scoreline}
+          {scheduled ? (
+            kickoff
+          ) : (
+            <>
+              <span className={flash === 'home' ? 'oss-flash' : ''}>{match.homeScore ?? 0}</span>
+              <span className="px-1 font-light opacity-40">–</span>
+              <span className={flash === 'away' ? 'oss-flash' : ''}>{match.awayScore ?? 0}</span>
+            </>
+          )}
         </span>
         {badge}
       </div>
