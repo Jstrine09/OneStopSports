@@ -378,10 +378,10 @@ export default function LeaguesPage() {
               <button
                 key={l.id}
                 onClick={() => setLeague(l.id)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold backdrop-blur transition
                   ${isActive
                     ? `${pillTheme.tint} ${pillTheme.text} ring-1 ${pillTheme.ring}`
-                    : 'bg-stone-100 text-stone-500 hover:text-stone-900 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                    : 'bg-white/70 text-stone-600 ring-1 ring-stone-200/70 hover:text-stone-900 dark:bg-zinc-800/50 dark:text-zinc-300 dark:ring-zinc-700/50 dark:hover:text-zinc-100'
                   }`}
               >
                 {l.name}
@@ -391,16 +391,17 @@ export default function LeaguesPage() {
         </div>
       )}
 
-      {/* Standings / Teams / Results toggle — segmented control on a flat surface. */}
-      <div className="inline-flex rounded-lg border border-stone-200 p-0.5 dark:border-zinc-900">
+      {/* Standings / Teams / Results toggle — glass segmented control floating on
+          the field; the active tab gets a solid chip so it reads clearly. */}
+      <div className="inline-flex rounded-lg bg-stone-100/70 p-0.5 backdrop-blur dark:bg-zinc-900/50">
         {(['standings', 'teams', 'results'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setTab(tab)}
             className={`rounded-md px-4 py-1.5 text-xs font-semibold capitalize transition
               ${activeTab === tab
-                ? 'bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'text-stone-500 hover:text-stone-900 dark:text-zinc-500 dark:hover:text-zinc-100'
+                ? 'bg-white text-stone-900 shadow-sm dark:bg-zinc-700 dark:text-white'
+                : 'text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100'
               }`}
           >
             {tab}
