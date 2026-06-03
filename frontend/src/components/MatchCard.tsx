@@ -80,25 +80,23 @@ export default function MatchCard({ match }: Props) {
         <span className="truncate text-sm font-semibold">{match.homeTeam.shortName}</span>
       </div>
 
-      {/* Score / kickoff time — this is the information, everything else is context */}
-      <div className="flex w-24 flex-col items-center gap-0.5 text-center">
-        <span className={`text-lg font-extrabold tabular-nums tracking-tight
-          ${state === 'live'
-            ? 'text-green-600 dark:text-green-400'
-            : scheduled
-              ? 'text-stone-500 dark:text-zinc-400'
-              : 'text-stone-900 dark:text-zinc-100'}`}
-        >
-          {scheduled ? (
-            kickoff
-          ) : (
-            <>
-              <span className={flash === 'home' ? 'oss-flash' : ''}>{match.homeScore ?? 0}</span>
-              <span className="px-1 font-light opacity-40">–</span>
-              <span className={flash === 'away' ? 'oss-flash' : ''}>{match.awayScore ?? 0}</span>
-            </>
-          )}
-        </span>
+      {/* Score / kickoff time — this is the information, everything else is context.
+          Scheduled games show the kickoff at a smaller weight (it's a time, not a
+          score); played games show the big score with per-side flash on change. */}
+      <div className="flex w-28 shrink-0 flex-col items-center gap-0.5 text-center">
+        {scheduled ? (
+          <span className="whitespace-nowrap text-xs font-bold text-stone-500 dark:text-zinc-400">
+            {kickoff}
+          </span>
+        ) : (
+          <span className={`text-lg font-extrabold tabular-nums tracking-tight
+            ${state === 'live' ? 'text-green-600 dark:text-green-400' : 'text-stone-900 dark:text-zinc-100'}`}
+          >
+            <span className={flash === 'home' ? 'oss-flash' : ''}>{match.homeScore ?? 0}</span>
+            <span className="px-1 font-light opacity-40">–</span>
+            <span className={flash === 'away' ? 'oss-flash' : ''}>{match.awayScore ?? 0}</span>
+          </span>
+        )}
         {badge}
       </div>
 
