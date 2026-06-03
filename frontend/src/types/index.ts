@@ -89,6 +89,7 @@ export interface MatchDto {
   startTime: string | null  // NBA/NFL: already converted to ET. Football: UTC.
   leagueId: number | null
   timezone: string | null   // "ET" for NBA/NFL — shown as a label next to the time. null for football.
+  clock: string | null      // live game clock, e.g. "3RD · 4:12" (NBA) / "Q3 · 9:22" (NFL). null otherwise.
 }
 
 export interface StandingsEntryDto {

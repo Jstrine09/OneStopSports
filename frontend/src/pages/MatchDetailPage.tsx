@@ -40,10 +40,10 @@ function eventIcon(type: string): string {
     case 'GOAL':            return '⚽'
     case 'OWN_GOAL':        return '⚽'
     case 'PENALTY':         return '⚽'
-    case 'YELLOW_CARD':     return '🟡'
+    case 'YELLOW_CARD':     return '🟨'
     case 'RED_CARD':        return '🟥'
     case 'YELLOW_RED_CARD': return '🟥'
-    case 'SUBSTITUTION':    return '🔄'
+    case 'SUBSTITUTION':    return '🔁'
     default:                return '•'
   }
 }
@@ -383,7 +383,7 @@ export default function MatchDetailPage() {
 
             <div className="mt-1">
               {state === 'live'      && <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> Live
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {match.clock ?? 'Live'}
               </span>}
               {state === 'halftime'  && <span className="rounded-full bg-amber-500 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">Half Time</span>}
               {state === 'finished'  && <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-500">Full Time</span>}
@@ -420,36 +420,44 @@ export default function MatchDetailPage() {
           </div>
         ) : (
           <div>
-            {sortedEvents.map((event, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-0 transition-colors hover:bg-stone-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
-              >
-                {/* Minute */}
-                <span className="w-10 shrink-0 text-right text-xs font-bold tabular-nums text-stone-500 dark:text-zinc-500">
-                  {event.minute != null
-                    ? event.injuryMinute != null
-                      ? `${event.minute}+${event.injuryMinute}'`
-                      : `${event.minute}'`
-                    : '—'}
-                </span>
+            {sortedEvents.map((event, i) => {
+              // Mirror the timeline: home-team events read left→right, away-team
+              // events flip to right→left so each side owns a half of the row.
+              const isHome =
+                event.teamName != null &&
+                (event.teamName === match.homeTeam.name || event.teamName === match.homeTeam.shortName)
+              return (
+                <div
+                  key={i}
+                  className={`flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-0 transition-colors hover:bg-stone-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40
+                    ${isHome ? '' : 'flex-row-reverse'}`}
+                >
+                  {/* Minute */}
+                  <span className="w-10 shrink-0 text-xs font-bold tabular-nums text-stone-500 dark:text-zinc-500">
+                    {event.minute != null
+                      ? event.injuryMinute != null
+                        ? `${event.minute}+${event.injuryMinute}'`
+                        : `${event.minute}'`
+                      : '—'}
+                  </span>
 
-                <span className="text-base leading-none">{eventIcon(event.type)}</span>
+                  <span className="text-base leading-none">{eventIcon(event.type)}</span>
 
-                <div className="flex-1 overflow-hidden">
-                  <p className="truncate text-sm font-medium">{eventLabel(event)}</p>
-                  {event.type === 'GOAL' && event.assistName && (
-                    <p className="truncate text-xs text-stone-500 dark:text-zinc-500">Assist: {event.assistName}</p>
+                  <div className={`flex-1 overflow-hidden ${isHome ? '' : 'text-right'}`}>
+                    <p className="truncate text-sm font-medium">{eventLabel(event)}</p>
+                    {event.type === 'GOAL' && event.assistName && (
+                      <p className="truncate text-xs text-stone-500 dark:text-zinc-500">Assist: {event.assistName}</p>
+                    )}
+                  </div>
+
+                  {event.teamName && (
+                    <span className="shrink-0 max-w-[100px] truncate text-xs text-stone-400 dark:text-zinc-600">
+                      {event.teamName}
+                    </span>
                   )}
                 </div>
-
-                {event.teamName && (
-                  <span className="shrink-0 max-w-[100px] truncate text-right text-xs text-stone-400 dark:text-zinc-600">
-                    {event.teamName}
-                  </span>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>

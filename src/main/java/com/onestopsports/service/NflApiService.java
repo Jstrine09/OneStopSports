@@ -181,7 +181,10 @@ public class NflApiService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record EspnEventStatus(
-            @JsonProperty("type") EspnStatusType type) {}
+            @JsonProperty("type") EspnStatusType type,
+            @JsonProperty("displayClock") String displayClock, // e.g. "9:22" (time left in quarter)
+            @JsonProperty("period") Integer period)            // quarter number (1-4, 5+ = OT)
+    {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record EspnStatusType(
@@ -608,8 +611,28 @@ public class NflApiService {
             if (event.id() != null) matchId = Long.parseLong(event.id());
         } catch (NumberFormatException ignored) {}
 
+        // Live game clock, e.g. "Q3 · 9:22" — only for in-progress games.
+        String clock = null;
+        if ("LIVE".equals(mappedStatus) && event.status() != null && event.status().displayClock() != null) {
+            String pl = nflPeriodLabel(event.status().period());
+            clock = pl.isEmpty() ? event.status().displayClock() : pl + " · " + event.status().displayClock();
+        }
+
         return new MatchDto(matchId, home, away, homeScore, awayScore,
-                mappedStatus, startTime, dbLeagueId, "ET");
+                mappedStatus, startTime, dbLeagueId, "ET", clock);
+    }
+
+    // NFL period number → label: Q1..Q4, then OT / 2OT ...
+    private static String nflPeriodLabel(Integer period) {
+        if (period == null) return "";
+        return switch (period) {
+            case 1 -> "Q1";
+            case 2 -> "Q2";
+            case 3 -> "Q3";
+            case 4 -> "Q4";
+            case 5 -> "OT";
+            default -> (period - 4) + "OT";
+        };
     }
 
     // Converts an ESPN competitor record to a TeamDto.

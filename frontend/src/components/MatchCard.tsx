@@ -97,7 +97,11 @@ export default function MatchCard({ match }: Props) {
             <span className={flash === 'away' ? 'oss-flash' : ''}>{match.awayScore ?? 0}</span>
           </span>
         )}
-        {badge}
+        {/* Live games show the running clock ("3RD · 4:12") when the backend has
+            it; otherwise fall back to the status badge (Live / HT / FT). */}
+        {state === 'live' && match.clock
+          ? <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-wide text-green-600/90 dark:text-green-400/90">{match.clock}</span>
+          : badge}
       </div>
 
       {/* Away team */}

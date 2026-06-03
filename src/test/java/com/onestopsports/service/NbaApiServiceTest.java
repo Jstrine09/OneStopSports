@@ -67,7 +67,7 @@ class NbaApiServiceTest {
             String statusName, String homeScore, String awayScore) {
 
         var statusType = new NbaApiService.EspnStatusType(statusName, "description");
-        var status     = new NbaApiService.EspnEventStatus(statusType);
+        var status     = new NbaApiService.EspnEventStatus(statusType, null, null);
 
         var homeTeam = new NbaApiService.EspnCompTeam("1", "Boston Celtics", "BOS", "logo.png");
         var awayTeam = new NbaApiService.EspnCompTeam("2", "Miami Heat",     "MIA", "logo2.png");
