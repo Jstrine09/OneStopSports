@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchTeam, fetchTeamPlayers } from '../api/teams'
+import { fetchLeague } from '../api/leagues'
+import { fetchSports } from '../api/sports'
 import {
   getFavoriteTeams, addFavoriteTeam, removeFavoriteTeam,
   getFavoritePlayers, addFavoritePlayer, removeFavoritePlayer,
@@ -150,6 +152,21 @@ export default function TeamDetailPage() {
     staleTime: selectedSeason != null ? 24 * 60 * 60_000 : 5 * 60_000,
   })
 
+  // Resolve the team's league + sport so the header field shows the correct sport
+  // and league colour regardless of how the user arrived (Leagues, search, direct
+  // URL). Both queries are cached, so this is cheap.
+  const { data: league } = useQuery({
+    queryKey: ['league', team?.leagueId],
+    queryFn: () => fetchLeague(team!.leagueId!),
+    enabled: !!team?.leagueId,
+    staleTime: 10 * 60_000,
+  })
+  const { data: sports = [] } = useQuery({
+    queryKey: ['sports'],
+    queryFn: fetchSports,
+    staleTime: 10 * 60_000,
+  })
+
   const { data: favTeams = [] } = useQuery({
     queryKey: ['favorites', 'teams'],
     queryFn: getFavoriteTeams,
@@ -191,12 +208,12 @@ export default function TeamDetailPage() {
 
   const grouped = groupByPosition(players)
 
-  // Sport field for the header. We only reliably know the sport when the user
-  // arrived from the Leagues page (sportSlug is passed in router state); on a
-  // direct URL or search hit we fall back to the soccer pitch. Theme colour comes
-  // from the same slug (NBA orange / NFL indigo / default amber).
-  const fieldTheme = getLeagueTheme(undefined, fromState?.sportSlug)
-  const fieldVariant = fieldVariantForSport(fromState?.sportSlug)
+  // Sport field for the header. Prefer the resolved league→sport (works on any
+  // nav path and gives the league-specific colour, e.g. Premier League purple);
+  // fall back to the router-state sportSlug while the league query loads.
+  const resolvedSlug = sports.find((s) => s.id === league?.sportId)?.slug ?? fromState?.sportSlug
+  const fieldTheme = getLeagueTheme(league?.name, resolvedSlug)
+  const fieldVariant = fieldVariantForSport(resolvedSlug)
 
   return (
     <div className="space-y-5">
