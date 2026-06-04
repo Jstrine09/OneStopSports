@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { searchAll } from '../api/search'
 import LoadingSpinner from '../components/LoadingSpinner'
+import SectionLabel from '../components/SectionLabel'
 
 export default function SearchPage() {
   // The current value of the search input — drives the React Query fetch
@@ -44,7 +45,7 @@ export default function SearchPage() {
         className="w-full rounded-xl bg-white px-4 py-3 text-base text-stone-900
                    placeholder-stone-400 outline-none ring-1 ring-stone-200
                    focus:ring-amber-500 transition
-                   dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500 dark:ring-zinc-700
+                   dark:bg-zinc-900 dark:text-white dark:placeholder-zinc-500 dark:ring-zinc-800
                    md:text-sm"
       />
 
@@ -61,9 +62,7 @@ export default function SearchPage() {
       {/* Team results */}
       {data && data.teams.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-zinc-400">
-            Teams
-          </h2>
+          <SectionLabel>Teams</SectionLabel>
           <div className="space-y-1.5">
             {data.teams.map((team) => (
               <Link
@@ -71,7 +70,7 @@ export default function SearchPage() {
                 to={`/teams/${team.id}`}
                 className="flex items-center gap-3 rounded-xl bg-white px-4 py-3
                            transition hover:bg-stone-50 active:scale-[0.98]
-                           dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                           dark:bg-zinc-900/60 dark:hover:bg-zinc-800"
               >
                 {/* Team crest or abbreviation fallback — same logic as MatchCard */}
                 {team.crestUrl ? (
@@ -98,9 +97,7 @@ export default function SearchPage() {
       {/* Player results */}
       {data && data.players.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-zinc-400">
-            Players
-          </h2>
+          <SectionLabel>Players</SectionLabel>
           <div className="space-y-1.5">
             {data.players.map((player) => (
               <Link
@@ -108,7 +105,7 @@ export default function SearchPage() {
                 to={`/players/${player.id!}`}
                 className="flex items-center gap-3 rounded-xl bg-white px-4 py-3
                            transition hover:bg-stone-50 active:scale-[0.98]
-                           dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                           dark:bg-zinc-900/60 dark:hover:bg-zinc-800"
               >
                 {/* Jersey number badge, or # if unknown */}
                 <div className="flex h-8 w-8 items-center justify-center rounded-full

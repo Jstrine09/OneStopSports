@@ -8,6 +8,9 @@ import {
 } from '../api/auth'
 import { useAuth } from '../context/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
+import SectionLabel from '../components/SectionLabel'
+import SportFieldBackdrop, { fieldVariantForSport } from '../components/SportFieldBackdrop'
+import { getLeagueTheme } from '../lib/leagueTheme'
 import { ChevronLeft, MapPin, Globe, Heart } from 'lucide-react'
 import type { PlayerDto } from '../types'
 
@@ -188,6 +191,13 @@ export default function TeamDetailPage() {
 
   const grouped = groupByPosition(players)
 
+  // Sport field for the header. We only reliably know the sport when the user
+  // arrived from the Leagues page (sportSlug is passed in router state); on a
+  // direct URL or search hit we fall back to the soccer pitch. Theme colour comes
+  // from the same slug (NBA orange / NFL indigo / default amber).
+  const fieldTheme = getLeagueTheme(undefined, fromState?.sportSlug)
+  const fieldVariant = fieldVariantForSport(fromState?.sportSlug)
+
   return (
     <div className="space-y-5">
       {/* Back */}
@@ -206,9 +216,14 @@ export default function TeamDetailPage() {
         <LoadingSpinner />
       ) : team ? (
         <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
-          {/* Subtle radial wash behind the crest — adds depth without using
-              gradient text or glassmorphism (both banned). */}
-          <div className="pointer-events-none absolute -left-12 -top-12 h-48 w-48 rounded-full bg-amber-500/[0.04] blur-3xl" />
+          {/* Sport field behind the crest, themed to the sport. Subtle so the team
+              identity stays dominant; hidden on phones. */}
+          <SportFieldBackdrop
+            colorClass={fieldTheme.text}
+            variant={fieldVariant}
+            intensity="subtle"
+            className="hidden md:block"
+          />
 
           <div className="relative flex items-center gap-5">
             {team.crestUrl ? (
@@ -255,9 +270,7 @@ export default function TeamDetailPage() {
       <section>
         <div className="mb-3 flex items-center justify-between gap-3 px-1">
           <div className="flex items-baseline gap-3">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-400">
-              Squad
-            </h2>
+            <SectionLabel>Squad</SectionLabel>
             {players.length > 0 && (
               <span className="text-xs tabular-nums text-stone-400 dark:text-zinc-600">{players.length} players</span>
             )}
