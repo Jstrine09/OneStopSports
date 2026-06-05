@@ -4,6 +4,7 @@ import com.onestopsports.security.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -43,24 +44,44 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                // Define which endpoints are public and which require a logged-in user
+                // Define which endpoints are public and which require a logged-in user.
+                //
+                // ORDER MATTERS: Spring evaluates these matchers top-to-bottom and the FIRST
+                // match wins. The authenticated rules must therefore come BEFORE the broad
+                // `GET /api/**` permitAll — otherwise a `GET /api/users/me/...` would match
+                // the public GET rule first and skip the auth check entirely (a real bypass
+                // that earlier versions of this file had).
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.GET, "/api/**").permitAll()  // All GET requests are public (browsing the app)
+                        // Always-public endpoints first.
                         .requestMatchers("/api/auth/**").permitAll()              // Login and register are always public
                         .requestMatchers("/ws/**").permitAll()                   // WebSocket endpoint is public
                         // Swagger UI assets and the raw OpenAPI JSON spec must be public —
                         // without this, Spring Security returns 401 and the UI never loads.
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+
+                        // Protected endpoints — declared BEFORE the broad GET permitAll so the
+                        // auth check can't be skipped. Covers every method (GET included).
                         .requestMatchers("/api/users/me/**").authenticated()     // Profile / favourites require login
+
+                        // Public browsing — all other GET /api/** is open (read-only data).
+                        .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
                         // Serve the React single-page app (index.html, hashed assets, icons,
-                        // and client-side routes like /leagues or /live) to everyone. These are
-                        // GET requests for the frontend shell — the API endpoints above stay
-                        // individually secured, and any protected action still goes through an
-                        // authenticated /api call. Without this, .anyRequest().authenticated()
-                        // would return 401 for the app's own HTML and JS.
+                        // and client-side routes like /leagues or /live) to everyone.
                         .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().authenticated()                            // Everything else (POST/PUT/DELETE) requires login
                 )
+
+                // When an unauthenticated request hits a protected endpoint, return a clean
+                // 401 with our standard JSON error envelope instead of an empty 403 (or, in
+                // the old bypass case, a 500 from a null principal).
+                .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authEx) -> {
+                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setContentType("application/json");
+                    response.getWriter().write(
+                            "{\"status\":401,\"error\":\"Unauthorized\","
+                            + "\"message\":\"Authentication required\","
+                            + "\"timestamp\":\"" + java.time.LocalDateTime.now() + "\"}");
+                }))
 
                 // Add our JWT filter BEFORE Spring's default username/password filter.
                 // This means every request is checked for a JWT before anything else runs.

@@ -27,6 +27,16 @@
   * {
     scroll-behavior: smooth;
   }
+
+  /* Keyboard focus ring. Tailwind's Preflight removes default outlines, which left
+     the app unusable by keyboard (WCAG 2.4.7). :focus-visible only shows the ring
+     for keyboard/AT users — mouse clicks don't get an outline. amber-500 reads on
+     both light and dark surfaces. */
+  :focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
 }
 
 @layer utilities {
@@ -157,4 +167,23 @@
 }
 .dark .glass-card {
   background-color: rgba(24, 24, 27, 0.30);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Reduced motion. The custom field animations (pitch-* / ossFlood) are already
+   gated to `prefers-reduced-motion: no-preference`, but Tailwind's built-in
+   looping animations (the live badge pulse, the live header ping, the loading
+   spinner) are NOT — they run regardless. Neutralise them, and switch smooth
+   scrolling off, for anyone who has asked their OS for reduced motion (WCAG 2.3.3).
+   ───────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-ping,
+  .animate-spin,
+  .animate-bounce {
+    animation: none !important;
+  }
+  * {
+    scroll-behavior: auto !important;
+  }
 }

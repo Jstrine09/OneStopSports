@@ -10,9 +10,12 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.stream.Collectors;
@@ -51,6 +54,38 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponseDto.of(400, "Bad Request", "Malformed or missing request body"));
+    }
+
+    // ── 400 Bad Request — wrong type in a path/query param ───────────────────
+    // Thrown when a path variable or query param can't be converted to the expected
+    // type — e.g. GET /api/players/abc where {id} is a Long, or a malformed ?date=.
+    // Without this it bubbles to the 500 catch-all.
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponseDto> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String message = "Invalid value for '" + ex.getName() + "'";
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponseDto.of(400, "Bad Request", message));
+    }
+
+    // ── 400 Bad Request — missing required query param ───────────────────────
+    // Thrown when a required @RequestParam is absent — e.g. GET /api/search with no ?q=.
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponseDto> handleMissingParam(MissingServletRequestParameterException ex) {
+        String message = "Missing required parameter '" + ex.getParameterName() + "'";
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponseDto.of(400, "Bad Request", message));
+    }
+
+    // ── 405 Method Not Allowed — wrong HTTP verb ─────────────────────────────
+    // Thrown when the path exists but the method doesn't — e.g. POST /api/sports.
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponseDto> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity
+                .status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ErrorResponseDto.of(405, "Method Not Allowed",
+                        "The " + ex.getMethod() + " method is not supported for this endpoint"));
     }
 
     // ── 401 Unauthorized — wrong credentials ─────────────────────────────────

@@ -18,6 +18,12 @@ export default function CareerStatsTable({ stats }: Props) {
     return null
   }
 
+  // Football stats come from a single-season data feed that lags the live season,
+  // so we label the season explicitly rather than letting an old year read as
+  // "current". Pull the season from the first row we have.
+  const footballSeason =
+    stats.sport === 'football' ? stats.categories[0]?.seasons?.[0]?.season ?? null : null
+
   return (
     <section className="space-y-5">
       {/* Section header — keeps the visual rhythm of the page (SQUAD, FAVOURITES, etc.) */}
@@ -29,6 +35,13 @@ export default function CareerStatsTable({ stats }: Props) {
           {stats.categories.length} {stats.categories.length === 1 ? 'category' : 'categories'}
         </span>
       </div>
+
+      {/* Honesty badge — don't present a lagging football season as if it were live. */}
+      {footballSeason && (
+        <p className="-mt-3 px-1 text-[11px] text-amber-700 dark:text-amber-400/90">
+          Showing the {footballSeason} season — the most recent available on the current data plan.
+        </p>
+      )}
 
       {stats.categories.map((cat) => (
         <CategoryTable key={cat.name} category={cat} />
