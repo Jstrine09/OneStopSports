@@ -4,6 +4,22 @@
 
 ---
 
+## UPDATE — 5-persona QA pass (current state, commit `bc1a890`)
+
+A QA sweep with 5 user personas (football ultra, mobile casual, accessibility consultant, chaos SDET, stats nerd) ran against the full app. The cheap high-impact **blockers were fixed**:
+
+- **Auth bypass closed** — `SecurityConfig` matchers were reordered so `/api/users/me/**` `authenticated()` is evaluated BEFORE the broad `GET /api/**` `permitAll()` (previously protected GETs slipped through). Added an `AuthenticationEntryPoint` returning a clean 401 JSON envelope. Verified live: `/api/users/me` → 401.
+- **500s → 4xx** — `GlobalExceptionHandler` now maps type-mismatch (`/players/abc`) → 400, missing required param (`/search` no `q`) → 400, wrong method → 405. Were all 500s.
+- **A11y** — global `:focus-visible` ring (Tailwind Preflight had stripped outlines, WCAG 2.4.7); `prefers-reduced-motion: reduce` now disables Tailwind's built-in `animate-pulse/ping/spin` + smooth scroll (WCAG 2.3.3).
+- **Stale-data honesty** — `CareerStatsTable` shows a "most recent available season" badge for football so the lagging single-season feed isn't read as current.
+- **Team header** now resolves the team's real sport + league colour via `fetchLeague`/`fetchSports` on any nav path (not just from Leagues).
+
+**Still open (ranked):** (1) NBA standings render as a flat 1-30 win-sorted ladder — `conference` is never populated for NBA so East/West never group; (2) search is not accent-insensitive ("Dembele"↛"Dembélé") + some star footballers 204 on career-stats from name-match misses; (3) winner not emphasised on finished cards, NBA/NFL league logos null, standings crests null; (4) a11y: form-label associations, `aria-live` on live scores, glass-over-field contrast, some <44px tap targets; (5) duplicate clubs/players across competitions; (6) standings DTO missing PCT/GB server-side.
+
+The detailed concerns below predate this update but remain accurate.
+
+---
+
 ## Known incomplete features
 
 ### Football player headshots — **gap**

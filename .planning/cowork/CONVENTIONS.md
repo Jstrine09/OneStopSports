@@ -405,3 +405,18 @@ Rules:
 | Full stack via Docker | `docker-compose up --build` |
 | Swagger UI | `http://localhost:8081/swagger-ui/index.html` |
 | Production build (frontend) | `cd frontend && npm run build` (output to `frontend/dist/`) |
+
+---
+
+## Design system primitives (the "sport field" redesign)
+
+Added in the Claude Design handoff redesign. Reuse these on any new screen rather than re-styling inline.
+
+- **`SectionLabel`** (`components/SectionLabel.tsx`) — the uppercase tracked section heading (`text-[11px] font-bold uppercase tracking-[0.13em]`). Accepts a leading icon/bullet child and an optional `className` to recolor (e.g. a league accent).
+- **`RowCard`** (`components/RowCard.tsx`, exports `ROW_DIVIDER`) — the rounded bordered list surface. Rows inside use the `ROW_DIVIDER` class for consistent separators.
+- **`SportFieldBackdrop`** (`components/SportFieldBackdrop.tsx`, exports `fieldVariantForSport`) — animated portrait field; variant `bowl`/`court`/`gridiron`; themed via a Tailwind text-color class passed as `colorClass`; add `className="hidden md:block"` to hide on phones.
+- **`.glass-card`** (index.css) — translucent + blur surface to layer over a field so it reads through. **Glassmorphism is the intended house style for field-backed surfaces** — any older "no glassmorphism" rule is superseded.
+
+**Motion + a11y conventions:**
+- New looping animations must be gated: run custom field animation only under `prefers-reduced-motion: no-preference`; ensure `prefers-reduced-motion: reduce` neutralises it (Tailwind's built-in `animate-*` are handled globally in index.css).
+- Tailwind classes stay **literal strings** (JIT can't see `text-${x}`); decorative SVG is `aria-hidden`; keep the global `:focus-visible` ring intact.

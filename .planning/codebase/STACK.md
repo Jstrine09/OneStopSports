@@ -1,3 +1,5 @@
+> ⚠️ **SNAPSHOT — 2026-05-21.** This codebase map is a point-in-time analysis and is now partially STALE. For current state see `/CLAUDE.md` and `.planning/cowork/`. Major changes since this snapshot: full "sport field" frontend redesign (`SportFieldBackdrop` + `.glass-card` + `SectionLabel`/`RowCard`), player career stats + bio + ESPN-CDN headshots, live game clock (`MatchDto.clock`, now 10 fields), match box score (`BoxScoreDto`), migrations V6+V7, two new services (`ApiFootballService`, `BallDontLieService`), production deploy (Render + Neon, single-origin via `SpaForwardingConfig`), and the 5-persona QA fixes (auth-bypass fix + `AuthenticationEntryPoint`, 500→4xx handlers, a11y focus/reduced-motion). Tests: 57. Regenerate this map with `/gsd:map-codebase`.
+
 # Technology Stack
 
 **Analysis Date:** 2026-05-21
