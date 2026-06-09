@@ -12,7 +12,7 @@ import {
 } from '../types'
 import { fetchBoxScore, fetchMatchEvents } from '../api/matches'
 import LoadingSpinner from '../components/LoadingSpinner'
-import StadiumBackdrop from '../components/StadiumBackdrop'
+import SportFieldBackdrop, { fieldVariantForSport } from '../components/SportFieldBackdrop'
 import { getLeagueTheme } from '../lib/leagueTheme'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -40,10 +40,10 @@ function eventIcon(type: string): string {
     case 'GOAL':            return '⚽'
     case 'OWN_GOAL':        return '⚽'
     case 'PENALTY':         return '⚽'
-    case 'YELLOW_CARD':     return '🟡'
+    case 'YELLOW_CARD':     return '🟨'
     case 'RED_CARD':        return '🟥'
     case 'YELLOW_RED_CARD': return '🟥'
-    case 'SUBSTITUTION':    return '🔄'
+    case 'SUBSTITUTION':    return '🔁'
     default:                return '•'
   }
 }
@@ -63,12 +63,19 @@ function eventLabel(event: MatchEventDto): string {
 
 // ── Box Score sub-components ───────────────────────────────────────────────────
 
-// Team stats comparison table — classic ESPN / Fotmob style:
-//   home value | STAT LABEL | away value
-// Each row shows one stat for both teams side-by-side.
-function TeamStatsTable({ home, away }: { home: TeamBoxScoreDto; away: TeamBoxScoreDto }) {
+// Pulls the first number out of a stat string ("60%", "14", "453 yds") so we can
+// draw a proportional comparison bar. Returns null when there's no number to read.
+function statNumber(s: string): number | null {
+  const m = String(s).match(/-?\d+(?:\.\d+)?/)
+  return m ? parseFloat(m[0]) : null
+}
+
+// Team stats comparison — Fotmob style: home value | STAT LABEL | away value,
+// with a proportional split bar beneath each row. The bar uses the match accent
+// (home = full color, away = same color faded) so the dominant team reads at a
+// glance. Rows whose values aren't numeric (e.g. "—") skip the bar gracefully.
+function TeamStatsTable({ home, away, accentClass }: { home: TeamBoxScoreDto; away: TeamBoxScoreDto; accentClass: string }) {
   // Both teams should have the same set of stats in the same order.
-  // We zip them by index since the backend guarantees parallel arrays.
   const rows = home.stats.map((stat, i) => ({
     label: stat.label,
     homeValue: stat.value,
@@ -78,23 +85,38 @@ function TeamStatsTable({ home, away }: { home: TeamBoxScoreDto; away: TeamBoxSc
   if (rows.length === 0) return null
 
   return (
-    <div className="divide-y divide-stone-100 dark:divide-zinc-800">
-      {rows.map(({ label, homeValue, awayValue }) => (
-        <div key={label} className="grid grid-cols-3 items-center py-2 px-4 text-sm">
-          {/* Home value — right-aligned so it reads toward the label */}
-          <span className="text-right font-semibold tabular-nums text-stone-900 dark:text-zinc-100">
-            {homeValue}
-          </span>
-          {/* Stat label — centred and subdued */}
-          <span className="text-center text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-zinc-500">
-            {label}
-          </span>
-          {/* Away value — left-aligned so it reads toward the label */}
-          <span className="text-left font-semibold tabular-nums text-stone-900 dark:text-zinc-100">
-            {awayValue}
-          </span>
-        </div>
-      ))}
+    <div className="divide-y divide-stone-100 px-4 dark:divide-zinc-800">
+      {rows.map(({ label, homeValue, awayValue }) => {
+        const h = statNumber(homeValue)
+        const a = statNumber(awayValue)
+        const total = (h ?? 0) + (a ?? 0)
+        const showBar = h != null && a != null && total > 0
+        const homePct = showBar ? (h! / total) * 100 : 50
+        return (
+          <div key={label} className="py-2.5">
+            <div className="grid grid-cols-3 items-center text-sm">
+              {/* Home value — right-aligned so it reads toward the label */}
+              <span className="text-right font-semibold tabular-nums text-stone-900 dark:text-zinc-100">
+                {homeValue}
+              </span>
+              {/* Stat label — centred and subdued */}
+              <span className="text-center text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-zinc-500">
+                {label}
+              </span>
+              {/* Away value — left-aligned so it reads toward the label */}
+              <span className="text-left font-semibold tabular-nums text-stone-900 dark:text-zinc-100">
+                {awayValue}
+              </span>
+            </div>
+            {showBar && (
+              <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-zinc-800">
+                <div className={accentClass} style={{ width: `${homePct}%` }} />
+                <div className={`${accentClass} opacity-50`} style={{ width: `${100 - homePct}%` }} />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -165,7 +187,7 @@ function PlayerStatsTable({ group }: { group: PlayerStatGroupDto }) {
 
 // Full box score panel — team stats comparison at the top, then tabbed player stats.
 // Tabs let you switch between home and away player tables without doubling the height.
-function BoxScorePanel({ boxScore, match }: { boxScore: BoxScoreDto; match: MatchDto }) {
+function BoxScorePanel({ boxScore, match, accentClass }: { boxScore: BoxScoreDto; match: MatchDto; accentClass: string }) {
   // activeTeam 0 = home, 1 = away — mirrors how the backend orders both arrays
   const [activeTeam, setActiveTeam] = useState<0 | 1>(0)
 
@@ -199,7 +221,7 @@ function BoxScorePanel({ boxScore, match }: { boxScore: BoxScoreDto; match: Matc
         </header>
 
         {home && away ? (
-          <TeamStatsTable home={home} away={away} />
+          <TeamStatsTable home={home} away={away} accentClass={accentClass} />
         ) : (
           <p className="py-6 text-center text-xs text-stone-400 dark:text-zinc-600">
             Team stats not available
@@ -320,9 +342,14 @@ export default function MatchDetailPage() {
         className={`relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-4 py-8 dark:border-zinc-900 dark:bg-zinc-900/60 sm:py-10
           ${state === 'live' ? 'bg-gradient-to-b from-green-50 to-white dark:bg-gradient-to-b dark:from-green-500/[0.08] dark:to-zinc-900/40' : ''}`}
       >
-        {/* Sport-themed stadium atmosphere — strong in non-live matches, subtle
-            during live so the green live treatment can dominate the section */}
-        <StadiumBackdrop colorClass={theme.text} intensity={state === 'live' ? 'subtle' : 'strong'} />
+        {/* Sport-themed field — strong in non-live matches, subtle during live so
+            the green live treatment can dominate the section. Hidden on phones. */}
+        <SportFieldBackdrop
+          colorClass={theme.text}
+          variant={fieldVariantForSport(sportSlug)}
+          intensity={state === 'live' ? 'subtle' : 'strong'}
+          className="hidden md:block"
+        />
 
         {/* Top accent — sport color (or green when live) */}
         <div className={`absolute inset-x-0 top-0 h-0.5 opacity-80 ${state === 'live' ? 'bg-green-500' : theme.bg}`} />
@@ -356,7 +383,7 @@ export default function MatchDetailPage() {
 
             <div className="mt-1">
               {state === 'live'      && <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> Live
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {match.clock ?? 'Live'}
               </span>}
               {state === 'halftime'  && <span className="rounded-full bg-amber-500 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">Half Time</span>}
               {state === 'finished'  && <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-500">Full Time</span>}
@@ -393,36 +420,44 @@ export default function MatchDetailPage() {
           </div>
         ) : (
           <div>
-            {sortedEvents.map((event, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-0 transition-colors hover:bg-stone-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
-              >
-                {/* Minute */}
-                <span className="w-10 shrink-0 text-right text-xs font-bold tabular-nums text-stone-500 dark:text-zinc-500">
-                  {event.minute != null
-                    ? event.injuryMinute != null
-                      ? `${event.minute}+${event.injuryMinute}'`
-                      : `${event.minute}'`
-                    : '—'}
-                </span>
+            {sortedEvents.map((event, i) => {
+              // Mirror the timeline: home-team events read left→right, away-team
+              // events flip to right→left so each side owns a half of the row.
+              const isHome =
+                event.teamName != null &&
+                (event.teamName === match.homeTeam.name || event.teamName === match.homeTeam.shortName)
+              return (
+                <div
+                  key={i}
+                  className={`flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-0 transition-colors hover:bg-stone-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40
+                    ${isHome ? '' : 'flex-row-reverse'}`}
+                >
+                  {/* Minute */}
+                  <span className="w-10 shrink-0 text-xs font-bold tabular-nums text-stone-500 dark:text-zinc-500">
+                    {event.minute != null
+                      ? event.injuryMinute != null
+                        ? `${event.minute}+${event.injuryMinute}'`
+                        : `${event.minute}'`
+                      : '—'}
+                  </span>
 
-                <span className="text-base leading-none">{eventIcon(event.type)}</span>
+                  <span className="text-base leading-none">{eventIcon(event.type)}</span>
 
-                <div className="flex-1 overflow-hidden">
-                  <p className="truncate text-sm font-medium">{eventLabel(event)}</p>
-                  {event.type === 'GOAL' && event.assistName && (
-                    <p className="truncate text-xs text-stone-500 dark:text-zinc-500">Assist: {event.assistName}</p>
+                  <div className={`flex-1 overflow-hidden ${isHome ? '' : 'text-right'}`}>
+                    <p className="truncate text-sm font-medium">{eventLabel(event)}</p>
+                    {event.type === 'GOAL' && event.assistName && (
+                      <p className="truncate text-xs text-stone-500 dark:text-zinc-500">Assist: {event.assistName}</p>
+                    )}
+                  </div>
+
+                  {event.teamName && (
+                    <span className="shrink-0 max-w-[100px] truncate text-xs text-stone-400 dark:text-zinc-600">
+                      {event.teamName}
+                    </span>
                   )}
                 </div>
-
-                {event.teamName && (
-                  <span className="shrink-0 max-w-[100px] truncate text-right text-xs text-stone-400 dark:text-zinc-600">
-                    {event.teamName}
-                  </span>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>
@@ -447,7 +482,7 @@ export default function MatchDetailPage() {
         </section>
       ) : boxScore ? (
         // Real data — render the full box score panel
-        <BoxScorePanel boxScore={boxScore} match={match} />
+        <BoxScorePanel boxScore={boxScore} match={match} accentClass={theme.bg} />
       ) : (
         // API returned 204 — game played but no data (ESPN sometimes lags)
         <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/40">

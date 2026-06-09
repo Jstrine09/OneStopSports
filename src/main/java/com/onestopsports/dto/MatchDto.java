@@ -14,5 +14,7 @@ public record MatchDto(
         String status,        // e.g. "LIVE", "FINISHED", "SCHEDULED", "PAUSED" (halftime)
         LocalDateTime startTime, // NBA/NFL: already converted to ET. Football (soccer): UTC.
         Long leagueId,        // Our internal DB league ID (used to navigate to the right league)
-        String timezone       // "ET" for NBA/NFL (so frontend can show the label). null for football.
+        String timezone,      // "ET" for NBA/NFL (so frontend can show the label). null for football.
+        String clock          // Live game clock for in-progress games, e.g. "3RD · 4:12" (NBA),
+                              // "Q3 · 9:22" (NFL). null when not live or unavailable.
 ) {}

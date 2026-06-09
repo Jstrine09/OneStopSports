@@ -18,6 +18,9 @@ You are working on OneStopSports, a Java 21 + Spring Boot 3.4.4 backend with a R
 ## Critical gotchas — internalise these
 
 - **`ResponseStatusException` `@ExceptionHandler` must appear BEFORE the catch-all `@ExceptionHandler(Exception.class)` in `GlobalExceptionHandler`.** If the catch-all comes first, 404s become 500s.
+- **`SecurityConfig` matcher order is load-bearing.** `/api/users/me/**` `authenticated()` MUST be declared before the broad `GET /api/**` `permitAll()` — first match wins, so reversing it bypasses auth on protected GETs. (There's also an `AuthenticationEntryPoint` for clean 401 JSON.)
+- **Glassmorphism is the house style** for field-backed surfaces (`.glass-card` over a `SportFieldBackdrop`). Any older "no glassmorphism" guidance is superseded. Reuse `SectionLabel` + `RowCard` for section headings and list surfaces.
+- **Accessibility baseline exists** — keep it: there's a global `:focus-visible` ring and a `prefers-reduced-motion: reduce` block (disables Tailwind `animate-pulse/ping/spin` + smooth scroll). New looping animations should be gated the same way; decorative SVG backdrops are `aria-hidden`.
 - **MapStruct annotation-processor order is load-bearing** in `pom.xml`: Lombok → `lombok-mapstruct-binding` → MapStruct. Reverse it and MapStruct can't see Lombok-generated getters.
 - **jjwt 0.12.x API:** `Jwts.parser()` + `.verifyWith(key)` + `.parseSignedClaims(token)`. NOT 0.11.x's `parserBuilder()` / `setSigningKey()` / `parseClaimsJws()`.
 - **`UserAccount` not `User`** — `user` is a PostgreSQL reserved word.

@@ -7,7 +7,7 @@ import { fetchMatchesByLeagueAndDate, fetchBoxScore } from '../api/matches'
 import StandingsTable from '../components/StandingsTable'
 import DateNav from '../components/DateNav'
 import LoadingSpinner from '../components/LoadingSpinner'
-import StadiumBackdrop from '../components/StadiumBackdrop'
+import SportFieldBackdrop, { fieldVariantForSport } from '../components/SportFieldBackdrop'
 import { getLeagueTheme } from '../lib/leagueTheme'
 import type { MatchDto, BoxScoreDto, PlayerStatGroupDto } from '../types'
 import { getMatchState } from '../types'
@@ -287,7 +287,25 @@ export default function LeaguesPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <>
+      {/* Full-bleed sport field — ONE field spanning the whole content pane (into
+          the side gutters, behind the header), themed to the active league. The
+          page content floats on top (relative z-10) with glass surfaces so the
+          field reads through everything. Fixed so it stays put while the page
+          scrolls; offset past the desktop sidebar; hidden on phones. */}
+      {activeLeague && (
+        <div className="pointer-events-none fixed inset-0 z-0 hidden md:block lg:left-56">
+          <SportFieldBackdrop
+            colorClass={theme.text}
+            variant={fieldVariantForSport(sportSlug)}
+            intensity="strong"
+          />
+          {/* Faint accent wash over the whole pane (matches the Design). */}
+          <div className={`absolute inset-0 ${theme.bg} opacity-[0.04]`} />
+        </div>
+      )}
+
+      <div className="relative z-10 space-y-5">
       {/* Sport selector — underline tab style, active tab takes the active league's theme color.
           When you switch sports mid-flow the underline color refreshes too, since the theme
           resolves from sport when no league is yet chosen. */}
@@ -315,15 +333,10 @@ export default function LeaguesPage() {
         </div>
       )}
 
-      {/* League identity header — the league is the subject of this page.
-          The StadiumBackdrop component renders floodlight glows + bowl silhouette
-          + crowd-dot texture, all themed to the league's brand color. This is the
-          "live feels alive" + "sport over chrome" principles working together:
-          the chrome IS the sport. */}
+      {/* League identity header — glass so the full-bleed field behind the pane
+          reads through it. */}
       {activeLeague && (
-        <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
-          <StadiumBackdrop colorClass={theme.text} intensity="strong" />
-
+        <header className="glass-card relative overflow-hidden rounded-3xl border border-stone-200 px-6 py-7 dark:border-zinc-800/60">
           {/* Top accent — a thin colored bar across the very top of the header.
               Reinforces league identity without using the banned side-stripe pattern. */}
           <div className={`absolute inset-x-0 top-0 h-0.5 ${theme.bg} opacity-80`} />
@@ -365,10 +378,10 @@ export default function LeaguesPage() {
               <button
                 key={l.id}
                 onClick={() => setLeague(l.id)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold backdrop-blur transition
                   ${isActive
                     ? `${pillTheme.tint} ${pillTheme.text} ring-1 ${pillTheme.ring}`
-                    : 'bg-stone-100 text-stone-500 hover:text-stone-900 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                    : 'bg-white/70 text-stone-600 ring-1 ring-stone-200/70 hover:text-stone-900 dark:bg-zinc-800/50 dark:text-zinc-300 dark:ring-zinc-700/50 dark:hover:text-zinc-100'
                   }`}
               >
                 {l.name}
@@ -378,16 +391,17 @@ export default function LeaguesPage() {
         </div>
       )}
 
-      {/* Standings / Teams / Results toggle — segmented control on a flat surface. */}
-      <div className="inline-flex rounded-lg border border-stone-200 p-0.5 dark:border-zinc-900">
+      {/* Standings / Teams / Results toggle — glass segmented control floating on
+          the field; the active tab gets a solid chip so it reads clearly. */}
+      <div className="inline-flex rounded-lg bg-stone-100/70 p-0.5 backdrop-blur dark:bg-zinc-900/50">
         {(['standings', 'teams', 'results'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setTab(tab)}
             className={`rounded-md px-4 py-1.5 text-xs font-semibold capitalize transition
               ${activeTab === tab
-                ? 'bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'text-stone-500 hover:text-stone-900 dark:text-zinc-500 dark:hover:text-zinc-100'
+                ? 'bg-white text-stone-900 shadow-sm dark:bg-zinc-700 dark:text-white'
+                : 'text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100'
               }`}
           >
             {tab}
@@ -398,6 +412,7 @@ export default function LeaguesPage() {
       {/* Tab content */}
       {activeTab === 'standings' ? (
         loadingStandings ? <LoadingSpinner /> : (
+          // Glass table reads over the full-bleed field behind the pane.
           <StandingsTable
             entries={standings}
             // showZones only for domestic football leagues — Champions League
@@ -406,6 +421,7 @@ export default function LeaguesPage() {
               sportSlug === 'football' &&
               !activeLeague?.name?.toLowerCase().includes('champions')
             }
+            glass
           />
         )
       ) : activeTab === 'teams' ? (
@@ -414,17 +430,16 @@ export default function LeaguesPage() {
         ) : teams.length === 0 ? (
           <p className="py-8 text-center text-sm text-stone-500 dark:text-zinc-500">No teams found</p>
         ) : (
-          // Squad-wall layout. Hover uses the league's theme color so the brand
-          // continuity carries through into the interaction state.
+          // Squad-wall layout. Glass tiles read over the full-bleed field; hover
+          // uses the league's theme color so the brand continuity carries through.
           <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
             {teams.map((team) => (
               <Link
                 key={team.id}
                 to={`/teams/${team.id}`}
                 state={{ fromLeagues: true, sportSlug, leagueId }}
-                className={`group flex flex-col items-center gap-3 rounded-xl border border-transparent bg-white px-3 py-5 transition
-                           ${theme.hoverBorder} ${theme.hoverTint} active:scale-[0.97]
-                           dark:bg-zinc-900/60`}
+                className={`group flex flex-col items-center gap-3 rounded-xl border border-transparent glass-card px-3 py-5 transition
+                           ${theme.hoverBorder} ${theme.hoverTint} active:scale-[0.97]`}
               >
                 {team.crestUrl
                   ? <img src={team.crestUrl} alt={team.name} className="h-14 w-14 object-contain transition-transform group-hover:scale-105" />
@@ -459,7 +474,8 @@ export default function LeaguesPage() {
           ) : (
             // Expandable result rows — finished matches can be expanded inline
             // to show starters + team stats. Box score is lazy-fetched on expand.
-            <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+            // Glass so the full-bleed field reads through.
+            <section className="glass-card overflow-hidden rounded-2xl border border-stone-200 dark:border-zinc-800/60">
               {results.map((match) => (
                 <ResultRow key={match.id} match={match} leagueId={leagueId!} />
               ))}
@@ -467,6 +483,7 @@ export default function LeaguesPage() {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }

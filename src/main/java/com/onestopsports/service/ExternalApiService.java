@@ -389,7 +389,7 @@ public class ExternalApiService {
         }
 
         return new MatchDto(m.id(), home, away, homeScore, awayScore,
-                m.status(), startTime, dbLeagueId, null); // null timezone — football times stay as UTC
+                m.status(), startTime, dbLeagueId, null, null); // null timezone (UTC) + null clock (no free-tier minute)
     }
 
     // Converts an ApiMatchDetail (returned by GET /matches/{id}) into a MatchDto.
@@ -430,7 +430,7 @@ public class ExternalApiService {
         }
 
         return new MatchDto(detail.id(), home, away, homeScore, awayScore,
-                detail.status(), startTime, dbLeagueId, null); // null timezone — football times stay as UTC
+                detail.status(), startTime, dbLeagueId, null, null); // null timezone (UTC) + null clock
     }
 
     // Converts one row of standings data from the API into a StandingsEntryDto.

@@ -48,7 +48,7 @@ export default function AuthPage() {
         </div>
 
         {/* Form card */}
-        <form onSubmit={submit} className="space-y-3 rounded-2xl bg-white p-6 dark:bg-zinc-800">
+        <form onSubmit={submit} className="space-y-3 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
           <div>
             <label className="mb-1 block text-xs text-stone-500 dark:text-zinc-400">Username</label>
             <input
@@ -58,7 +58,7 @@ export default function AuthPage() {
               required
               autoComplete="username"
               autoCapitalize="none"
-              className="w-full rounded-lg bg-stone-100 px-3 py-2.5 text-base outline-none ring-1 ring-stone-300 transition focus:ring-amber-500 dark:bg-zinc-700 dark:ring-zinc-600 md:text-sm"
+              className="w-full rounded-lg bg-stone-100 px-3 py-2.5 text-base outline-none ring-1 ring-stone-300 transition focus:ring-amber-500 dark:bg-zinc-800 dark:ring-zinc-700 md:text-sm"
             />
           </div>
 
@@ -73,7 +73,7 @@ export default function AuthPage() {
                 required
                 autoComplete="email"
                 inputMode="email"
-                className="w-full rounded-lg bg-stone-100 px-3 py-2.5 text-base outline-none ring-1 ring-stone-300 transition focus:ring-amber-500 dark:bg-zinc-700 dark:ring-zinc-600 md:text-sm"
+                className="w-full rounded-lg bg-stone-100 px-3 py-2.5 text-base outline-none ring-1 ring-stone-300 transition focus:ring-amber-500 dark:bg-zinc-800 dark:ring-zinc-700 md:text-sm"
               />
             </div>
           )}
@@ -88,7 +88,7 @@ export default function AuthPage() {
               required
               minLength={8}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              className="w-full rounded-lg bg-stone-100 px-3 py-2.5 text-base outline-none ring-1 ring-stone-300 transition focus:ring-amber-500 dark:bg-zinc-700 dark:ring-zinc-600 md:text-sm"
+              className="w-full rounded-lg bg-stone-100 px-3 py-2.5 text-base outline-none ring-1 ring-stone-300 transition focus:ring-amber-500 dark:bg-zinc-800 dark:ring-zinc-700 md:text-sm"
             />
           </div>
 

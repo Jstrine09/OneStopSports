@@ -5,6 +5,9 @@ interface Props {
   // Whether to colour-code position zones (CL/EL/Conf/relegation).
   // False for competitions with no zones (Champions League, NBA, NFL).
   showZones?: boolean
+  // When true, the table surface is translucent (`.glass-card`) so a
+  // SportFieldBackdrop behind it reads through. Default false → solid card.
+  glass?: boolean
 }
 
 // ── Football / NBA flat-table helpers ─────────────────────────────────────────
@@ -79,10 +82,13 @@ function nflSeedBadge(position: number): JSX.Element {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function StandingsTable({ entries, showZones = true }: Props) {
+export default function StandingsTable({ entries, showZones = true, glass = false }: Props) {
   if (entries.length === 0) {
     return <p className="py-8 text-center text-sm text-stone-500 dark:text-zinc-500">No standings available</p>
   }
+
+  // Outer surface — translucent when field-backed, solid otherwise.
+  const surface = glass ? 'glass-card' : 'bg-white dark:bg-zinc-900/60'
 
   // Detect NFL mode — any entry with a non-null division triggers the grouped layout
   const isNfl = entries.some((e) => e.division !== null)
@@ -94,7 +100,7 @@ export default function StandingsTable({ entries, showZones = true }: Props) {
     return (
       <div className="space-y-5">
         {conferences.map((conf) => (
-          <div key={conf.name} className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+          <div key={conf.name} className={`overflow-hidden rounded-2xl border border-stone-200 dark:border-zinc-900 ${surface}`}>
             {/* Conference header */}
             <div className="flex items-center gap-2 border-b border-stone-200 bg-stone-50 px-4 py-2 dark:border-zinc-900 dark:bg-zinc-900/80">
               <span className="rounded bg-stone-900 px-2 py-0.5 text-[11px] font-black tracking-widest text-white dark:bg-zinc-100 dark:text-zinc-900">
@@ -180,7 +186,7 @@ export default function StandingsTable({ entries, showZones = true }: Props) {
 
   // ── Football / NBA flat-table layout ─────────────────────────────────────────
   return (
-    <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-zinc-900 dark:bg-zinc-900/60">
+    <div className={`overflow-hidden rounded-2xl border border-stone-200 dark:border-zinc-900 ${surface}`}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>

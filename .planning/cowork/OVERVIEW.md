@@ -171,13 +171,19 @@ JWT Bearer scheme is wired in — paste a token from `POST /api/auth/login` into
 | Find the JSON error envelope | `controller/GlobalExceptionHandler.java` |
 | Read the API config namespace | `application.yml` → `external-api.*` |
 
-## What's not done
+## Frontend design system (the "sport field" redesign)
+- **`SportFieldBackdrop`** — animated portrait field behind sections, variants `bowl`/`court`/`gridiron` (soccer/NBA/NFL), themed via `currentColor`; `fieldVariantForSport(slug)` picks the variant. Used on Home, Leagues, Live, Match, Team.
+- **`.glass-card`** — translucent + blur surface so the field reads through tables/rows. **Glassmorphism is now the house style** for field-backed surfaces (supersedes any older "banned" note).
+- **`SectionLabel`** + **`RowCard`** (+ `ROW_DIVIDER`) — shared primitives for section headings and list surfaces; reuse them on new screens.
+- A11y baseline: global `:focus-visible` ring + `prefers-reduced-motion` gating; decorative backdrops `aria-hidden`. Field hidden on phones.
 
-- Football player headshots (lazy capture from API-Football's `player.photo` not wired)
-- Match stats + lineups for football (free-tier limit on football-data.org)
-- API-Football serves season 2024 only on free tier — currently displaying 2024-25 data rather than 2025-26
-- No CI pipeline, no production deployment
-- No frontend tests (Vitest not configured)
-- Test coverage gaps on `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `TeamService`
+## What's not done / known issues
+- NBA/NFL player headshots ARE wired (ESPN CDN, derived from `externalId`); **football** headshots are still not captured.
+- Football career stats: single season, capped at 2024 (api-sports.io free tier) — UI shows a "most recent available season" badge.
+- Match stats + lineups for football: stubbed `{}` (football-data.org free-tier limit).
+- **NBA standings don't group by conference** (flat win-sorted ladder — `conference` not populated). Highest-value open data fix.
+- Search is not accent-insensitive ("Dembele"↛"Dembélé").
+- No frontend tests (Vitest not configured); backend coverage gaps on `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `TeamService`.
+- Production deploy IS set up (Render + Neon, single-origin Docker via `SpaForwardingConfig`); no CI pipeline yet.
 
-See `ROADMAP.md` for the full backlog.
+See `ROADMAP.md` (top section is the current post-QA state) for the full backlog.

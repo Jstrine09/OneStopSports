@@ -153,7 +153,11 @@ public class NbaApiService {
     {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record EspnEventStatus(EspnStatusType type) {}
+    public record EspnEventStatus(
+            EspnStatusType type,
+            String displayClock, // Live game clock e.g. "4:12" (in-period time remaining)
+            Integer period)      // Quarter number (1-4, 5+ = overtime)
+    {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record EspnStatusType(
@@ -523,8 +527,28 @@ public class NbaApiService {
         // ESPN event IDs are strings — parse to Long for MatchDto
         Long matchId = parseId(event.id());
 
+        // Live game clock, e.g. "3RD · 4:12" — only for in-progress games.
+        String clock = null;
+        if ("LIVE".equals(mappedStatus) && event.status() != null && event.status().displayClock() != null) {
+            String pl = nbaPeriodLabel(event.status().period());
+            clock = pl.isEmpty() ? event.status().displayClock() : pl + " · " + event.status().displayClock();
+        }
+
         return new MatchDto(matchId, home, away, homeScore, awayScore,
-                mappedStatus, startTime, dbLeagueId, "ET");
+                mappedStatus, startTime, dbLeagueId, "ET", clock);
+    }
+
+    // NBA period number → label: 1ST..4TH, then OT / 2OT / 3OT ...
+    private static String nbaPeriodLabel(Integer period) {
+        if (period == null) return "";
+        return switch (period) {
+            case 1 -> "1ST";
+            case 2 -> "2ND";
+            case 3 -> "3RD";
+            case 4 -> "4TH";
+            case 5 -> "OT";
+            default -> (period - 4) + "OT"; // 6 → 2OT, 7 → 3OT
+        };
     }
 
     // Converts an ESPN competitor record to a TeamDto.

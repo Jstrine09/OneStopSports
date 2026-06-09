@@ -2,12 +2,17 @@ import { useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchTeam, fetchTeamPlayers } from '../api/teams'
+import { fetchLeague } from '../api/leagues'
+import { fetchSports } from '../api/sports'
 import {
   getFavoriteTeams, addFavoriteTeam, removeFavoriteTeam,
   getFavoritePlayers, addFavoritePlayer, removeFavoritePlayer,
 } from '../api/auth'
 import { useAuth } from '../context/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
+import SectionLabel from '../components/SectionLabel'
+import SportFieldBackdrop, { fieldVariantForSport } from '../components/SportFieldBackdrop'
+import { getLeagueTheme } from '../lib/leagueTheme'
 import { ChevronLeft, MapPin, Globe, Heart } from 'lucide-react'
 import type { PlayerDto } from '../types'
 
@@ -147,6 +152,21 @@ export default function TeamDetailPage() {
     staleTime: selectedSeason != null ? 24 * 60 * 60_000 : 5 * 60_000,
   })
 
+  // Resolve the team's league + sport so the header field shows the correct sport
+  // and league colour regardless of how the user arrived (Leagues, search, direct
+  // URL). Both queries are cached, so this is cheap.
+  const { data: league } = useQuery({
+    queryKey: ['league', team?.leagueId],
+    queryFn: () => fetchLeague(team!.leagueId!),
+    enabled: !!team?.leagueId,
+    staleTime: 10 * 60_000,
+  })
+  const { data: sports = [] } = useQuery({
+    queryKey: ['sports'],
+    queryFn: fetchSports,
+    staleTime: 10 * 60_000,
+  })
+
   const { data: favTeams = [] } = useQuery({
     queryKey: ['favorites', 'teams'],
     queryFn: getFavoriteTeams,
@@ -188,6 +208,13 @@ export default function TeamDetailPage() {
 
   const grouped = groupByPosition(players)
 
+  // Sport field for the header. Prefer the resolved league→sport (works on any
+  // nav path and gives the league-specific colour, e.g. Premier League purple);
+  // fall back to the router-state sportSlug while the league query loads.
+  const resolvedSlug = sports.find((s) => s.id === league?.sportId)?.slug ?? fromState?.sportSlug
+  const fieldTheme = getLeagueTheme(league?.name, resolvedSlug)
+  const fieldVariant = fieldVariantForSport(resolvedSlug)
+
   return (
     <div className="space-y-5">
       {/* Back */}
@@ -206,9 +233,14 @@ export default function TeamDetailPage() {
         <LoadingSpinner />
       ) : team ? (
         <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-white px-6 py-7 dark:border-zinc-900 dark:bg-zinc-900/60">
-          {/* Subtle radial wash behind the crest — adds depth without using
-              gradient text or glassmorphism (both banned). */}
-          <div className="pointer-events-none absolute -left-12 -top-12 h-48 w-48 rounded-full bg-amber-500/[0.04] blur-3xl" />
+          {/* Sport field behind the crest, themed to the sport. Subtle so the team
+              identity stays dominant; hidden on phones. */}
+          <SportFieldBackdrop
+            colorClass={fieldTheme.text}
+            variant={fieldVariant}
+            intensity="subtle"
+            className="hidden md:block"
+          />
 
           <div className="relative flex items-center gap-5">
             {team.crestUrl ? (
@@ -255,9 +287,7 @@ export default function TeamDetailPage() {
       <section>
         <div className="mb-3 flex items-center justify-between gap-3 px-1">
           <div className="flex items-baseline gap-3">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500 dark:text-zinc-400">
-              Squad
-            </h2>
+            <SectionLabel>Squad</SectionLabel>
             {players.length > 0 && (
               <span className="text-xs tabular-nums text-stone-400 dark:text-zinc-600">{players.length} players</span>
             )}

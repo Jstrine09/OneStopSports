@@ -103,7 +103,7 @@ public List<MatchDto> getMatchesByLeagueAndDate(Long leagueId, LocalDate date) {
 
 1. Browser fires HTTP via `frontend/src/api/client.ts` (axios); request interceptor attaches `Authorization: Bearer <jwt>` from `localStorage` if a token exists.
 2. `JwtAuthFilter.doFilterInternal` parses the token, validates via `JwtUtil`, loads `UserDetails` via `AuthService.loadUserByUsername`, populates `SecurityContextHolder`. The chain is fully stateless — no server session is created.
-3. `SecurityConfig.filterChain` checks route rules — `GET /api/**` is `permitAll`, `/api/users/me/**` requires `authenticated()`.
+3. `SecurityConfig.filterChain` checks route rules — `/api/users/me/**` requires `authenticated()` and is declared **before** the broad `GET /api/**` `permitAll` (order is load-bearing: first match wins, so the auth rule must come first or protected GETs get bypassed). Unauthenticated hits on protected routes return a 401 JSON via the configured `AuthenticationEntryPoint`.
 4. `MatchController.getMatches` delegates to `MatchService.getMatchesByLeagueAndDate`.
 5. Service resolves the league, walks `league.getSport().getSlug()`, routes via the `switch` above to the matching adapter.
 6. The adapter calls the upstream API via `RestClient`, maps JSON to `MatchDto` records, returns them.

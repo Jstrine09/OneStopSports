@@ -6,6 +6,11 @@ import ThemeToggle from '../components/ThemeToggle'
 export default function AppLayout() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 dark:bg-zinc-950 dark:text-zinc-100">
+      {/* Note: sport fields are no longer a single full-page background — they're
+          rendered per-section (per league group on Home, behind the Leagues panel,
+          etc.) via SportFieldBackdrop, so each section shows the right sport's
+          field themed to its league colour. */}
+
       {/* Desktop sidebar (≥ lg) */}
       <Sidebar />
 

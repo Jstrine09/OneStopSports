@@ -218,3 +218,27 @@ className={state === 'live' ? 'text-green-600' : 'text-stone-500'}
 **Why:** User memory file explicitly requests this. Treats the codebase as a teaching project. Has been retroactively applied to all ~50 existing files. The tone target is "explain to a CS student in their first internship". Mention the why (cycle prevention, free-tier limits, ESPN quirks), not just the what.
 
 This is **mandatory** — not a style preference. New code without comments doesn't match the codebase.
+
+## Security matcher order + AuthenticationEntryPoint (post-QA, commit `bc1a890`)
+
+**Choice:** In `SecurityConfig`, declare `/api/users/me/**` `authenticated()` BEFORE the broad `GET /api/**` `permitAll()`, and add an `AuthenticationEntryPoint` that returns a 401 JSON envelope.
+
+**Why:** Spring evaluates matchers top-to-bottom, first match wins. With the broad GET permitAll first, a `GET /api/users/me/...` matched the public rule and skipped auth entirely — a real bypass that only avoided leaking data via a null-principal NPE → 500. A QA persona found it. Order now guarantees the auth check runs; the entry point replaces the empty 403 with a proper 401 body.
+
+## 500 → 4xx exception handlers (post-QA)
+
+**Choice:** `GlobalExceptionHandler` maps `MethodArgumentTypeMismatchException`→400, `MissingServletRequestParameterException`→400, `HttpRequestMethodNotSupportedException`→405.
+
+**Why:** These bubbled to the generic `Exception`→500 catch-all, so `/players/abc`, `/search` without `q`, and wrong HTTP verbs all returned 500s. Each is a client error and deserves the right 4xx.
+
+## Accessibility baseline (post-QA)
+
+**Choice:** Global `:focus-visible` outline; `prefers-reduced-motion: reduce` block disabling Tailwind's built-in `animate-pulse/ping/spin` + smooth scroll.
+
+**Why:** Tailwind Preflight strips default focus outlines, leaving the app unusable by keyboard (WCAG 2.4.7). Our *custom* field animations were already reduced-motion-gated, but the built-in Tailwind animations were not (WCAG 2.3.3). These are two small global CSS rules that fix both app-wide. (Note: glassmorphism via `.glass-card` IS now part of the house style for field-backed surfaces — any older "no glassmorphism" guidance is superseded.)
+
+## Football stale-season badge (post-QA)
+
+**Choice:** `CareerStatsTable` renders a "Showing the {season} season — most recent available on the current data plan" note for football.
+
+**Why:** api-sports.io free tier caps at season 2024, so football career stats lag the live season. Presenting a year-old season with no caveat reads as current/wrong data. The badge makes the limitation honest rather than hidden.

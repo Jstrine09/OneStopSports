@@ -27,6 +27,16 @@
   * {
     scroll-behavior: smooth;
   }
+
+  /* Keyboard focus ring. Tailwind's Preflight removes default outlines, which left
+     the app unusable by keyboard (WCAG 2.4.7). :focus-visible only shows the ring
+     for keyboard/AT users — mouse clicks don't get an outline. amber-500 reads on
+     both light and dark surfaces. */
+  :focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
 }
 
 @layer utilities {
@@ -56,5 +66,124 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SportFieldBackdrop — animation for the sport-field backgrounds (soccer pitch /
+   NBA court / NFL gridiron). Two motion layers, both GPU-friendly (only
+   `transform` and `opacity` animate):
+
+     1. Two floodlight glows that slowly "breathe" (opacity), top & bottom.
+     2. A scatter of X / O markers + a ball that drift gently over the field.
+
+   Both layers are gated TWO ways:
+     • the `.oss-backdrop--anim` class on the wrapper (set by the `animate` prop,
+       so callers — e.g. a "reduce live motion" setting — can switch it off), and
+     • `@media (prefers-reduced-motion: no-preference)` so users who ask their OS
+       for reduced motion get a still field with no animation at all.
+
+   Translate values are in the field's SVG user units (viewBox 360×760), so ~12
+   is a small, calm drift. Keep new field animations inside the same media query.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Marker drift — each uses a different duration so the cluster never moves in lockstep. */
+@keyframes pitch-drift-a {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(12px, -9px); }
+}
+@keyframes pitch-drift-b {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(-13px, 8px); }
+}
+@keyframes pitch-drift-c {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(9px, 11px); }
+}
+@keyframes pitch-drift-d {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(-10px, -7px); }
+}
+
+/* The ball travels a longer, slower loop down the field with a little sway. */
+@keyframes pitch-ball {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-10px, 52px); }
+  50%  { transform: translate(6px, 96px); }
+  75%  { transform: translate(-8px, 52px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Floodlight breathe — opacity only. */
+@keyframes ossFloodA { 0%, 100% { opacity: 0.62; } 50% { opacity: 1; } }
+@keyframes ossFloodB { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+/* Score-change flash — a green pop on the digit that just changed (live updates).
+   Applied transiently by MatchCard for ~1s when a WebSocket update bumps a score.
+   Gated on prefers-reduced-motion so it's a plain (instant) update for those users. */
+@media (prefers-reduced-motion: no-preference) {
+  .oss-flash {
+    border-radius: 5px;
+    padding: 0 2px;
+    animation: ossFlash 0.95s ease-out;
+  }
+}
+@keyframes ossFlash {
+  0%   { background: rgba(34, 197, 94, 0);    }
+  18%  { background: rgba(34, 197, 94, 0.38); }
+  100% { background: rgba(34, 197, 94, 0);    }
+}
+
+/* Base hints — `will-change` gives each animated element its own compositor layer
+   (cheap here: a handful of markers + two glows per backdrop). */
+.pitch-marker,
+.pitch-ball { will-change: transform; }
+.oss-flood  { transform-box: fill-box; transform-origin: center; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .oss-backdrop--anim .oss-flood--l    { animation: ossFloodA 6.5s ease-in-out infinite; }
+  .oss-backdrop--anim .oss-flood--r    { animation: ossFloodB 7.5s ease-in-out infinite; }
+  .oss-backdrop--anim .pitch-marker--a { animation: pitch-drift-a  9s ease-in-out infinite; }
+  .oss-backdrop--anim .pitch-marker--b { animation: pitch-drift-b 11s ease-in-out infinite; }
+  .oss-backdrop--anim .pitch-marker--c { animation: pitch-drift-c 13s ease-in-out infinite; }
+  .oss-backdrop--anim .pitch-marker--d { animation: pitch-drift-d 10s ease-in-out infinite; }
+  .oss-backdrop--anim .pitch-ball      { animation: pitch-ball   18s ease-in-out infinite; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Glass cards — semi-transparent + blurred surface so a SportFieldBackdrop reads
+   through behind tables and match rows while keeping text legible. Adopted from
+   the Claude Design handoff.
+
+   Note: this intentionally introduces glassmorphism, which the rest of the app
+   had avoided. It's scoped to field-backed surfaces only (apply `.glass-card`
+   together with a SportFieldBackdrop sibling) — don't use it on plain panels.
+   darkMode is class-based, so `.dark .glass-card` targets the dark theme.
+   ───────────────────────────────────────────────────────────────────────── */
+.glass-card {
+  background-color: rgba(255, 255, 255, 0.46);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+.dark .glass-card {
+  background-color: rgba(24, 24, 27, 0.30);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Reduced motion. The custom field animations (pitch-* / ossFlood) are already
+   gated to `prefers-reduced-motion: no-preference`, but Tailwind's built-in
+   looping animations (the live badge pulse, the live header ping, the loading
+   spinner) are NOT — they run regardless. Neutralise them, and switch smooth
+   scrolling off, for anyone who has asked their OS for reduced motion (WCAG 2.3.3).
+   ───────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-ping,
+  .animate-spin,
+  .animate-bounce {
+    animation: none !important;
+  }
+  * {
+    scroll-behavior: auto !important;
   }
 }
