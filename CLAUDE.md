@@ -91,7 +91,7 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 ### Multi-Sport Routing
 - DB schema is sport-agnostic: `sport → league → team → player`. Per-sport quirks live only in the adapter services.
 - Routing switches on `league.getSport().getSlug()` (canonical slugs `"football"`, `"basketball"`, `"american-football"`) in three methods: `MatchService.getMatchesByLeagueAndDate`, `LeagueService.getStandings`, `PlayerService.getPlayerCareerStats`. Each is `@Transactional` so the lazy chain resolves.
-- `getMatchById`/`getMatchEvents`/box score are football-only (ESPN/api-sports don't expose per-match event timelines the same way).
+- `getMatchById`/`getMatchEvents` are football-only. **Box score IS sport-routed** (`MatchService.getBoxScore(matchId, leagueId)` → `NbaApiService`/`NflApiService.fetchBoxScore` from ESPN's `/summary` endpoint for real NBA/NFL data, or `ExternalApiService.fetchFootballBoxScore` derived from match events for football).
 
 ### Player Career Stats / Bio / Photos
 - **Career stats** (`GET /api/players/{id}/career-stats`, 200|204): `PlayerService.getPlayerCareerStats` routes by sport → `NbaApiService`/`NflApiService` (ESPN `.../athletes/{espnId}/stats`) or `ApiFootballService` (api-sports.io). One sport-agnostic `PlayerCareerStatsDto` (`categories[] → {labels, seasons[], career}`). NBA/NFL have a career-total row; football is single-season (career row null).
@@ -109,8 +109,9 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 - `MatchService.refreshLiveMatchCache()` `@Scheduled(fixedDelay=30_000)`: fetches football + NBA + NFL live games, diffs against a `volatile` snapshot map, and only on change writes Redis (`cache.put(SimpleKey.EMPTY, current)`) + broadcasts `/topic/matches/live`.
 - Frontend `useLiveScores` hook subscribes and calls `queryClient.setQueryData(['matches','live'], …)`. REST polling at 60s is the fallback. Vite proxy forwards `/ws` with `ws:true`.
 
-### Redis / Jackson
+### Redis / Jackson / prod cache
 - `RedisConfig` uses a custom `ObjectMapper` (`JavaTimeModule` + `DefaultTyping.EVERYTHING`); `WebSocketConfig` injects Boot's auto-configured `ObjectMapper`. Both because the bare default can't serialise `LocalDateTime` → 500s.
+- **Redis is dev/local only.** `RedisConfig` is `@Profile("!prod")`. The **prod** profile (`application-prod.yml`) uses Spring's in-memory `cache.type: simple` and excludes the Redis auto-configs — the single prod instance doesn't run Redis. The live-scores scheduler overwrites the cached value every 30s either way, so behaviour matches.
 
 ### Frontend Design System — "sport field" redesign (Claude Design handoff)
 - **`SportFieldBackdrop`** — portrait playing-field background, variants `bowl` (soccer pitch) / `court` (NBA) / `gridiron` (NFL), with detailed markings, a breathing floodlight glow, and drifting X/O markers. Themed via `currentColor` (a Tailwind text class). `fieldVariantForSport(slug)` maps sport→variant. Used behind: Home league groups, Leagues header + standings/teams panels, Live groups, Match hero, Team header.
@@ -138,7 +139,7 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 | V4 `add_league_external_id` | `league.external_id` → football-data.org competition IDs |
 | V5 `rename_football_to_futbol` | sport name "Football"→"Futbol" (slug unchanged) |
 | V6 `add_player_external_id` | `player.external_id` (ESPN athlete ID / api-sports player ID) |
-| V7 `add_team_external_id` | `team.external_id` (ESPN team ID) |
+| V7 `add_team_external_id` | `team.external_id` VARCHAR(50) — ESPN team ID (NBA/NFL) / football-data team ID (football); enables historical-roster fetches |
 
 ---
 
@@ -158,10 +159,11 @@ GET  /api/players/{id}/bio              200 PlayerBioDto | 204 (NBA only)
 GET  /api/players/{id}/career-stats     200 PlayerCareerStatsDto | 204
 GET  /api/matches?league={id}&date={date}
 GET  /api/matches/live                  @Cacheable("matches"); also pushed via WebSocket
-GET  /api/matches/{id}                  match detail (football: full; box score available)
-GET  /api/matches/{id}/events           football match events
-GET  /api/matches/{id}/stats            stub: {} (free-tier limit)
-GET  /api/matches/{id}/lineups          stub: {} (free-tier limit)
+GET  /api/matches/{id}                   match detail (football)
+GET  /api/matches/{id}/events            football match events
+GET  /api/matches/{id}/boxscore?leagueId={id}   200 BoxScoreDto | 204 — sport-routed (NBA/NFL real via ESPN /summary; football derived from events)
+GET  /api/matches/{id}/stats             stub: {} (free-tier limit)
+GET  /api/matches/{id}/lineups           stub: {} (free-tier limit)
 GET  /api/search?q={query}              min 2 chars, up to 8 teams + 10 players
 POST /api/auth/register
 POST /api/auth/login
