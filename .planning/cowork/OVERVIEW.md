@@ -22,7 +22,7 @@ Users can browse leagues, view standings, see match fixtures and results for any
 | Backend framework | **Spring Boot 3.4.4** |
 | HTTP client | Spring 6 **`RestClient`** (synchronous; not WebFlux) |
 | Database | **PostgreSQL 16** |
-| Schema migrations | **Flyway** (six migrations, `V1`–`V6`) |
+| Schema migrations | **Flyway** (seven migrations, `V1`–`V7`) |
 | ORM | **Hibernate** via Spring Data JPA; `ddl-auto: validate` |
 | Cache | **Redis 7** (single `matches` cache, 30s TTL) |
 | Realtime | **Spring WebSocket / STOMP**, topic `/topic/matches/live` |
@@ -42,7 +42,7 @@ com.onestopsports
 ├── OneStopSportsApplication.java   @SpringBootApplication @EnableCaching @EnableScheduling
 ├── config/        @Configuration beans + CommandLineRunner data seeders
 ├── controller/    @RestController classes + GlobalExceptionHandler
-├── dto/           Java 21 records (request + response payloads, 17 total)
+├── dto/           Java 21 records (request + response payloads, 18 total)
 ├── model/         JPA entities (7 total: Sport, League, Team, Player, UserAccount, FavoriteTeam, FavoritePlayer)
 ├── repository/    Spring Data JpaRepository interfaces
 ├── security/      JwtUtil + JwtAuthFilter
@@ -90,6 +90,7 @@ GET  /api/matches?league={id}&date={iso-date}
 GET  /api/matches/live                  Cached in Redis 30s; also pushed via /topic/matches/live
 GET  /api/matches/{id}
 GET  /api/matches/{id}/events
+GET  /api/matches/{id}/boxscore?leagueId={id}   200 BoxScoreDto | 204 — sport-routed
 GET  /api/matches/{id}/stats            Stubbed → {} (free-tier blocked)
 GET  /api/matches/{id}/lineups          Stubbed → {} (free-tier blocked)
 GET  /api/search?q={query}              Min 2 chars; up to 8 teams + 10 players
@@ -148,7 +149,7 @@ docker-compose up --build
 
 ```bash
 mvn test
-# 57 tests across 6 test classes; uses H2 + spring.cache.type: none
+# 57 tests across 7 test classes; uses H2 + spring.cache.type: none
 ```
 
 ### Swagger UI
