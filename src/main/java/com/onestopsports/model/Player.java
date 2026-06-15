@@ -1,5 +1,6 @@
 package com.onestopsports.model;
 
+import com.onestopsports.util.TextNormalizer;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -36,6 +37,13 @@ public class Player {
     private Integer jerseyNumber;  // The number on their shirt
     private String photoUrl;     // Player headshot (currently not populated from the API)
 
+    // Accent-stripped, lower-cased copy of `name`, kept in sync automatically by the
+    // @PrePersist/@PreUpdate hook below so search can match "Dembele" against "Dembélé".
+    // Nullable for rows created before this column existed — NameNormalizationBackfill
+    // fills those on startup.
+    @Column(name = "name_normalized")
+    private String nameNormalized;
+
     // External-API identifier used by the career-stats endpoints.
     // Meaning is sport-specific (see migration V6 for the full breakdown):
     //   • basketball / american-football → ESPN athlete ID  (set at seed time by NbaDataLoader / NflDataLoader)
@@ -47,4 +55,12 @@ public class Player {
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
+
+    // Runs automatically before every insert and update so the normalized name stays
+    // in sync with `name` regardless of which loader or service persisted the row.
+    @PrePersist
+    @PreUpdate
+    private void syncNameNormalized() {
+        this.nameNormalized = TextNormalizer.normalize(this.name);
+    }
 }

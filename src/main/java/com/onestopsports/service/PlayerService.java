@@ -5,6 +5,7 @@ import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.PlayerDto;
 import com.onestopsports.model.Player;
 import com.onestopsports.repository.PlayerRepository;
+import com.onestopsports.util.TextNormalizer;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -158,11 +159,14 @@ public class PlayerService {
         return apiFootballService.fetchPlayerStats(found.get(), season);
     }
 
-    // Returns players whose name contains the query string (case-insensitive).
+    // Returns players whose name contains the query string (accent-insensitive).
+    // The query is normalized (accents stripped, lower-cased) to match the stored
+    // name_normalized column, so "Dembele" finds "Dembélé".
     // Capped at 10 results so the search results page stays readable.
     // Called by GET /api/search?q=...
     public List<PlayerDto> searchPlayers(String query) {
-        return playerRepository.findByNameContainingIgnoreCase(query)
+        String normalized = TextNormalizer.normalize(query);
+        return playerRepository.findByNameNormalizedContaining(normalized)
                 .stream()
                 .limit(10)
                 .map(this::toDto)

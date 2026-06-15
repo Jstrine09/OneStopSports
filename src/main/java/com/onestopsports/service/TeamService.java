@@ -4,6 +4,7 @@ import com.onestopsports.dto.PlayerDto;
 import com.onestopsports.dto.TeamDto;
 import com.onestopsports.model.Team;
 import com.onestopsports.repository.TeamRepository;
+import com.onestopsports.util.TextNormalizer;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,11 +47,14 @@ public class TeamService {
                 .toList();
     }
 
-    // Returns teams whose name contains the query string (case-insensitive).
+    // Returns teams whose name contains the query string (accent-insensitive).
+    // We normalize the query the same way the stored name_normalized column was
+    // normalized (accents stripped, lower-cased) so "Atletico" matches "Atlético".
     // Capped at 8 results so the search dropdown stays compact.
     // Called by GET /api/search?q=...
     public List<TeamDto> searchTeams(String query) {
-        return teamRepository.findByNameContainingIgnoreCase(query)
+        String normalized = TextNormalizer.normalize(query);
+        return teamRepository.findByNameNormalizedContaining(normalized)
                 .stream()
                 .limit(8)
                 .map(this::toDto)

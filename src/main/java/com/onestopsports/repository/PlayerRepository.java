@@ -23,7 +23,14 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
     // SQL: SELECT EXISTS(SELECT 1 FROM player WHERE team_id = ? AND external_id IS NULL)
     boolean existsByTeamIdAndExternalIdIsNull(Long teamId);
 
-    // Case-insensitive partial name match — used by the global search feature.
-    // SQL: SELECT * FROM player WHERE LOWER(name) LIKE LOWER('%?%')
-    List<Player> findByNameContainingIgnoreCase(String query);
+    // Accent-insensitive partial name match — used by the global search feature.
+    // Queries the pre-normalized (accent-stripped, lower-cased) name column so a
+    // search for "Dembele" matches the stored "Dembélé". The caller must pass an
+    // already-normalized query (see TextNormalizer).
+    // SQL: SELECT * FROM player WHERE name_normalized LIKE '%?%'
+    List<Player> findByNameNormalizedContaining(String normalizedQuery);
+
+    // All rows whose normalized name hasn't been populated yet (rows that pre-date the
+    // name_normalized column). Used by the boot-time backfill to fill them in.
+    List<Player> findByNameNormalizedIsNull();
 }

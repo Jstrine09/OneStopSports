@@ -1,5 +1,6 @@
 package com.onestopsports.model;
 
+import com.onestopsports.util.TextNormalizer;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -35,6 +36,13 @@ public class Team {
     private String stadium;   // Stadium name — e.g. "Etihad Stadium"
     private String country;   // Country — e.g. "England"
 
+    // Accent-stripped, lower-cased copy of `name`, kept in sync automatically by the
+    // @PrePersist/@PreUpdate hook below. Search queries this column so "Atletico"
+    // matches "Atlético". Nullable for rows created before this column existed —
+    // the boot-time backfill (NameNormalizationBackfill) fills those in.
+    @Column(name = "name_normalized")
+    private String nameNormalized;
+
     // The upstream provider's team ID — stored so we can fetch historical rosters
     // without re-fetching the full team list at runtime.
     // NBA/NFL: ESPN string ID (e.g. "1"). Football: football-data.org integer as string.
@@ -45,4 +53,13 @@ public class Team {
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
+
+    // Runs automatically before every insert and update, so the normalized name can
+    // never drift out of sync with `name` no matter which loader or service saved the
+    // row. Centralising it here means callers never have to remember to set it.
+    @PrePersist
+    @PreUpdate
+    private void syncNameNormalized() {
+        this.nameNormalized = TextNormalizer.normalize(this.name);
+    }
 }
