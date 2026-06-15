@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 // Handles business logic for Players.
@@ -162,12 +164,25 @@ public class PlayerService {
     // Returns players whose name contains the query string (accent-insensitive).
     // The query is normalized (accents stripped, lower-cased) to match the stored
     // name_normalized column, so "Dembele" finds "Dembélé".
+    //
+    // A squad is seeded once per competition the club plays in, so the same player
+    // can appear as multiple rows (e.g. an Arsenal player under both the Premier
+    // League and Champions League copies of the club). We collapse to one entry per
+    // (player name + club name) — keeping the first seen — so duplicates don't fill
+    // the results. Two genuinely different players who share a name but play for
+    // different clubs are kept separate because the club name is part of the key.
     // Capped at 10 results so the search results page stays readable.
     // Called by GET /api/search?q=...
     public List<PlayerDto> searchPlayers(String query) {
         String normalized = TextNormalizer.normalize(query);
-        return playerRepository.findByNameNormalizedContaining(normalized)
-                .stream()
+        Map<String, Player> uniqueByNameAndClub = new LinkedHashMap<>();
+        for (Player player : playerRepository.findByNameNormalizedContaining(normalized)) {
+            // team is lazy but resolvable here — OSIV keeps the session open for the
+            // whole web request (the same reason toDto can walk team.league.sport).
+            String clubKey = player.getTeam() != null ? player.getTeam().getNameNormalized() : "";
+            uniqueByNameAndClub.putIfAbsent(player.getNameNormalized() + "|" + clubKey, player);
+        }
+        return uniqueByNameAndClub.values().stream()
                 .limit(10)
                 .map(this::toDto)
                 .toList();

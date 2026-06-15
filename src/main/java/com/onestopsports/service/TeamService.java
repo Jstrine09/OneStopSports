@@ -10,7 +10,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 // Handles business logic for Teams.
 // All data comes from our own database (seeded from football-data.org at startup).
@@ -50,12 +52,19 @@ public class TeamService {
     // Returns teams whose name contains the query string (accent-insensitive).
     // We normalize the query the same way the stored name_normalized column was
     // normalized (accents stripped, lower-cased) so "Atletico" matches "Atlético".
-    // Capped at 8 results so the search dropdown stays compact.
+    //
+    // The same club is seeded once per competition it plays in (e.g. Arsenal exists
+    // as separate rows in the Premier League and the Champions League), so we collapse
+    // the results to one entry per distinct normalized name — keeping the first row
+    // seen — before capping at 8. Otherwise a search for "Arsenal" returns it twice.
     // Called by GET /api/search?q=...
     public List<TeamDto> searchTeams(String query) {
         String normalized = TextNormalizer.normalize(query);
-        return teamRepository.findByNameNormalizedContaining(normalized)
-                .stream()
+        Map<String, Team> uniqueByName = new LinkedHashMap<>();
+        for (Team team : teamRepository.findByNameNormalizedContaining(normalized)) {
+            uniqueByName.putIfAbsent(team.getNameNormalized(), team);
+        }
+        return uniqueByName.values().stream()
                 .limit(8)
                 .map(this::toDto)
                 .toList();
