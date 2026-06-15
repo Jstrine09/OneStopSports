@@ -115,7 +115,9 @@ export default function LivePage() {
         // brand color: top accent bar, themed section header, and a faint
         // stadium backdrop inside the section. This gives every match in the
         // group an immediate visual association with its sport.
-        <div className="space-y-5">
+        // aria-live="polite" so assistive tech announces score changes pushed
+        // over the WebSocket without the user having to navigate back in.
+        <div className="space-y-5" aria-live="polite" aria-label="Live scores">
           {groups.map((group) => (
             <section key={group.label}>
               <div className="mb-2 flex items-center justify-between px-1">

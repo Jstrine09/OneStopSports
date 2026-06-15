@@ -34,6 +34,16 @@ export default function MatchCard({ match }: Props) {
     ? match.startTime ? formatKickoff(match.startTime, match.timezone) : '--:--'
     : null
 
+  // Winner emphasis on finished matches — the loser is dimmed so the result reads
+  // at a glance (Fotmob-style). Draws emphasise neither side.
+  const finished = state === 'finished'
+  const bothScored = match.homeScore != null && match.awayScore != null
+  const homeWon = finished && bothScored && match.homeScore! > match.awayScore!
+  const awayWon = finished && bothScored && match.awayScore! > match.homeScore!
+  // Class applied to the losing side's name + crest so it recedes.
+  const homeDim = awayWon ? 'opacity-50' : ''
+  const awayDim = homeWon ? 'opacity-50' : ''
+
   // Score-change flash — when a live WebSocket update changes a score, briefly
   // pop the side that scored (green flash, see .oss-flash in index.css). We track
   // the previous scores in refs and compare on each render. The first render
@@ -75,9 +85,9 @@ export default function MatchCard({ match }: Props) {
         ${state === 'live' ? 'bg-green-50 dark:bg-green-500/[0.06]' : ''}`}
     >
       {/* Home team */}
-      <div className="flex flex-1 items-center gap-2.5 overflow-hidden">
+      <div className={`flex flex-1 items-center gap-2.5 overflow-hidden ${homeDim}`}>
         <TeamCrest url={match.homeTeam.crestUrl} name={match.homeTeam.shortName} />
-        <span className="truncate text-sm font-semibold">{match.homeTeam.shortName}</span>
+        <span className={`truncate text-sm ${homeWon ? 'font-extrabold' : 'font-semibold'}`}>{match.homeTeam.shortName}</span>
       </div>
 
       {/* Score / kickoff time — this is the information, everything else is context.
@@ -89,7 +99,9 @@ export default function MatchCard({ match }: Props) {
             {kickoff}
           </span>
         ) : (
-          <span className={`text-lg font-extrabold tabular-nums tracking-tight
+          <span
+            aria-label={`${match.homeTeam.shortName} ${match.homeScore ?? 0}, ${match.awayTeam.shortName} ${match.awayScore ?? 0}`}
+            className={`text-lg font-extrabold tabular-nums tracking-tight
             ${state === 'live' ? 'text-green-600 dark:text-green-400' : 'text-stone-900 dark:text-zinc-100'}`}
           >
             <span className={flash === 'home' ? 'oss-flash' : ''}>{match.homeScore ?? 0}</span>
@@ -105,8 +117,8 @@ export default function MatchCard({ match }: Props) {
       </div>
 
       {/* Away team */}
-      <div className="flex flex-1 items-center justify-end gap-2.5 overflow-hidden">
-        <span className="truncate text-right text-sm font-semibold">{match.awayTeam.shortName}</span>
+      <div className={`flex flex-1 items-center justify-end gap-2.5 overflow-hidden ${awayDim}`}>
+        <span className={`truncate text-right text-sm ${awayWon ? 'font-extrabold' : 'font-semibold'}`}>{match.awayTeam.shortName}</span>
         <TeamCrest url={match.awayTeam.crestUrl} name={match.awayTeam.shortName} />
       </div>
     </Link>
