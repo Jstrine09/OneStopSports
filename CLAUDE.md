@@ -1,6 +1,6 @@
 # OneStopSports — Claude Code Context
 
-> **Last refreshed:** reflects commit `ed8ef2e` (post 5-persona QA fixes + docs corrections; cowork files verified). If you're picking this up in a new chat, this file + `.planning/cowork/` are the authoritative current-state context.
+> **Last refreshed:** reflects commit `2399c3e` (all remaining 5-persona QA issues cleared — NBA conference standings, accent-insensitive search, PCT/GB + league logos, a11y, search dedupe). If you're picking this up in a new chat, this file + `.planning/cowork/` are the authoritative current-state context.
 
 ## Project Overview
 **OneStopSports** is a full-stack, Fotmob-style multi-sport app covering **football (soccer), the NBA, and the NFL**. It surfaces live scores (pushed over WebSocket), league standings, match detail + box scores + event timelines, full team rosters, player profiles with **bio, career stats, and headshots**, and global search. Users can register and save favourite teams and players.
@@ -17,7 +17,7 @@
 | Backend | Java 21 + Spring Boot 3.4.4 |
 | HTTP port | **8081** (`server.port` in `application.yml`) |
 | Database | PostgreSQL 16 (`onestopsports` DB) |
-| Migrations | Flyway (**7 migrations**, V1–V7) |
+| Migrations | Flyway (**8 migrations**, V1–V8) |
 | Cache | Redis 7 (30s TTL on the live-matches cache) |
 | Auth | Spring Security 6 + JWT (jjwt 0.12.x) |
 | Real-time | Spring WebSocket (STOMP) — server pushes score changes to `/topic/matches/live` |
@@ -118,11 +118,11 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 - **`.glass-card`** (index.css) — semi-transparent + blur surface so the field reads through tables/rows. **Note: this intentionally introduces glassmorphism, which earlier docs said was "banned" — that rule is superseded; glass is now the house style for field-backed surfaces.**
 - **Shared primitives:** `SectionLabel` (uppercase tracked heading) and `RowCard` (+ `ROW_DIVIDER`) — used across Profile/Search/Team and worth reusing on new screens.
 - Animations are gated: custom field animation runs only under `prefers-reduced-motion: no-preference`; Tailwind's built-in `animate-pulse/ping/spin` + smooth scroll are disabled under `prefers-reduced-motion: reduce`.
-- **Accessibility:** global `:focus-visible` ring (Tailwind Preflight had stripped outlines); decorative backdrops `aria-hidden`. Known open a11y gaps: form-label associations, `aria-live` on live scores, glass contrast (see QA findings).
+- **Accessibility:** global `:focus-visible` ring (Tailwind Preflight had stripped outlines); decorative backdrops `aria-hidden`. The QA a11y gaps are now closed: AuthPage form labels associated (`htmlFor`/`id`), search input `aria-label`, `aria-live="polite"` on the Live score list, ≥44px tap targets (DateNav arrows, bottom nav), raised `.glass-card` opacity/blur for contrast.
 - The field is hidden on phones (`hidden md:block`).
 
 ### Search
-- `GET /api/search?q=` (min 2 chars) → `SearchResultDto(teams, players)` via `findByNameContainingIgnoreCase` (LIKE). **Known gap:** case-insensitive but **not** accent-insensitive — "Dembele" won't match "Dembélé".
+- `GET /api/search?q=` (min 2 chars) → `SearchResultDto(teams, players)` via `findByNameNormalizedContaining` against the `name_normalized` column (V8). **Accent-insensitive** — "Dembele" matches "Dembélé" (query folded through `TextNormalizer`). Results are deduped (one entry per team name / per player+club) so a club seeded in multiple competitions appears once.
 
 ### Build / Seeding
 - `pom.xml` annotation-processor order is load-bearing: Lombok → `lombok-mapstruct-binding:0.2.0` → MapStruct.
@@ -130,7 +130,7 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 
 ---
 
-## Flyway Migrations (V1–V7, all applied)
+## Flyway Migrations (V1–V8, all applied)
 | File | What it does |
 |---|---|
 | V1 `create_sport_league` | `sport`, `league` |
@@ -140,6 +140,7 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 | V5 `rename_football_to_futbol` | sport name "Football"→"Futbol" (slug unchanged) |
 | V6 `add_player_external_id` | `player.external_id` (ESPN athlete ID / api-sports player ID) |
 | V7 `add_team_external_id` | `team.external_id` VARCHAR(50) — ESPN team ID (NBA/NFL) / football-data team ID (football); enables historical-roster fetches |
+| V8 `add_name_normalized` | `team.name_normalized` + `player.name_normalized` (+ indexes) — accent-stripped, lower-cased names for accent-insensitive search; kept in sync by `@PrePersist/@PreUpdate`, backfilled at boot |
 
 ---
 
@@ -200,40 +201,43 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 
 ---
 
-## Testing — 57 tests, all green (`mvn test`)
+## Testing — 63 tests, all green (`mvn test`)
 | Class | Count | Notes |
 |---|---|---|
 | `AuthServiceTest` | 6 | pure unit |
 | `AuthControllerTest` | 7 | `@WebMvcTest` + `@Import(SecurityConfig.class)` + `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class`; needs `spring-security-test` |
 | `MatchServiceTest` | 13 | routing + guards; `anyInt()` gotcha for primitive `int` params |
-| `NbaApiServiceTest` | 12 | `RETURNS_DEEP_STUBS` RestClient mocks + package-private test constructor |
+| `NbaApiServiceTest` | 13 | `RETURNS_DEEP_STUBS` RestClient mocks + package-private test constructor; covers per-conference standings grouping + crest derivation |
 | `LeagueServiceTest` | 9 | standings routing |
 | `PlayerServiceCareerStatsTest` | 9 | career-stats routing + lazy football ID resolution |
+| `TextNormalizerTest` | 5 | accent-folding for accent-insensitive search |
 | `OneStopSportsApplicationTests` | 1 | context load; needs `@MockBean RedisConnectionFactory` |
 
-**Coverage gaps (no tests):** `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `TeamService`, `SportService`, `PlayerService.resolvePhotoUrl/toDto`, `GlobalExceptionHandler`, all frontend.
+**Coverage gaps (no tests):** `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `TeamService`/`PlayerService` search + dedupe, `SportService`, `PlayerService.resolvePhotoUrl/toDto`, `GlobalExceptionHandler`, all frontend.
 
 ---
 
 ## Current Status
 
 ### ✅ Working
-Everything in the original build (entities, auth, Redis, WebSocket live push, search, Swagger, Docker) **plus**: player career stats (3 sports) + bio + headshots; live game clock; match box score + mirrored event timeline; the full sport-field/glass frontend redesign across all screens; shared `SectionLabel`/`RowCard` primitives; production deploy setup (Render + Neon, single-origin Docker); 5-persona QA pass with the top blockers fixed (auth bypass, 500s→4xx, a11y focus + reduced-motion, stale-data badge).
+Everything in the original build (entities, auth, Redis, WebSocket live push, search, Swagger, Docker) **plus**: player career stats (3 sports) + bio + headshots; live game clock; match box score + mirrored event timeline; the full sport-field/glass frontend redesign across all screens; shared `SectionLabel`/`RowCard` primitives; production deploy setup (Render + Neon, single-origin Docker); **full 5-persona QA remediation** — top blockers (auth bypass, 500s→4xx, a11y focus + reduced-motion, stale-data badge) plus all remaining issues: NBA conference-grouped standings, accent-insensitive + deduped search, server-side PCT/GB, NBA/NFL league logos + standings crests, winner emphasis, form labels + aria-live + ≥44px tap targets + glass contrast.
 
 ### 🔲 Stubbed (free-tier limits)
 - `getMatchStats()` / `getMatchLineups()` → `{}` (football-data.org free tier).
 - Football career stats: single season, capped at 2024 (api-sports.io free tier).
 
-### Known issues (from the 5-persona QA sweep — open)
-- **NBA standings render as a flat 1-30 win-sorted table** — `conference` is never populated for NBA, so East/West never group (the DTO + grouped UI already support it). *Highest-value data fix.*
-- **Search is not accent-insensitive** ("Dembele" → no results); some star footballers 204 on career-stats due to name-match misses.
-- **Winner not emphasised** on finished match cards; NBA/NFL **league logos null**; standings **crests null**.
-- A11y: form inputs not label-associated, no `aria-live` on live scores, glass-over-field contrast risk, some <44px tap targets (DateNav arrows, bottom nav).
-- Duplicate clubs/players across competitions (e.g. Arsenal appears in PL and UCL separately).
-- Standings DTO missing PCT/GB columns server-side (PCT computed on frontend; GB absent).
+### Known issues from the 5-persona QA sweep — ✅ NOW FIXED (commits `5409a3d`–`2399c3e`)
+- ✅ **NBA standings group by conference** — `NbaApiService.fetchStandings` ranks within each conference (1–15) and sets `conference`; `StandingsTable` renders East/West as two tables. Crests derived from the team abbreviation via ESPN's CDN.
+- ✅ **Accent-insensitive search** — new `name_normalized` column (V8) + `@PrePersist/@PreUpdate` hook on Team/Player + shared `TextNormalizer`; search queries the normalized column so "Dembele" matches "Dembélé". Boot-time `NameNormalizationBackfill` covers pre-existing rows. *(Career-stats name-match misses for some footballers remain — separate api-sports lookup path.)*
+- ✅ **Winner emphasised** on finished match cards (loser dimmed, winner bolded); **NBA/NFL league logos** set at seed time from ESPN's league-logo CDN; **standings crests** populated.
+- ✅ **A11y**: AuthPage labels associated (`htmlFor`/`id`), search input `aria-label`, `aria-live="polite"` on the Live score list, DateNav arrows + bottom-nav items ≥44px, `.glass-card` opacity/blur raised for contrast.
+- ✅ **Duplicate clubs/players** deduped in search results (one entry per team name / per player+club). *Pragmatic fix only — see below.*
+- ✅ **PCT/GB columns** added server-side to `StandingsEntryDto` (NBA per-conference, NFL per-division); GB column shown on NBA tables.
 
-### Remaining / nice-to-have
-- NBA standings conferences (above) · accent-folded search · winner emphasis · form labels + aria-live + glass contrast · dedupe clubs/players · push notifications for favourites · more test coverage · historical-data tracking (see `.planning/cowork/HISTORICAL_DATA_RESEARCH.md`).
+### Still open / nice-to-have
+- **Structural dedupe**: the team↔league many-to-many refactor (so a club is one row across competitions) is NOT done — search dedupe is a presentation-layer workaround. This is the tracked follow-up.
+- Career-stats 204s for some star footballers (api-sports name-match misses) · push notifications for favourites · more test coverage (NflApiService, ExternalApiService, frontend) · historical-data tracking (see `.planning/cowork/HISTORICAL_DATA_RESEARCH.md`).
+- ⚠️ **Note:** V8 migration runs only against real Postgres (Flyway off in H2 tests); validated by compile + entity schema, not by an integration test against Postgres.
 
 ---
 
