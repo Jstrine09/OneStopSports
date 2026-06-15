@@ -121,6 +121,8 @@ public class NflDataLoader implements CommandLineRunner {
         // ── 2. League ─────────────────────────────────────────────────────────
         // The NFL — no external competition ID (externalId=null) because the ESPN API
         // doesn't use competition IDs. Routing uses the sport slug "american-football" instead.
+        // The logo comes from ESPN's stable league-logo CDN path.
+        final String nflLogoUrl = "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png";
         League nfl = leagueRepository.findBySportId(americanFootball.getId())
                 .stream()
                 .filter(l -> "NFL".equals(l.getName()))
@@ -131,8 +133,14 @@ public class NflDataLoader implements CommandLineRunner {
                                 .name("NFL")
                                 .country("United States")
                                 .season("2025-26") // The 2025 season runs Sep 2025 – Feb 2026
+                                .logoUrl(nflLogoUrl)
                                 .externalId(null)  // No competition ID — routing by sport slug
                                 .build()));
+        // Backfill the logo for a league row seeded before we set it (it was null then).
+        if (nfl.getLogoUrl() == null) {
+            nfl.setLogoUrl(nflLogoUrl);
+            leagueRepository.save(nfl);
+        }
         log.info("[NflDataLoader] League: {}", nfl.getName());
 
         // ── 3. Teams ──────────────────────────────────────────────────────────

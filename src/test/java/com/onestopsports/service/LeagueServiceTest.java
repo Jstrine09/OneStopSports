@@ -71,7 +71,7 @@ class LeagueServiceTest {
     private static final StandingsEntryDto DUMMY_STANDING = new StandingsEntryDto(
             1,
             new TeamDto(1L, "Test FC", "TFC", null, null, null, 7L),
-            10, 7, 1, 2, 18, 9, 22, null, null);
+            10, 7, 1, 2, 18, 9, 22, null, null, null, null);
 
     // ── getStandings — 404 on unknown league ──────────────────────────────────
 

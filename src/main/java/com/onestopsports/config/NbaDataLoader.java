@@ -131,6 +131,8 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
         // Find the NBA league if it already exists (from a previous run),
         // or create it fresh. externalId is null — ESPN has no competition ID.
         // Routing in MatchService uses the sport slug ("basketball") instead.
+        // The logo comes from ESPN's stable league-logo CDN path.
+        final String nbaLogoUrl = "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png";
         League nba = leagueRepository.findBySportId(basketball.getId())
                 .stream()
                 .filter(l -> "NBA".equals(l.getName()))
@@ -141,8 +143,14 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                                 .name("NBA")
                                 .country("United States")
                                 .season("2025-26")
+                                .logoUrl(nbaLogoUrl)
                                 .externalId(null) // No external competition ID — routing by sport slug
                                 .build()));
+        // Backfill the logo for a league row seeded before we set it (it was null then).
+        if (nba.getLogoUrl() == null) {
+            nba.setLogoUrl(nbaLogoUrl);
+            leagueRepository.save(nba);
+        }
         log.info("[NbaDataLoader] League: {}", nba.getName());
 
         // ── 3. Teams ──────────────────────────────────────────────────────────

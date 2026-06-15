@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 // This service talks to ESPN's unofficial public NBA API — no API key required.
 //
@@ -423,12 +422,24 @@ public class NbaApiService {
             for (EspnConference conference : response.children()) {
                 if (conference.standings() == null || conference.standings().entries() == null) continue;
 
-                // A fresh rank counter per conference so each starts again at 1.
-                AtomicInteger rank = new AtomicInteger(0);
-                conference.standings().entries().stream()
+                // Sort this conference's teams by wins (descending) so the leader is first.
+                List<EspnStandingsEntry> sorted = conference.standings().entries().stream()
                         .sorted(Comparator.comparingDouble(e -> -getStatValue(e, "wins")))
-                        .map(entry -> toStandingsEntryDto(entry, dbLeagueId, rank.incrementAndGet(), conference.name()))
-                        .forEach(result::add);
+                        .toList();
+                if (sorted.isEmpty()) continue;
+
+                // The conference leader is the yardstick for "games behind" — every other
+                // team's GB is measured against this team's win/loss record.
+                EspnStandingsEntry leader = sorted.get(0);
+                double leaderWins   = getStatValue(leader, "wins");
+                double leaderLosses = getStatValue(leader, "losses");
+
+                int rank = 0;
+                for (EspnStandingsEntry entry : sorted) {
+                    rank++;
+                    result.add(toStandingsEntryDto(entry, dbLeagueId, rank, conference.name(),
+                            leaderWins, leaderLosses));
+                }
             }
 
             if (result.isEmpty()) return Collections.emptyList();
@@ -576,7 +587,8 @@ public class NbaApiService {
     // Basketball has no draws — drawn is always 0.
     // "Points" is set to wins — NBA teams are ranked by win count (not accumulated points).
     private StandingsEntryDto toStandingsEntryDto(EspnStandingsEntry entry, Long dbLeagueId,
-                                                  int rank, String conferenceName) {
+                                                  int rank, String conferenceName,
+                                                  double leaderWins, double leaderLosses) {
         EspnStandingsTeam t = entry.team();
         TeamDto team = new TeamDto(
                 parseId(t.id()),
@@ -591,11 +603,20 @@ public class NbaApiService {
 
         int wins   = (int) getStatValue(entry, "wins");
         int losses = (int) getStatValue(entry, "losses");
+        int games  = wins + losses;
+
+        // Win percentage (basketball has no draws): wins / games played, 0 when no games yet.
+        Double pct = games > 0 ? (double) wins / games : 0.0;
+
+        // Games behind the conference leader: the average of how many more wins and
+        // how many fewer losses this team needs to match the leader. The leader's own
+        // GB works out to exactly 0.0.
+        double gamesBehind = ((leaderWins - wins) + (losses - leaderLosses)) / 2.0;
 
         return new StandingsEntryDto(
                 rank,          // within-conference rank (1–15)
                 team,
-                wins + losses, // played = wins + losses (no draws in basketball)
+                games,         // played = wins + losses (no draws in basketball)
                 wins,
                 0,             // drawn — always 0 in basketball
                 losses,
@@ -603,7 +624,9 @@ public class NbaApiService {
                 0,             // goalsAgainst — not applicable
                 wins,          // "points" = wins — ranking metric for basketball
                 conferenceName, // "Eastern Conference" / "Western Conference" — drives the grouped layout
-                null);         // division — NBA has no division level, so the frontend groups by conference only
+                null,          // division — NBA has no division level, so the frontend groups by conference only
+                pct,
+                gamesBehind);
     }
 
     // ESPN serves team logos from a predictable CDN path keyed by the lowercase team

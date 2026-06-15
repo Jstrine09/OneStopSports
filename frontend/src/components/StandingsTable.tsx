@@ -104,6 +104,19 @@ function shortNbaConf(name: string) {
   return name
 }
 
+// Format a win percentage as .XXX. Prefers the server-computed value (e.pct);
+// falls back to computing from W/L if the backend didn't supply one.
+function formatPct(e: StandingsEntryDto): string {
+  const value = e.pct ?? (e.won + e.lost > 0 ? e.won / (e.won + e.lost) : 0)
+  return value.toFixed(3).replace(/^0/, '')
+}
+
+// Format games-behind: the leader (0) shows a dash; half-games show ".5".
+function formatGb(gb: number | null): string {
+  if (gb == null || gb === 0) return '—'
+  return Number.isInteger(gb) ? String(gb) : gb.toFixed(1)
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function StandingsTable({ entries, showZones = true, glass = false }: Props) {
@@ -164,9 +177,9 @@ export default function StandingsTable({ entries, showZones = true, glass = fals
                     )}
                     <tbody>
                       {div.teams.map((e) => {
-                        // Win % — wins / (wins + losses + ties), displayed as .XXX
-                        const denom = e.won + e.lost + e.drawn
-                        const pct = denom > 0 ? (e.won / denom).toFixed(3).replace(/^0/, '') : '.000'
+                        // Win % comes from the server (counts a tie as half a win); formatPct
+                        // falls back to a client calc only if the backend didn't supply one.
+                        const pct = formatPct(e)
                         const diff = e.goalsFor - e.goalsAgainst
                         return (
                           <tr
@@ -236,41 +249,38 @@ export default function StandingsTable({ entries, showZones = true, glass = fals
                     <th className="py-2.5 text-left font-semibold">Team</th>
                     <th className="py-2.5 text-center font-semibold">W</th>
                     <th className="py-2.5 text-center font-semibold">L</th>
-                    <th className="py-2.5 pr-4 text-center font-bold text-stone-700 dark:text-zinc-300">PCT</th>
+                    <th className="py-2.5 text-center font-bold text-stone-700 dark:text-zinc-300">PCT</th>
+                    <th className="py-2.5 pr-4 text-center font-semibold">GB</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {conf.teams.map((e) => {
-                    // Basketball has no draws — win % is wins / (wins + losses), shown as .XXX
-                    const denom = e.won + e.lost
-                    const pct = denom > 0 ? (e.won / denom).toFixed(3).replace(/^0/, '') : '.000'
-                    return (
-                      <tr
-                        key={e.team.id}
-                        className="border-t border-stone-100 transition-colors hover:bg-stone-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
-                      >
-                        <td className="py-2.5 pl-4">
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold tabular-nums text-stone-500 dark:text-zinc-500">
-                            {e.position}
+                  {conf.teams.map((e) => (
+                    <tr
+                      key={e.team.id}
+                      className="border-t border-stone-100 transition-colors hover:bg-stone-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
+                    >
+                      <td className="py-2.5 pl-4">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold tabular-nums text-stone-500 dark:text-zinc-500">
+                          {e.position}
+                        </span>
+                      </td>
+                      <td className="py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          {e.team.crestUrl && (
+                            <img src={e.team.crestUrl} alt={e.team.name} className="h-5 w-5 object-contain" />
+                          )}
+                          <span className="font-medium">
+                            <span className="hidden sm:inline">{e.team.name}</span>
+                            <span className="sm:hidden">{e.team.shortName}</span>
                           </span>
-                        </td>
-                        <td className="py-2.5">
-                          <div className="flex items-center gap-2.5">
-                            {e.team.crestUrl && (
-                              <img src={e.team.crestUrl} alt={e.team.name} className="h-5 w-5 object-contain" />
-                            )}
-                            <span className="font-medium">
-                              <span className="hidden sm:inline">{e.team.name}</span>
-                              <span className="sm:hidden">{e.team.shortName}</span>
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-2.5 text-center tabular-nums text-stone-600 dark:text-zinc-400">{e.won}</td>
-                        <td className="py-2.5 text-center tabular-nums text-stone-600 dark:text-zinc-400">{e.lost}</td>
-                        <td className="py-2.5 pr-4 text-center font-extrabold tabular-nums">{pct}</td>
-                      </tr>
-                    )
-                  })}
+                        </div>
+                      </td>
+                      <td className="py-2.5 text-center tabular-nums text-stone-600 dark:text-zinc-400">{e.won}</td>
+                      <td className="py-2.5 text-center tabular-nums text-stone-600 dark:text-zinc-400">{e.lost}</td>
+                      <td className="py-2.5 text-center font-extrabold tabular-nums">{formatPct(e)}</td>
+                      <td className="py-2.5 pr-4 text-center tabular-nums text-stone-500 dark:text-zinc-500">{formatGb(e.gamesBehind)}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

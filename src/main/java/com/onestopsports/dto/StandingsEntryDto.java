@@ -18,6 +18,8 @@ public record StandingsEntryDto(
         Integer goalsFor,      // Goals/points scored (reused for NFL points-for)
         Integer goalsAgainst,  // Goals/points conceded (reused for NFL points-against)
         Integer points,        // Accumulated points (3W+1D for football; wins for NFL/NBA)
-        String conference,     // NFL only — e.g. "American Football Conference"   (null for football/NBA)
-        String division        // NFL only — e.g. "AFC East", "NFC West"           (null for football/NBA)
+        String conference,     // NBA: "Eastern/Western Conference" · NFL: "American/National Football Conference" (null for football)
+        String division,       // NFL only — e.g. "AFC East", "NFC West"           (null for football/NBA)
+        Double pct,            // Win percentage 0.0–1.0 — NBA/NFL only (null for football, which ranks on points)
+        Double gamesBehind     // Games behind the conference/division leader — NBA/NFL only (0.0 for the leader, null for football)
 ) {}

@@ -451,7 +451,9 @@ public class ExternalApiService {
                 entry.goalsAgainst(),
                 entry.points(),
                 null,           // conference — football/soccer leagues don't use this
-                null);          // division   — football/soccer leagues don't use this
+                null,           // division   — football/soccer leagues don't use this
+                null,           // pct        — football ranks on points, not win %
+                null);          // gamesBehind — not a football concept
     }
 
     // ── Football Box Score (free-tier derivation) ──────────────────────────────
