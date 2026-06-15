@@ -47,7 +47,9 @@ class PlayerServiceCareerStatsTest {
     private PlayerService playerService;
 
     // ── Helper: build a Player with its full sport chain populated ────────────
-    // Mirrors the lazy DB chain (player → team → league → sport) that OSIV resolves in prod.
+    // Mirrors the DB chain the service walks in prod: player → team → sport for routing,
+    // and player → team → primary league for the football API-Football lookup. Sport now
+    // lives directly on the Team; the league is attached via the team↔league association.
     private static Player playerInSport(Long id, String sportSlug, String externalId,
                                         String playerName, Integer leagueExternalId) {
         Sport sport = Sport.builder()
@@ -67,9 +69,10 @@ class PlayerServiceCareerStatsTest {
                 .build();
         Team team = Team.builder()
                 .id(100L)
-                .league(league)
+                .sport(sport)
                 .name("Test Team")
                 .build();
+        team.addLeague(league); // primary league = this one (single membership)
         return Player.builder()
                 .id(id)
                 .team(team)

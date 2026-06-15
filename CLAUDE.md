@@ -1,6 +1,6 @@
 # OneStopSports — Claude Code Context
 
-> **Last refreshed:** reflects commit `2399c3e` (all remaining 5-persona QA issues cleared — NBA conference standings, accent-insensitive search, PCT/GB + league logos, a11y, search dedupe). If you're picking this up in a new chat, this file + `.planning/cowork/` are the authoritative current-state context.
+> **Last refreshed:** reflects commit `2399c3e` PLUS the **team↔league many-to-many structural dedupe** (V9 — a club is now one row that belongs to many competitions; uncommitted at time of writing). If you're picking this up in a new chat, this file + `.planning/cowork/` are the authoritative current-state context.
 
 ## Project Overview
 **OneStopSports** is a full-stack, Fotmob-style multi-sport app covering **football (soccer), the NBA, and the NFL**. It surfaces live scores (pushed over WebSocket), league standings, match detail + box scores + event timelines, full team rosters, player profiles with **bio, career stats, and headshots**, and global search. Users can register and save favourite teams and players.
@@ -17,7 +17,7 @@
 | Backend | Java 21 + Spring Boot 3.4.4 |
 | HTTP port | **8081** (`server.port` in `application.yml`) |
 | Database | PostgreSQL 16 (`onestopsports` DB) |
-| Migrations | Flyway (**8 migrations**, V1–V8) |
+| Migrations | Flyway (**9 migrations**, V1–V9) |
 | Cache | Redis 7 (30s TTL on the live-matches cache) |
 | Auth | Spring Security 6 + JWT (jjwt 0.12.x) |
 | Real-time | Spring WebSocket (STOMP) — server pushes score changes to `/topic/matches/live` |
@@ -52,7 +52,7 @@ service/                          12 services (see below)
 
 **Services (12):** business — `SportService`, `LeagueService`, `TeamService`, `PlayerService`, `MatchService`, `AuthService`, `UserService`; external-API adapters — `ExternalApiService` (football-data.org), `NbaApiService` (ESPN), `NflApiService` (ESPN), `BallDontLieService` (NBA bios), `ApiFootballService` (api-sports.io football stats).
 
-**DTOs (18):** `SportDto`, `LeagueDto`, `TeamDto`, `PlayerDto`, `PlayerBioDto`, `PlayerCareerStatsDto`, `MatchDto`, `MatchEventDto`, `BoxScoreDto`, `StandingsEntryDto`, `SearchResultDto`, `UserDto`, `ErrorResponseDto`, `AuthRequest`, `AuthResponse`, `RegisterRequest`, `FavoriteTeamRequest`, `FavoritePlayerRequest`.
+**DTOs (18):** `SportDto`, `LeagueDto`, `TeamDto`, `PlayerDto`, `PlayerBioDto`, `PlayerCareerStatsDto`, `MatchDto`, `MatchEventDto`, `BoxScoreDto`, `StandingsEntryDto`, `SearchResultDto`, `UserDto`, `ErrorResponseDto`, `AuthRequest`, `AuthResponse`, `RegisterRequest`, `FavoriteTeamRequest`, `FavoritePlayerRequest`. `TeamDto` now has **8 fields** — it gained `leagueIds` (all competitions a club plays in) alongside `leagueId` (the primary league, kept for the team-page header); a 7-arg convenience constructor derives `leagueIds` for synthetic single-league DTOs (standings/box-score teams).
 
 ---
 
@@ -62,8 +62,9 @@ service/                          12 services (see below)
 - `@Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor` — **never `@Data`** (recursion on bidirectional relationships).
 - `UserAccount` (not `User`) — `user` is a PostgreSQL reserved word.
 - All `@ManyToOne` are `fetch = FetchType.LAZY`.
-- `@UniqueConstraint` on `FavoriteTeam(user_id, team_id)` and `FavoritePlayer(user_id, player_id)`; `ON DELETE CASCADE` on favourite tables (re-seeding a roster wipes those favourites — accepted trade-off).
-- `Player.externalId` (V6) and `Team.externalId` (V7): sport-specific external ID. NBA/NFL = ESPN athlete/team ID (set at seed time). Football player = api-sports.io player ID (set lazily on first stats lookup).
+- **`Team` ↔ `League` is many-to-many** (V9): a club is ONE row that can belong to several competitions (e.g. Real Madrid in La Liga + the Champions League), via the `team_league` join table (owning side = `Team.leagues`, a LAZY `@ManyToMany`). `Team` also carries a **direct `Team.sport` `@ManyToOne`** (`sport_id`) so sport routing has a single unambiguous answer without a league hop. Helpers: `Team.addLeague(league)` (idempotent) and `Team.getPrimaryLeague()` (smallest-id league = domestic, used for the TeamDto header + the API-Football stats lookup). The football `DataLoader` find-or-creates a club by `(sport_id, external_id)` and links each competition; squads are seeded once per club. **This replaces the old presentation-layer search dedupe — the data is now structurally unique.**
+- `@UniqueConstraint` on `FavoriteTeam(user_id, team_id)` and `FavoritePlayer(user_id, player_id)`; `ON DELETE CASCADE` on favourite tables (re-seeding a roster wipes those favourites — accepted trade-off). The V9 merge re-points favourites onto the canonical club/player (respecting the unique constraints) before deleting duplicates.
+- `Player.externalId` (V6) and `Team.externalId` (V7): sport-specific external ID. NBA/NFL = ESPN athlete/team ID (set at seed time). Football player = api-sports.io player ID (set lazily on first stats lookup). For football **teams**, `external_id` (the football-data.org team id, identical across competitions) is the find-or-create / merge key for the M:N refactor.
 
 ### DTOs
 - All Java 21 records. Inbound requests carry Jakarta validation on components (`@NotBlank`, `@Email`, `@Size`).
@@ -90,7 +91,7 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 
 ### Multi-Sport Routing
 - DB schema is sport-agnostic: `sport → league → team → player`. Per-sport quirks live only in the adapter services.
-- Routing switches on `league.getSport().getSlug()` (canonical slugs `"football"`, `"basketball"`, `"american-football"`) in three methods: `MatchService.getMatchesByLeagueAndDate`, `LeagueService.getStandings`, `PlayerService.getPlayerCareerStats`. Each is `@Transactional` so the lazy chain resolves.
+- Routing switches on the canonical sport slug (`"football"`, `"basketball"`, `"american-football"`). `MatchService.getMatchesByLeagueAndDate` / `LeagueService.getStandings` resolve it via `league.getSport()`. `PlayerService.getPlayerCareerStats` / `PlayerService.resolvePhotoUrl` / `TeamService.getRosterForSeason` resolve it via **`team.getSport()`** (the direct sport link added in V9 — no longer a `team → league → sport` hop, which would be ambiguous now a team has many leagues). Each is `@Transactional`/OSIV so the lazy chain resolves.
 - `getMatchById`/`getMatchEvents` are football-only. **Box score IS sport-routed** (`MatchService.getBoxScore(matchId, leagueId)` → `NbaApiService`/`NflApiService.fetchBoxScore` from ESPN's `/summary` endpoint for real NBA/NFL data, or `ExternalApiService.fetchFootballBoxScore` derived from match events for football).
 
 ### Player Career Stats / Bio / Photos
@@ -122,7 +123,7 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 - The field is hidden on phones (`hidden md:block`).
 
 ### Search
-- `GET /api/search?q=` (min 2 chars) → `SearchResultDto(teams, players)` via `findByNameNormalizedContaining` against the `name_normalized` column (V8). **Accent-insensitive** — "Dembele" matches "Dembélé" (query folded through `TextNormalizer`). Results are deduped (one entry per team name / per player+club) so a club seeded in multiple competitions appears once.
+- `GET /api/search?q=` (min 2 chars) → `SearchResultDto(teams, players)` via `findByNameNormalizedContaining` against the `name_normalized` column (V8). **Accent-insensitive** — "Dembele" matches "Dembélé" (query folded through `TextNormalizer`). **No result de-duplication step** any more — the V9 team↔league refactor makes each club (and its squad) a single row, so a club/player can only match once. (The old `searchTeams`/`searchPlayers` collapse-by-normalized-name has been removed.)
 
 ### Build / Seeding
 - `pom.xml` annotation-processor order is load-bearing: Lombok → `lombok-mapstruct-binding:0.2.0` → MapStruct.
@@ -130,7 +131,7 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 
 ---
 
-## Flyway Migrations (V1–V8, all applied)
+## Flyway Migrations (V1–V9, all applied)
 | File | What it does |
 |---|---|
 | V1 `create_sport_league` | `sport`, `league` |
@@ -141,6 +142,7 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 | V6 `add_player_external_id` | `player.external_id` (ESPN athlete ID / api-sports player ID) |
 | V7 `add_team_external_id` | `team.external_id` VARCHAR(50) — ESPN team ID (NBA/NFL) / football-data team ID (football); enables historical-roster fetches |
 | V8 `add_name_normalized` | `team.name_normalized` + `player.name_normalized` (+ indexes) — accent-stripped, lower-cased names for accent-insensitive search; kept in sync by `@PrePersist/@PreUpdate`, backfilled at boot |
+| V9 `team_league_many_to_many` | Creates the `team_league` join table (+ reverse index) and backfills it from `team.league_id`; adds `team.sport_id` (NOT NULL + FK, backfilled from the league's sport); **merges duplicate clubs** sharing `(sport_id, external_id)` into one canonical row (re-pointing players, league links and favourites, then deleting dupes) and de-duplicates the players that the merge brings onto a shared club; finally drops `team.league_id`. Postgres-only (Flyway off in H2 tests). |
 
 ---
 
@@ -201,7 +203,7 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 
 ---
 
-## Testing — 63 tests, all green (`mvn test`)
+## Testing — 66 tests, all green (`mvn test`)
 | Class | Count | Notes |
 |---|---|---|
 | `AuthServiceTest` | 6 | pure unit |
@@ -209,11 +211,12 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 | `MatchServiceTest` | 13 | routing + guards; `anyInt()` gotcha for primitive `int` params |
 | `NbaApiServiceTest` | 13 | `RETURNS_DEEP_STUBS` RestClient mocks + package-private test constructor; covers per-conference standings grouping + crest derivation |
 | `LeagueServiceTest` | 9 | standings routing |
-| `PlayerServiceCareerStatsTest` | 9 | career-stats routing + lazy football ID resolution |
+| `PlayerServiceCareerStatsTest` | 9 | career-stats routing + lazy football ID resolution; helper builds the chain with `Team.sport` + `addLeague` (post-V9) |
+| `TeamServiceTest` | 3 | team↔league M:N: `toDto` exposes primary `leagueId` + all `leagueIds`, `getTeamsByLeague` uses the join-table query, search no longer collapses by name |
 | `TextNormalizerTest` | 5 | accent-folding for accent-insensitive search |
-| `OneStopSportsApplicationTests` | 1 | context load; needs `@MockBean RedisConnectionFactory` |
+| `OneStopSportsApplicationTests` | 1 | context load; needs `@MockBean RedisConnectionFactory`. Runs the loaders against H2 — also exercises the new `team_league` join + `sport_id` mapping under Hibernate `create-drop`. |
 
-**Coverage gaps (no tests):** `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `TeamService`/`PlayerService` search + dedupe, `SportService`, `PlayerService.resolvePhotoUrl/toDto`, `GlobalExceptionHandler`, all frontend.
+**Coverage gaps (no tests):** `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `PlayerService` search, `SportService`, `PlayerService.resolvePhotoUrl/toDto`, `GlobalExceptionHandler`, all frontend. The **V9 data-merge SQL** is unit-tested only by compile/entity-mapping — not by an integration run against Postgres (same caveat as V8).
 
 ---
 
@@ -231,12 +234,15 @@ Everything in the original build (entities, auth, Redis, WebSocket live push, se
 - ✅ **Accent-insensitive search** — new `name_normalized` column (V8) + `@PrePersist/@PreUpdate` hook on Team/Player + shared `TextNormalizer`; search queries the normalized column so "Dembele" matches "Dembélé". Boot-time `NameNormalizationBackfill` covers pre-existing rows. *(Career-stats name-match misses for some footballers remain — separate api-sports lookup path.)*
 - ✅ **Winner emphasised** on finished match cards (loser dimmed, winner bolded); **NBA/NFL league logos** set at seed time from ESPN's league-logo CDN; **standings crests** populated.
 - ✅ **A11y**: AuthPage labels associated (`htmlFor`/`id`), search input `aria-label`, `aria-live="polite"` on the Live score list, DateNav arrows + bottom-nav items ≥44px, `.glass-card` opacity/blur raised for contrast.
-- ✅ **Duplicate clubs/players** deduped in search results (one entry per team name / per player+club). *Pragmatic fix only — see below.*
+- ✅ **Duplicate clubs/players** — now fixed **structurally** (see below), superseding the old presentation-layer search dedupe (which has been removed).
 - ✅ **PCT/GB columns** added server-side to `StandingsEntryDto` (NBA per-conference, NFL per-division); GB column shown on NBA tables.
 
+### ✅ Structural dedupe — DONE (team↔league many-to-many, V9)
+The tracked follow-up is complete. A club is now a single `team` row that belongs to many competitions via the `team_league` join table, with `Team.sport` as a direct link for routing. The football `DataLoader` find-or-creates each club by `(sport, football-data team id)` and links each competition (squad seeded once); the NBA/NFL loaders set `sport` + link their single league. V9 migrates existing data: it merges duplicate clubs + their duplicated players into canonical rows (re-pointing favourites/links) and drops `team.league_id`. `TeamDto` gained `leagueIds`; `searchTeams`/`searchPlayers` no longer de-duplicate.
+
 ### Still open / nice-to-have
-- **Structural dedupe**: the team↔league many-to-many refactor (so a club is one row across competitions) is NOT done — search dedupe is a presentation-layer workaround. This is the tracked follow-up.
 - Career-stats 204s for some star footballers (api-sports name-match misses) · push notifications for favourites · more test coverage (NflApiService, ExternalApiService, frontend) · historical-data tracking (see `.planning/cowork/HISTORICAL_DATA_RESEARCH.md`).
+- ⚠️ The V9 data-merge SQL runs only against real Postgres (Flyway off in H2 tests); validated by compile + entity-mapping + the H2 context-load seeding the new schema, **not** by an integration test that exercises the merge against duplicated Postgres data.
 - ⚠️ **Note:** V8 migration runs only against real Postgres (Flyway off in H2 tests); validated by compile + entity schema, not by an integration test against Postgres.
 
 ---

@@ -2,6 +2,7 @@ package com.onestopsports.service;
 
 import com.onestopsports.dto.PlayerDto;
 import com.onestopsports.dto.TeamDto;
+import com.onestopsports.model.League;
 import com.onestopsports.model.Team;
 import com.onestopsports.repository.TeamRepository;
 import com.onestopsports.util.TextNormalizer;
@@ -10,9 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 
 // Handles business logic for Teams.
 // All data comes from our own database (seeded from football-data.org at startup).
@@ -44,7 +44,7 @@ public class TeamService {
     // Returns all teams in a given league.
     // Called by GET /api/leagues/{id}/teams — used for the Teams tab in LeaguesPage.
     public List<TeamDto> getTeamsByLeague(Long leagueId) {
-        return teamRepository.findByLeagueId(leagueId).stream()
+        return teamRepository.findByLeagues_Id(leagueId).stream()
                 .map(this::toDto)
                 .toList();
     }
@@ -53,18 +53,13 @@ public class TeamService {
     // We normalize the query the same way the stored name_normalized column was
     // normalized (accents stripped, lower-cased) so "Atletico" matches "Atlético".
     //
-    // The same club is seeded once per competition it plays in (e.g. Arsenal exists
-    // as separate rows in the Premier League and the Champions League), so we collapse
-    // the results to one entry per distinct normalized name — keeping the first row
-    // seen — before capping at 8. Otherwise a search for "Arsenal" returns it twice.
+    // No de-duplication step is needed any more: since the team↔league refactor a club
+    // is a single row regardless of how many competitions it plays in, so "Arsenal" can
+    // only match once. (The old presentation-layer collapse-by-name is gone.)
     // Called by GET /api/search?q=...
     public List<TeamDto> searchTeams(String query) {
         String normalized = TextNormalizer.normalize(query);
-        Map<String, Team> uniqueByName = new LinkedHashMap<>();
-        for (Team team : teamRepository.findByNameNormalizedContaining(normalized)) {
-            uniqueByName.putIfAbsent(team.getNameNormalized(), team);
-        }
-        return uniqueByName.values().stream()
+        return teamRepository.findByNameNormalizedContaining(normalized).stream()
                 .limit(8)
                 .map(this::toDto)
                 .toList();
@@ -101,8 +96,9 @@ public class TeamService {
             return List.of(); // Can't call ESPN without an ID — tell the frontend "no data"
         }
 
-        // Walk the lazy relationship chain — safe inside this @Transactional method
-        String sportSlug = team.getLeague().getSport().getSlug();
+        // Sport is now stored directly on the team, so no league hop is needed. Still a lazy
+        // load (Sport is fetched LAZY), which is why this method stays @Transactional.
+        String sportSlug = team.getSport().getSlug();
 
         return switch (sportSlug) {
             case "basketball"        -> nbaApiService.fetchRosterDtos(externalId, season);
@@ -113,7 +109,16 @@ public class TeamService {
 
     // Package-private (no access modifier) so UserService can also use it
     // to convert FavoriteTeam entities into TeamDtos without duplicating logic.
+    //
+    // Walks the lazy `leagues` collection to expose both a single primary league (for the
+    // team-page header) and the full list of competition ids. All callers run inside a web
+    // request, so open-session-in-view keeps the Hibernate session alive for the lazy load.
     TeamDto toDto(Team team) {
+        League primary = team.getPrimaryLeague();
+        List<Long> leagueIds = team.getLeagues().stream()
+                .map(League::getId)
+                .sorted(Comparator.naturalOrder())
+                .toList();
         return new TeamDto(
                 team.getId(),
                 team.getName(),
@@ -121,6 +126,7 @@ public class TeamService {
                 team.getCrestUrl(),
                 team.getStadium(),
                 team.getCountry(),
-                team.getLeague().getId()); // Triggers a lazy load of the League — fine here
+                primary != null ? primary.getId() : null,
+                leagueIds);
     }
 }

@@ -205,20 +205,45 @@ public class DataLoader implements CommandLineRunner { // CommandLineRunner mean
             for (int j = 0; j < teamLimit; j++) {
                 ApiTeam apiTeam = apiTeams.get(j);
 
-                // Save the team. externalId = football-data.org integer team ID, stored as a
-                // String for uniformity with ESPN IDs.
-                Team team = teamRepository.save(
-                        Team.builder()
-                                .league(league)
-                                .name(apiTeam.name())
-                                .shortName(apiTeam.shortName())
-                                .crestUrl(apiTeam.crest())
-                                .stadium(apiTeam.venue())
-                                .country(country)
-                                .externalId(String.valueOf(apiTeam.id())) // football-data.org team ID → stored as String
-                                .build());
-                teamsSaved++;
-                log.info("[DataLoader]     Saved team: {}", team.getName());
+                // The football-data.org team id is identical across every competition a club
+                // appears in (e.g. Real Madrid carries the same id in La Liga and the Champions
+                // League). So we FIND-OR-CREATE the club within the Futbol sport keyed on that
+                // id, then link it to this competition — instead of creating a duplicate row.
+                String teamExternalId = String.valueOf(apiTeam.id());
+                Team team = teamRepository
+                        .findBySportIdAndExternalIdWithLeagues(football.getId(), teamExternalId)
+                        .orElse(null);
+
+                if (team == null) {
+                    // First time we've seen this club — create it and link it to this league.
+                    team = Team.builder()
+                            .sport(football)
+                            .name(apiTeam.name())
+                            .shortName(apiTeam.shortName())
+                            .crestUrl(apiTeam.crest())
+                            .stadium(apiTeam.venue())
+                            .country(country)
+                            .externalId(teamExternalId) // football-data.org team ID → stored as String
+                            .build();
+                    team.addLeague(league);
+                    team = teamRepository.save(team);
+                    teamsSaved++;
+                    log.info("[DataLoader]     Saved team: {}", team.getName());
+                } else {
+                    // Club already seeded from an earlier competition — just add this league
+                    // link (addLeague is idempotent) and reuse its existing shared squad.
+                    team.addLeague(league);
+                    team = teamRepository.save(team);
+                    log.info("[DataLoader]     {} already seeded — linked to {}.",
+                            team.getName(), league.getName());
+                }
+
+                // Only seed a squad if this club doesn't have one yet (first competition we've
+                // seen it in, or a previous partial seed). A club shared across competitions
+                // keeps its single squad — no duplicate player rows.
+                if (playerRepository.countByTeamId(team.getId()) > 0) {
+                    continue;
+                }
 
                 // Try to get the squad from the competition response
                 List<ApiPlayer> squad = apiTeam.squad();

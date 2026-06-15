@@ -24,7 +24,11 @@ export interface TeamDto {
   crestUrl: string | null
   stadium: string | null
   country: string | null
+  // Primary league — kept for the team-page league header (a single representative value).
   leagueId: number | null
+  // Every competition this club takes part in (a club can play in several, e.g. a domestic
+  // league plus the Champions League). Present since the team↔league many-to-many refactor.
+  leagueIds: number[]
 }
 
 export interface PlayerDto {

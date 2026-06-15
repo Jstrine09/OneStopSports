@@ -79,7 +79,7 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
                         .filter(l -> "NBA".equals(l.getName()))
                         .findFirst())
                 .map(l -> {
-                    List<Team> teams = teamRepository.findByLeagueId(l.getId());
+                    List<Team> teams = teamRepository.findByLeagues_Id(l.getId());
                     if (teams.size() < NBA_TEAM_COUNT) return false; // Not all 30 teams exist yet
 
                     // Verify logos are populated (ESPN data) and every team has players in the DB
@@ -179,7 +179,7 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
         log.info("[NbaDataLoader] Fetched {} teams from ESPN", apiTeams.size());
 
         // Build a name → Team entity map for quick existing-team lookups
-        Map<String, Team> existingTeamsByName = teamRepository.findByLeagueId(nba.getId())
+        Map<String, Team> existingTeamsByName = teamRepository.findByLeagues_Id(nba.getId())
                 .stream()
                 .collect(Collectors.toMap(Team::getName, t -> t));
 
@@ -236,17 +236,19 @@ public class NbaDataLoader implements CommandLineRunner { // CommandLineRunner =
 
             } else {
                 // ── New team ───────────────────────────────────────────────
-                // First time we've seen this team — save it with the ESPN logo
-                team = teamRepository.save(
-                        Team.builder()
-                                .league(nba)
-                                .name(apiTeam.displayName())        // e.g. "Boston Celtics"
-                                .shortName(apiTeam.abbreviation())  // e.g. "BOS"
-                                .country(apiTeam.location())        // e.g. "Boston" (city)
-                                .crestUrl(crestUrl)                 // ESPN CDN logo URL
-                                .externalId(apiTeam.id())           // ESPN team ID — used for historical roster lookups
-                                .stadium(null)                      // Not provided by ESPN teams endpoint
-                                .build());
+                // First time we've seen this team — save it with the ESPN logo. The sport
+                // is set directly and the NBA league is linked via the team↔league join.
+                team = Team.builder()
+                        .sport(basketball)                  // Direct sport link (no league hop)
+                        .name(apiTeam.displayName())        // e.g. "Boston Celtics"
+                        .shortName(apiTeam.abbreviation())  // e.g. "BOS"
+                        .country(apiTeam.location())        // e.g. "Boston" (city)
+                        .crestUrl(crestUrl)                 // ESPN CDN logo URL
+                        .externalId(apiTeam.id())           // ESPN team ID — used for historical roster lookups
+                        .stadium(null)                      // Not provided by ESPN teams endpoint
+                        .build();
+                team.addLeague(nba);                        // Link to the single NBA competition
+                team = teamRepository.save(team);
                 log.info("[NbaDataLoader]   Saved team: {}", team.getName());
             }
 

@@ -3,6 +3,7 @@ package com.onestopsports.service;
 import com.onestopsports.dto.PlayerBioDto;
 import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.PlayerDto;
+import com.onestopsports.model.League;
 import com.onestopsports.model.Player;
 import com.onestopsports.repository.PlayerRepository;
 import com.onestopsports.util.TextNormalizer;
@@ -11,9 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 // Handles business logic for Players.
@@ -96,8 +95,9 @@ public class PlayerService {
         Player player = playerRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found: " + id));
 
-        // Resolve sport slug via the lazy chain. The @Transactional above keeps the session alive.
-        String sportSlug = player.getTeam().getLeague().getSport().getSlug();
+        // Resolve sport slug via the lazy chain (sport is stored on the team now, so this is
+        // player → team → sport). The @Transactional above keeps the session alive.
+        String sportSlug = player.getTeam().getSport().getSlug();
 
         PlayerCareerStatsDto stats = switch (sportSlug) {
             case "basketball" -> hasExternalId(player) ? nbaApiService.fetchCareerStats(player.getExternalId()) : null;
@@ -141,8 +141,11 @@ public class PlayerService {
             }
         }
 
-        // First time: we need the league ID before we can search by name.
-        Integer fdLeagueId = player.getTeam().getLeague().getExternalId();
+        // First time: we need the league ID before we can search by name. A club can now play
+        // in several competitions, so we key off its primary (domestic) league — that's the
+        // competition whose player list API-Football is searched against.
+        League primaryLeague = player.getTeam().getPrimaryLeague();
+        Integer fdLeagueId = primaryLeague != null ? primaryLeague.getExternalId() : null;
         Integer apiSportsLeagueId = apiFootballService.mapLeagueId(fdLeagueId);
         if (apiSportsLeagueId == null) {
             // League isn't in our mapping — e.g. a cup competition we haven't added.
@@ -165,24 +168,14 @@ public class PlayerService {
     // The query is normalized (accents stripped, lower-cased) to match the stored
     // name_normalized column, so "Dembele" finds "Dembélé".
     //
-    // A squad is seeded once per competition the club plays in, so the same player
-    // can appear as multiple rows (e.g. an Arsenal player under both the Premier
-    // League and Champions League copies of the club). We collapse to one entry per
-    // (player name + club name) — keeping the first seen — so duplicates don't fill
-    // the results. Two genuinely different players who share a name but play for
-    // different clubs are kept separate because the club name is part of the key.
+    // No de-duplication step is needed any more: since the team↔league refactor a club is a
+    // single row with a single squad, so each player exists exactly once. (The old collapse
+    // by (player name + club name) — which worked around the duplicated squads — is gone.)
     // Capped at 10 results so the search results page stays readable.
     // Called by GET /api/search?q=...
     public List<PlayerDto> searchPlayers(String query) {
         String normalized = TextNormalizer.normalize(query);
-        Map<String, Player> uniqueByNameAndClub = new LinkedHashMap<>();
-        for (Player player : playerRepository.findByNameNormalizedContaining(normalized)) {
-            // team is lazy but resolvable here — OSIV keeps the session open for the
-            // whole web request (the same reason toDto can walk team.league.sport).
-            String clubKey = player.getTeam() != null ? player.getTeam().getNameNormalized() : "";
-            uniqueByNameAndClub.putIfAbsent(player.getNameNormalized() + "|" + clubKey, player);
-        }
-        return uniqueByNameAndClub.values().stream()
+        return playerRepository.findByNameNormalizedContaining(normalized).stream()
                 .limit(10)
                 .map(this::toDto)
                 .toList();
@@ -229,12 +222,12 @@ public class PlayerService {
         if (externalId == null || externalId.isBlank()) return null;
 
         // Walk the chain defensively — bad seed data shouldn't crash this mapper.
+        // Sport now lives directly on the team (player → team → sport).
         if (player.getTeam() == null
-                || player.getTeam().getLeague() == null
-                || player.getTeam().getLeague().getSport() == null) {
+                || player.getTeam().getSport() == null) {
             return null;
         }
-        String sportSlug = player.getTeam().getLeague().getSport().getSlug();
+        String sportSlug = player.getTeam().getSport().getSlug();
 
         return switch (sportSlug) {
             case "basketball"        -> "https://a.espncdn.com/i/headshots/nba/players/full/" + externalId + ".png";
