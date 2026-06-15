@@ -161,12 +161,16 @@
    darkMode is class-based, so `.dark .glass-card` targets the dark theme.
    ───────────────────────────────────────────────────────────────────────── */
 .glass-card {
-  background-color: rgba(255, 255, 255, 0.46);
-  backdrop-filter: blur(7px);
-  -webkit-backdrop-filter: blur(7px);
+  /* Opacity raised from 0.46 → 0.72 (and blur 7 → 9px) so body text keeps a
+     legible contrast ratio over the busiest part of the field backdrop, which
+     the QA accessibility pass flagged. The field still reads through clearly. */
+  background-color: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
 }
 .dark .glass-card {
-  background-color: rgba(24, 24, 27, 0.30);
+  /* Likewise raised 0.30 → 0.55 for dark mode legibility. */
+  background-color: rgba(24, 24, 27, 0.55);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

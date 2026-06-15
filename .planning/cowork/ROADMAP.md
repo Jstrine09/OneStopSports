@@ -38,9 +38,6 @@ Free tier serves season 2024 only. `currentSeason()` is clamped via `FREE_TIER_M
 
 Fix options: (a) banner on the football player stats card saying "showing 2024-25 — upgrade for current season"; (b) upgrade the API-Football plan and bump the constant; (c) augment with a different paid free-tier soccer API.
 
-### NFL standings frontend grouping — **DONE** (CLAUDE.md is stale)
-CLAUDE.md still lists "NFL standings flat table — needs conference/division grouping" as a remaining task, but `StandingsTable.tsx` does in fact render the grouped layout when any entry has a non-null `division` field. **Remove this item from CLAUDE.md on the next doc sweep.**
-
 ### Push notifications for favourite teams — **not started**
 Listed as nice-to-have. No infrastructure (no FCM/APN, no service worker).
 

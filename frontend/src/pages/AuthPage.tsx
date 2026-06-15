@@ -50,8 +50,9 @@ export default function AuthPage() {
         {/* Form card */}
         <form onSubmit={submit} className="space-y-3 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
           <div>
-            <label className="mb-1 block text-xs text-stone-500 dark:text-zinc-400">Username</label>
+            <label htmlFor="auth-username" className="mb-1 block text-xs text-stone-500 dark:text-zinc-400">Username</label>
             <input
+              id="auth-username"
               name="username"
               value={form.username}
               onChange={handle}
@@ -64,8 +65,9 @@ export default function AuthPage() {
 
           {mode === 'register' && (
             <div>
-              <label className="mb-1 block text-xs text-stone-500 dark:text-zinc-400">Email</label>
+              <label htmlFor="auth-email" className="mb-1 block text-xs text-stone-500 dark:text-zinc-400">Email</label>
               <input
+                id="auth-email"
                 type="email"
                 name="email"
                 value={form.email}
@@ -79,8 +81,9 @@ export default function AuthPage() {
           )}
 
           <div>
-            <label className="mb-1 block text-xs text-stone-500 dark:text-zinc-400">Password</label>
+            <label htmlFor="auth-password" className="mb-1 block text-xs text-stone-500 dark:text-zinc-400">Password</label>
             <input
+              id="auth-password"
               type="password"
               name="password"
               value={form.password}

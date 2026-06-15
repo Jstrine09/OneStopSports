@@ -75,7 +75,7 @@ public class NflDataLoader implements CommandLineRunner {
                         .filter(l -> "NFL".equals(l.getName()))
                         .findFirst())
                 .map(l -> {
-                    List<Team> teams = teamRepository.findByLeagueId(l.getId());
+                    List<Team> teams = teamRepository.findByLeagues_Id(l.getId());
                     if (teams.size() < NFL_TEAM_COUNT) return false;
                     // Also require every player to have an externalId — pre-V6 rosters were
                     // seeded before the column existed, so they're missing ESPN athlete IDs.
@@ -121,6 +121,8 @@ public class NflDataLoader implements CommandLineRunner {
         // ── 2. League ─────────────────────────────────────────────────────────
         // The NFL — no external competition ID (externalId=null) because the ESPN API
         // doesn't use competition IDs. Routing uses the sport slug "american-football" instead.
+        // The logo comes from ESPN's stable league-logo CDN path.
+        final String nflLogoUrl = "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png";
         League nfl = leagueRepository.findBySportId(americanFootball.getId())
                 .stream()
                 .filter(l -> "NFL".equals(l.getName()))
@@ -131,8 +133,14 @@ public class NflDataLoader implements CommandLineRunner {
                                 .name("NFL")
                                 .country("United States")
                                 .season("2025-26") // The 2025 season runs Sep 2025 – Feb 2026
+                                .logoUrl(nflLogoUrl)
                                 .externalId(null)  // No competition ID — routing by sport slug
                                 .build()));
+        // Backfill the logo for a league row seeded before we set it (it was null then).
+        if (nfl.getLogoUrl() == null) {
+            nfl.setLogoUrl(nflLogoUrl);
+            leagueRepository.save(nfl);
+        }
         log.info("[NflDataLoader] League: {}", nfl.getName());
 
         // ── 3. Teams ──────────────────────────────────────────────────────────
@@ -162,7 +170,7 @@ public class NflDataLoader implements CommandLineRunner {
 
         // Build a name → Team lookup so we can decide per-team whether to skip,
         // re-seed (stale roster), or create fresh.
-        java.util.Map<String, Team> existingTeamsByName = teamRepository.findByLeagueId(nfl.getId())
+        java.util.Map<String, Team> existingTeamsByName = teamRepository.findByLeagues_Id(nfl.getId())
                 .stream()
                 .collect(Collectors.toMap(Team::getName, t -> t));
 
@@ -210,16 +218,18 @@ public class NflDataLoader implements CommandLineRunner {
 
             } else {
                 // ── New team ───────────────────────────────────────────────
-                team = teamRepository.save(
-                        Team.builder()
-                                .league(nfl)
-                                .name(apiTeam.displayName())       // e.g. "Arizona Cardinals"
-                                .shortName(apiTeam.abbreviation()) // e.g. "ARI"
-                                .country(apiTeam.location())       // e.g. "Arizona" — city/state
-                                .crestUrl(crestUrl)                // ESPN CDN URL — available on free tier
-                                .externalId(apiTeam.id())          // ESPN team ID — used for historical roster lookups
-                                .stadium(null)                     // Not available in this API response
-                                .build());
+                // Sport is set directly; the NFL league is linked via the team↔league join.
+                team = Team.builder()
+                        .sport(americanFootball)           // Direct sport link (no league hop)
+                        .name(apiTeam.displayName())       // e.g. "Arizona Cardinals"
+                        .shortName(apiTeam.abbreviation()) // e.g. "ARI"
+                        .country(apiTeam.location())       // e.g. "Arizona" — city/state
+                        .crestUrl(crestUrl)                // ESPN CDN URL — available on free tier
+                        .externalId(apiTeam.id())          // ESPN team ID — used for historical roster lookups
+                        .stadium(null)                     // Not available in this API response
+                        .build();
+                team.addLeague(nfl);                       // Link to the single NFL competition
+                team = teamRepository.save(team);
                 log.info("[NflDataLoader]   Saved team: {}", team.getName());
             }
 

@@ -38,7 +38,7 @@
          ▼                                 ▼
 ┌────────────────────────┐  ┌─────────────────────────────────┐
 │ PostgreSQL "onestopsports" │ Redis 7 (matches cache + push) │
-│ Flyway V1..V6              │ Key matches::SimpleKey[] TTL30s│
+│ Flyway V1..V7              │ Key matches::SimpleKey[] TTL30s│
 └────────────────────────────┘                                │
         ▲                                                     │
         │ startup seeders + on-demand fetches                 │

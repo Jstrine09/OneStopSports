@@ -21,7 +21,8 @@ export default function BottomNav() {
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] transition
+              // min-h-[44px] guarantees a comfortable tap target per WCAG/Apple HIG.
+              `flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] transition
                ${isActive ? 'text-amber-600 dark:text-amber-400' : 'text-stone-500 hover:text-stone-700 dark:text-zinc-500 dark:hover:text-zinc-200'}`
             }
           >

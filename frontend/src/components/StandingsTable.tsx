@@ -80,6 +80,43 @@ function nflSeedBadge(position: number): JSX.Element {
   return <span className={`${base} text-stone-500 dark:text-zinc-500`}>{position}</span>
 }
 
+// ── NBA grouped-table helpers ──────────────────────────────────────────────────
+
+// Group a flat list of NBA entries by conference (East/West). Unlike the NFL
+// helper there's no division level — NBA standings are simply two conference
+// tables. Preserves the order the backend returned teams in (already ranked
+// within each conference).
+function groupByConference(entries: StandingsEntryDto[]) {
+  const conferences: { name: string; teams: StandingsEntryDto[] }[] = []
+  for (const entry of entries) {
+    const confName = entry.conference ?? 'Conference'
+    let conf = conferences.find((c) => c.name === confName)
+    if (!conf) { conf = { name: confName, teams: [] }; conferences.push(conf) }
+    conf.teams.push(entry)
+  }
+  return conferences
+}
+
+// Short conference label shown on the NBA conference header chip
+function shortNbaConf(name: string) {
+  if (name.includes('Eastern')) return 'EAST'
+  if (name.includes('Western')) return 'WEST'
+  return name
+}
+
+// Format a win percentage as .XXX. Prefers the server-computed value (e.pct);
+// falls back to computing from W/L if the backend didn't supply one.
+function formatPct(e: StandingsEntryDto): string {
+  const value = e.pct ?? (e.won + e.lost > 0 ? e.won / (e.won + e.lost) : 0)
+  return value.toFixed(3).replace(/^0/, '')
+}
+
+// Format games-behind: the leader (0) shows a dash; half-games show ".5".
+function formatGb(gb: number | null): string {
+  if (gb == null || gb === 0) return '—'
+  return Number.isInteger(gb) ? String(gb) : gb.toFixed(1)
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function StandingsTable({ entries, showZones = true, glass = false }: Props) {
@@ -140,9 +177,9 @@ export default function StandingsTable({ entries, showZones = true, glass = fals
                     )}
                     <tbody>
                       {div.teams.map((e) => {
-                        // Win % — wins / (wins + losses + ties), displayed as .XXX
-                        const denom = e.won + e.lost + e.drawn
-                        const pct = denom > 0 ? (e.won / denom).toFixed(3).replace(/^0/, '') : '.000'
+                        // Win % comes from the server (counts a tie as half a win); formatPct
+                        // falls back to a client calc only if the backend didn't supply one.
+                        const pct = formatPct(e)
                         const diff = e.goalsFor - e.goalsAgainst
                         return (
                           <tr
@@ -184,7 +221,76 @@ export default function StandingsTable({ entries, showZones = true, glass = fals
     )
   }
 
-  // ── Football / NBA flat-table layout ─────────────────────────────────────────
+  // ── NBA conference-grouped layout ────────────────────────────────────────────
+  // Triggered when entries carry a conference but no division. (NFL sets division
+  // too, so it's already handled above — this branch only runs for NBA.) Renders
+  // East and West as two separate tables instead of one flat 1–30 list.
+  const isNba = entries.some((e) => e.conference !== null)
+  if (isNba) {
+    const conferences = groupByConference(entries)
+
+    return (
+      <div className="space-y-5">
+        {conferences.map((conf) => (
+          <div key={conf.name} className={`overflow-hidden rounded-2xl border border-stone-200 dark:border-zinc-900 ${surface}`}>
+            {/* Conference header */}
+            <div className="flex items-center gap-2 border-b border-stone-200 bg-stone-50 px-4 py-2 dark:border-zinc-900 dark:bg-zinc-900/80">
+              <span className="rounded bg-stone-900 px-2 py-0.5 text-[11px] font-black tracking-widest text-white dark:bg-zinc-100 dark:text-zinc-900">
+                {shortNbaConf(conf.name)}
+              </span>
+              <span className="text-xs font-semibold text-stone-600 dark:text-zinc-400">{conf.name}</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-[0.1em] text-stone-400 dark:text-zinc-600">
+                    <th className="py-2.5 pl-4 text-left font-semibold">#</th>
+                    <th className="py-2.5 text-left font-semibold">Team</th>
+                    <th className="py-2.5 text-center font-semibold">W</th>
+                    <th className="py-2.5 text-center font-semibold">L</th>
+                    <th className="py-2.5 text-center font-bold text-stone-700 dark:text-zinc-300">PCT</th>
+                    <th className="py-2.5 pr-4 text-center font-semibold">GB</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {conf.teams.map((e) => (
+                    <tr
+                      key={e.team.id}
+                      className="border-t border-stone-100 transition-colors hover:bg-stone-50 dark:border-zinc-900 dark:hover:bg-zinc-800/40"
+                    >
+                      <td className="py-2.5 pl-4">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold tabular-nums text-stone-500 dark:text-zinc-500">
+                          {e.position}
+                        </span>
+                      </td>
+                      <td className="py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          {e.team.crestUrl && (
+                            <img src={e.team.crestUrl} alt={e.team.name} className="h-5 w-5 object-contain" />
+                          )}
+                          <span className="font-medium">
+                            <span className="hidden sm:inline">{e.team.name}</span>
+                            <span className="sm:hidden">{e.team.shortName}</span>
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 text-center tabular-nums text-stone-600 dark:text-zinc-400">{e.won}</td>
+                      <td className="py-2.5 text-center tabular-nums text-stone-600 dark:text-zinc-400">{e.lost}</td>
+                      <td className="py-2.5 text-center font-extrabold tabular-nums">{formatPct(e)}</td>
+                      <td className="py-2.5 pr-4 text-center tabular-nums text-stone-500 dark:text-zinc-500">{formatGb(e.gamesBehind)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // ── Football flat-table layout ───────────────────────────────────────────────
   return (
     <div className={`overflow-hidden rounded-2xl border border-stone-200 dark:border-zinc-900 ${surface}`}>
       <div className="overflow-x-auto">

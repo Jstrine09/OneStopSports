@@ -3,8 +3,10 @@ package com.onestopsports.service;
 import com.onestopsports.dto.PlayerBioDto;
 import com.onestopsports.dto.PlayerCareerStatsDto;
 import com.onestopsports.dto.PlayerDto;
+import com.onestopsports.model.League;
 import com.onestopsports.model.Player;
 import com.onestopsports.repository.PlayerRepository;
+import com.onestopsports.util.TextNormalizer;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -93,8 +95,9 @@ public class PlayerService {
         Player player = playerRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found: " + id));
 
-        // Resolve sport slug via the lazy chain. The @Transactional above keeps the session alive.
-        String sportSlug = player.getTeam().getLeague().getSport().getSlug();
+        // Resolve sport slug via the lazy chain (sport is stored on the team now, so this is
+        // player → team → sport). The @Transactional above keeps the session alive.
+        String sportSlug = player.getTeam().getSport().getSlug();
 
         PlayerCareerStatsDto stats = switch (sportSlug) {
             case "basketball" -> hasExternalId(player) ? nbaApiService.fetchCareerStats(player.getExternalId()) : null;
@@ -138,8 +141,11 @@ public class PlayerService {
             }
         }
 
-        // First time: we need the league ID before we can search by name.
-        Integer fdLeagueId = player.getTeam().getLeague().getExternalId();
+        // First time: we need the league ID before we can search by name. A club can now play
+        // in several competitions, so we key off its primary (domestic) league — that's the
+        // competition whose player list API-Football is searched against.
+        League primaryLeague = player.getTeam().getPrimaryLeague();
+        Integer fdLeagueId = primaryLeague != null ? primaryLeague.getExternalId() : null;
         Integer apiSportsLeagueId = apiFootballService.mapLeagueId(fdLeagueId);
         if (apiSportsLeagueId == null) {
             // League isn't in our mapping — e.g. a cup competition we haven't added.
@@ -158,12 +164,18 @@ public class PlayerService {
         return apiFootballService.fetchPlayerStats(found.get(), season);
     }
 
-    // Returns players whose name contains the query string (case-insensitive).
+    // Returns players whose name contains the query string (accent-insensitive).
+    // The query is normalized (accents stripped, lower-cased) to match the stored
+    // name_normalized column, so "Dembele" finds "Dembélé".
+    //
+    // No de-duplication step is needed any more: since the team↔league refactor a club is a
+    // single row with a single squad, so each player exists exactly once. (The old collapse
+    // by (player name + club name) — which worked around the duplicated squads — is gone.)
     // Capped at 10 results so the search results page stays readable.
     // Called by GET /api/search?q=...
     public List<PlayerDto> searchPlayers(String query) {
-        return playerRepository.findByNameContainingIgnoreCase(query)
-                .stream()
+        String normalized = TextNormalizer.normalize(query);
+        return playerRepository.findByNameNormalizedContaining(normalized).stream()
                 .limit(10)
                 .map(this::toDto)
                 .toList();
@@ -210,12 +222,12 @@ public class PlayerService {
         if (externalId == null || externalId.isBlank()) return null;
 
         // Walk the chain defensively — bad seed data shouldn't crash this mapper.
+        // Sport now lives directly on the team (player → team → sport).
         if (player.getTeam() == null
-                || player.getTeam().getLeague() == null
-                || player.getTeam().getLeague().getSport() == null) {
+                || player.getTeam().getSport() == null) {
             return null;
         }
-        String sportSlug = player.getTeam().getLeague().getSport().getSlug();
+        String sportSlug = player.getTeam().getSport().getSlug();
 
         return switch (sportSlug) {
             case "basketball"        -> "https://a.espncdn.com/i/headshots/nba/players/full/" + externalId + ".png";

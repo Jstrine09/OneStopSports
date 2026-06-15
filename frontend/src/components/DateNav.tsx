@@ -24,7 +24,7 @@ export default function DateNav({ date, onChange }: Props) {
     <div className="flex items-center justify-between rounded-xl bg-white px-2 py-1 dark:bg-zinc-800">
       <button
         onClick={() => onChange(addDays(date, -1))}
-        className="rounded-lg p-2 text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-white"
+        className="flex h-11 w-11 items-center justify-center rounded-lg text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-white"
         aria-label="Previous day"
       >
         <ChevronLeft size={20} />
@@ -34,7 +34,7 @@ export default function DateNav({ date, onChange }: Props) {
 
       <button
         onClick={() => onChange(addDays(date, 1))}
-        className="rounded-lg p-2 text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-white"
+        className="flex h-11 w-11 items-center justify-center rounded-lg text-stone-500 transition hover:bg-stone-100 hover:text-stone-900 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-white"
         aria-label="Next day"
       >
         <ChevronRight size={20} />

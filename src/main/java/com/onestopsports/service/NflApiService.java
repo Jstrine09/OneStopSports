@@ -473,10 +473,19 @@ public class NflApiService {
                                     .thenComparingDouble(e ->  getStatValue(e, "losses")))
                             .toList();
 
+                    if (teams.isEmpty()) continue;
+
+                    // The division leader (sorted to the front) is the yardstick for
+                    // "games behind" — every other team's GB is measured against it.
+                    EspnStandingsEntry leader = teams.get(0);
+                    double leaderWins   = getStatValue(leader, "wins");
+                    double leaderLosses = getStatValue(leader, "losses");
+
                     AtomicInteger divRank = new AtomicInteger(0);
                     for (EspnStandingsEntry entry : teams) {
                         result.add(toStandingsEntryDto(entry, dbLeagueId,
-                                divRank.incrementAndGet(), conference.name(), divisionName));
+                                divRank.incrementAndGet(), conference.name(), divisionName,
+                                leaderWins, leaderLosses));
                     }
                 }
             }
@@ -661,7 +670,8 @@ public class NflApiService {
     // We reuse goalsFor/goalsAgainst for points-for/points-against so the frontend
     // can show PF, PA, and DIFF (goalsFor − goalsAgainst) in the NFL-specific table layout.
     private StandingsEntryDto toStandingsEntryDto(EspnStandingsEntry entry, Long dbLeagueId,
-                                                   int rank, String conference, String division) {
+                                                   int rank, String conference, String division,
+                                                   double leaderWins, double leaderLosses) {
         EspnStandingsTeam t = entry.team();
 
         // Grab crest URL from the logo list if ESPN includes it in the standings response
@@ -683,6 +693,13 @@ public class NflApiService {
         int pointsFor   = (int) getStatValue(entry, "pointsFor");
         int pointsAgainst = (int) getStatValue(entry, "pointsAgainst");
 
+        // Win percentage — the NFL counts a tie as half a win, so it's (wins + ties/2) / games.
+        Double pct = played > 0 ? (wins + ties / 2.0) / played : 0.0;
+
+        // Games behind the division leader (ties ignored, as is convention): the average
+        // of how many more wins and fewer losses this team needs to match the leader.
+        double gamesBehind = ((leaderWins - wins) + (losses - leaderLosses)) / 2.0;
+
         return new StandingsEntryDto(
                 rank,           // within-division rank (1–4)
                 team,
@@ -694,7 +711,9 @@ public class NflApiService {
                 pointsAgainst,  // goalsAgainst reused for NFL points allowed
                 wins,           // points = wins — no traditional points system in NFL
                 conference,     // "American Football Conference" or "National Football Conference"
-                division);      // "AFC East", "NFC West", etc.
+                division,       // "AFC East", "NFC West", etc.
+                pct,
+                gamesBehind);
     }
 
     // Parses the score string from a competitor — ESPN sends empty string "" before the game starts.

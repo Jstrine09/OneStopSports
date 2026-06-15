@@ -24,7 +24,11 @@ export interface TeamDto {
   crestUrl: string | null
   stadium: string | null
   country: string | null
+  // Primary league — kept for the team-page league header (a single representative value).
   leagueId: number | null
+  // Every competition this club takes part in (a club can play in several, e.g. a domestic
+  // league plus the Champions League). Present since the team↔league many-to-many refactor.
+  leagueIds: number[]
 }
 
 export interface PlayerDto {
@@ -102,10 +106,14 @@ export interface StandingsEntryDto {
   goalsFor: number
   goalsAgainst: number
   points: number
-  // NFL only — null for football/NBA. When non-null the frontend renders
-  // a conference → division grouped table instead of a flat league table.
+  // conference drives the grouped layout: NBA sets it (East/West, no division);
+  // NFL sets both conference and division; football leaves both null (flat table).
   conference: string | null
   division: string | null
+  // Win percentage (0–1) and games behind the conference/division leader.
+  // Computed server-side for NBA/NFL; null for football.
+  pct: number | null
+  gamesBehind: number | null
 }
 
 export interface UserDto {

@@ -32,9 +32,11 @@ export default function SearchPage() {
         <h1 className="text-xl font-bold">Search</h1>
       </div>
 
-      {/* Search input — autofocused so users can type immediately on mobile */}
+      {/* Search input — autofocused so users can type immediately on mobile.
+          aria-label gives it an accessible name since the design has no visible label. */}
       <input
         type="search"
+        aria-label="Search teams or players"
         placeholder="Search teams or players…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
