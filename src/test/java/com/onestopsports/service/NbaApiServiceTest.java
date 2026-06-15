@@ -220,26 +220,49 @@ class NbaApiServiceTest {
     }
 
     @Test
-    void fetchStandings_sortsTeamsByWinsDescending() {
-        // The team with more wins should appear at position 1 regardless of which
-        // conference they're in — we rank all 30 teams globally, not by conference
+    void fetchStandings_groupsByConferenceAndRanksWithinEach() {
+        // Standings are now grouped by conference (East/West) and ranked within each
+        // conference, NOT flattened into one global 1–30 list. With one team per
+        // conference, each team is #1 in its own conference. The result is ordered
+        // East first (Boston), then West (Cleveland) — the order ESPN returns them.
         when(standingsClient.get().uri(anyString()).retrieve()
                 .body(NbaApiService.EspnStandingsResponse.class))
                 .thenReturn(standingsWithTwo(
-                        40,  // team1 (Boston) — 40 wins — should be position 2
-                        64)); // team2 (Cleveland) — 64 wins — should be position 1
+                        40,  // Boston (Eastern Conference) — 40 wins
+                        64)); // Cleveland (Western Conference) — 64 wins
 
         List<StandingsEntryDto> result = nbaApiService.fetchStandings(7L);
 
         assertThat(result).hasSize(2);
-        // Cleveland (64 wins) should be ranked 1st
+
+        // Boston tops the Eastern Conference
+        assertThat(result.get(0).team().name()).isEqualTo("Boston Celtics");
         assertThat(result.get(0).position()).isEqualTo(1);
-        assertThat(result.get(0).team().name()).isEqualTo("Cleveland Cavaliers");
-        assertThat(result.get(0).won()).isEqualTo(64);
-        // Boston (40 wins) should be ranked 2nd
-        assertThat(result.get(1).position()).isEqualTo(2);
-        assertThat(result.get(1).team().name()).isEqualTo("Boston Celtics");
-        assertThat(result.get(1).won()).isEqualTo(40);
+        assertThat(result.get(0).conference()).isEqualTo("Eastern Conference");
+
+        // Cleveland tops the Western Conference (also rank 1 — ranking restarts per conference)
+        assertThat(result.get(1).team().name()).isEqualTo("Cleveland Cavaliers");
+        assertThat(result.get(1).position()).isEqualTo(1);
+        assertThat(result.get(1).conference()).isEqualTo("Western Conference");
+
+        // NBA has no division level — division must stay null so the frontend groups
+        // by conference only (a non-null division would trigger the NFL layout).
+        assertThat(result).allSatisfy(entry -> assertThat(entry.division()).isNull());
+    }
+
+    @Test
+    void fetchStandings_derivesCrestUrlFromAbbreviation() {
+        // The ESPN standings response omits team logos, so the service derives the
+        // crest URL from the team abbreviation against ESPN's CDN path.
+        when(standingsClient.get().uri(anyString()).retrieve()
+                .body(NbaApiService.EspnStandingsResponse.class))
+                .thenReturn(standingsWithTwo(50, 45));
+
+        List<StandingsEntryDto> result = nbaApiService.fetchStandings(7L);
+
+        // Boston (BOS) → .../nba/500/bos.png
+        assertThat(result.get(0).team().crestUrl())
+                .isEqualTo("https://a.espncdn.com/i/teamlogos/nba/500/bos.png");
     }
 
     @Test

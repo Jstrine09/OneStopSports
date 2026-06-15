@@ -414,21 +414,25 @@ public class NbaApiService {
                 return Collections.emptyList();
             }
 
-            // Collect all entries from both conferences into one flat list
-            List<EspnStandingsEntry> allEntries = new ArrayList<>();
+            // Build the table conference by conference so East and West stay grouped —
+            // the frontend renders them as two separate tables. Within each conference
+            // we sort by wins (descending) and assign a within-conference rank of 1–15.
+            // (Previously every team was flattened into one win-sorted 1–30 list, which
+            // is why the QA sweep saw NBA standings render as a single flat table.)
+            List<StandingsEntryDto> result = new ArrayList<>();
             for (EspnConference conference : response.children()) {
                 if (conference.standings() == null || conference.standings().entries() == null) continue;
-                allEntries.addAll(conference.standings().entries());
+
+                // A fresh rank counter per conference so each starts again at 1.
+                AtomicInteger rank = new AtomicInteger(0);
+                conference.standings().entries().stream()
+                        .sorted(Comparator.comparingDouble(e -> -getStatValue(e, "wins")))
+                        .map(entry -> toStandingsEntryDto(entry, dbLeagueId, rank.incrementAndGet(), conference.name()))
+                        .forEach(result::add);
             }
 
-            if (allEntries.isEmpty()) return Collections.emptyList();
-
-            // Sort all 30 teams by wins (descending), then assign rank 1–30
-            AtomicInteger rank = new AtomicInteger(0);
-            return allEntries.stream()
-                    .sorted(Comparator.comparingDouble(e -> -getStatValue(e, "wins")))
-                    .map(entry -> toStandingsEntryDto(entry, dbLeagueId, rank.incrementAndGet()))
-                    .toList();
+            if (result.isEmpty()) return Collections.emptyList();
+            return result;
 
         } catch (RestClientException e) {
             // Off-season or ESPN structure change — log and return empty list gracefully.
@@ -571,13 +575,17 @@ public class NbaApiService {
     // Converts one NBA standings entry to a StandingsEntryDto.
     // Basketball has no draws — drawn is always 0.
     // "Points" is set to wins — NBA teams are ranked by win count (not accumulated points).
-    private StandingsEntryDto toStandingsEntryDto(EspnStandingsEntry entry, Long dbLeagueId, int rank) {
+    private StandingsEntryDto toStandingsEntryDto(EspnStandingsEntry entry, Long dbLeagueId,
+                                                  int rank, String conferenceName) {
         EspnStandingsTeam t = entry.team();
         TeamDto team = new TeamDto(
                 parseId(t.id()),
                 t.displayName(),
                 t.abbreviation(),
-                null, null,         // no crest/stadium in standings response
+                // The standings response omits logos, so we derive the crest URL from the
+                // team abbreviation (same CDN-derive approach used for player headshots).
+                espnTeamLogoUrl(t.abbreviation()),
+                null,               // stadium — not in standings response
                 t.location(),       // city name
                 dbLeagueId);
 
@@ -585,7 +593,7 @@ public class NbaApiService {
         int losses = (int) getStatValue(entry, "losses");
 
         return new StandingsEntryDto(
-                rank,          // global rank across both conferences (1–30)
+                rank,          // within-conference rank (1–15)
                 team,
                 wins + losses, // played = wins + losses (no draws in basketball)
                 wins,
@@ -594,8 +602,18 @@ public class NbaApiService {
                 0,             // goalsFor — not applicable
                 0,             // goalsAgainst — not applicable
                 wins,          // "points" = wins — ranking metric for basketball
-                null,          // conference — NBA doesn't use the grouped layout
-                null);         // division   — NBA doesn't use the grouped layout
+                conferenceName, // "Eastern Conference" / "Western Conference" — drives the grouped layout
+                null);         // division — NBA has no division level, so the frontend groups by conference only
+    }
+
+    // ESPN serves team logos from a predictable CDN path keyed by the lowercase team
+    // abbreviation, e.g. .../nba/500/cle.png for Cleveland. The standings endpoint itself
+    // doesn't include logos, so we derive the URL here — the same pattern PlayerService
+    // uses to derive headshot URLs from an athlete ID. Returns null if there's no
+    // abbreviation to build from (the frontend then shows an abbreviation fallback).
+    private String espnTeamLogoUrl(String abbreviation) {
+        if (abbreviation == null || abbreviation.isBlank()) return null;
+        return "https://a.espncdn.com/i/teamlogos/nba/500/" + abbreviation.toLowerCase() + ".png";
     }
 
     // Parses the score string from a competitor — ESPN sends empty string "" before the game starts.
