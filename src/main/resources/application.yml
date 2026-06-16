@@ -65,6 +65,18 @@ jwt:
   secret: bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u
   expiration-ms: 86400000
 
+# Application-specific settings (our own, not Spring's).
+app:
+  cors:
+    # Website origins allowed to call the API / open the live-scores WebSocket from a browser.
+    # Comma-separated Spring "origin patterns" (so "*" wildcards are allowed). Used by both
+    # SecurityConfig (REST CORS) and WebSocketConfig (WS handshake). Add a custom domain here
+    # later — no Java change needed. Override per environment via the
+    # APP_CORS_ALLOWED_ORIGIN_PATTERNS env var (e.g. on Render).
+    #   • http://localhost:*                 — any local dev port (Vite runs on 3000)
+    #   • https://one-stop-sports*.vercel.app — the Vercel site + its preview/alias URLs
+    allowed-origin-patterns: http://localhost:*,https://one-stop-sports*.vercel.app
+
 server:
   port: 8081
 
