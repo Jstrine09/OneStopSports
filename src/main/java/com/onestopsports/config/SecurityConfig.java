@@ -1,6 +1,7 @@
 package com.onestopsports.config;
 
 import com.onestopsports.security.JwtAuthFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -26,6 +27,15 @@ public class SecurityConfig {
 
     // Our custom filter that checks the JWT token on every incoming request
     private final JwtAuthFilter jwtAuthFilter;
+
+    // Which website origins are allowed to call this API from a browser. Read from the
+    // `app.cors.allowed-origin-patterns` property (a comma-separated list) so we can add a
+    // new domain — e.g. a custom domain later — without editing any Java. These are Spring
+    // "origin patterns", so "*" wildcards are allowed (handy for Vercel's per-deploy preview
+    // URLs). The ":*" after the colon is a fallback used only if the property is missing
+    // (e.g. in some tests), where allowing any origin is harmless.
+    @Value("${app.cors.allowed-origin-patterns:*}")
+    private List<String> allowedOriginPatterns;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
@@ -99,11 +109,13 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        // CORS (Cross-Origin Resource Sharing) controls which domains can call our API.
-        // The React frontend runs on localhost:5173 while the API is on localhost:8080 —
-        // without CORS config, the browser would block those cross-origin requests.
+        // CORS (Cross-Origin Resource Sharing) controls which website origins are allowed to
+        // call our API from a browser. In the Vercel split deploy the REST calls are proxied
+        // same-origin (so the browser doesn't even enforce CORS on them), but we still scope
+        // the allowed origins down from the old "*" to the configured list — defence in depth
+        // for any direct cross-origin call, and it keeps local dev working (localhost).
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));                              // Any origin (fine for dev)
+        configuration.setAllowedOriginPatterns(allowedOriginPatterns);                     // Only our known origins (dev + Vercel)
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); // Allowed HTTP methods
         configuration.setAllowedHeaders(List.of("*"));                                    // Allow any header (incl. Authorization)
         configuration.setAllowCredentials(true);                                           // Allow cookies and auth headers

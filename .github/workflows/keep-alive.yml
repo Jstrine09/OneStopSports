@@ -1,0 +1,34 @@
+# Keeps the Render free-tier backend awake so visitors don't hit a ~20s cold start.
+#
+# Render spins a free web service down after ~15 minutes of inactivity. This workflow
+# pings the public health endpoint on a schedule, which is enough traffic to keep the
+# instance running (and therefore keeps the 30s live-score scheduler + WebSocket alive).
+#
+# Caveats to be aware of:
+#   • GitHub's scheduled runs are best-effort and can be delayed under load, so the
+#     instance may occasionally still sleep — this *reduces* cold starts, it doesn't
+#     guarantee zero. The real fix is a paid always-on Render plan.
+#   • GitHub disables scheduled workflows on repos with no commits for 60 days.
+#   • A single free Render service kept warm fits within Render's monthly free hours.
+#
+# You can also trigger it by hand from the Actions tab (workflow_dispatch).
+name: Keep backend awake
+
+on:
+  schedule:
+    # Every 10 minutes, offset to :07 to avoid the top-of-hour stampede.
+    - cron: "7,17,27,37,47,57 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: |
+          # -m 90 allows for a cold start if it had already gone to sleep.
+          # --fail makes the step error on a 4xx/5xx so a broken backend shows up red.
+          curl --fail --silent --show-error -m 90 \
+            -o /dev/null \
+            -w "HTTP %{http_code} in %{time_total}s\n" \
+            https://onestopsports.onrender.com/api/sports

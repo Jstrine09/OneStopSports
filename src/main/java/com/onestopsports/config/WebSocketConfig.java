@@ -1,6 +1,7 @@
 package com.onestopsports.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.converter.DefaultContentTypeResolver;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
@@ -25,6 +26,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     // other registered modules, so LocalDateTime fields serialise to ISO-8601 strings.
     private final ObjectMapper objectMapper;
 
+    // Which website origins may open the live-scores WebSocket. Unlike the REST calls (which
+    // Vercel proxies same-origin), the browser connects this WebSocket straight from the
+    // Vercel site to the backend — a genuine cross-origin connection — so this list is what
+    // actually gates it. Read from the same `app.cors.allowed-origin-patterns` property the
+    // REST CORS config uses, so there's one place to manage allowed origins. ":*" is a
+    // fallback for when the property is absent (allows any origin — only hit in tests).
+    @Value("${app.cors.allowed-origin-patterns:*}")
+    private List<String> allowedOriginPatterns;
+
     public WebSocketConfig(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
@@ -46,8 +56,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // The frontend connects using @stomp/stompjs with a native ws:// URL,
         // which works in all modern browsers without any extra library.
         // SockJS was removed because its CJS module causes Vite to crash at import time.
+        // Only allow the configured origins (dev localhost + the Vercel site) to connect,
+        // instead of the old "*". setAllowedOriginPatterns takes varargs, so we hand it the
+        // list as an array.
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*"); // Allow connections from any origin (fine for dev)
+                .setAllowedOriginPatterns(allowedOriginPatterns.toArray(new String[0]));
     }
 
     // Override the STOMP message converter so it uses Spring Boot's ObjectMapper.
