@@ -9,6 +9,8 @@ dist-ssr/
 *.local
 .env
 .env.*
+# …but keep the committed template (no secrets — documents which vars exist)
+!.env.example
 
 # Editor
 .vscode/
