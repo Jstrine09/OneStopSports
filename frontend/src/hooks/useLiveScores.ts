@@ -19,13 +19,18 @@ import type { MatchDto } from '../types'
 // 7. React re-renders the score cards instantly — no polling needed
 export function useLiveScores(onUpdate: (matches: MatchDto[]) => void) {
   useEffect(() => {
-    // Derive the WebSocket URL from the current browser location so this works
-    // in both development (localhost:3000 → proxied by Vite to localhost:8080)
-    // and production (same host, just different protocol: https → wss).
-    // We use a plain ws:// URL — no SockJS needed, all modern browsers support
-    // native WebSocket and @stomp/stompjs works with it out of the box.
+    // Resolve the WebSocket URL. In a split deploy (frontend on Vercel, backend on
+    // Render) the WS can't be proxied through Vercel — rewrites don't carry WebSocket
+    // upgrades — so it must point directly at the backend. VITE_WS_URL supplies that
+    // absolute wss:// URL in production (set in Vercel's env vars).
+    //
+    // When VITE_WS_URL is unset (local dev, or a same-origin deploy where the backend
+    // serves the SPA), we fall back to deriving it from the browser location, which Vite
+    // proxies to localhost:8081 in dev and resolves same-origin in a single-host deploy.
+    // Plain ws:// — no SockJS; @stomp/stompjs speaks native WebSocket out of the box.
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const brokerURL = `${wsProtocol}//${window.location.host}/ws`
+    const brokerURL =
+      import.meta.env.VITE_WS_URL ?? `${wsProtocol}//${window.location.host}/ws`
 
     // Create the STOMP client with a native WebSocket URL.
     // brokerURL tells @stomp/stompjs to connect directly via WebSocket,
