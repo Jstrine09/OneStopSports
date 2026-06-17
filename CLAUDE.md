@@ -1,6 +1,6 @@
 # OneStopSports — Claude Code Context
 
-> **Last refreshed:** reflects commit `4956c89` — **team↔league many-to-many structural dedupe** (V9) is committed; a club is now one row that belongs to many competitions. If you're picking this up in a new chat, this file + `.planning/cowork/` are the authoritative current-state context.
+> **Last refreshed:** reflects commit `5eefe79` — the app is now **publicly deployed** (Vercel frontend + Render backend) with CORS/WS origins locked down to the real deploy domains and a keep-alive workflow against Render's free-tier cold starts. If you're picking this up in a new chat, this file + `.planning/cowork/` are the authoritative current-state context.
 
 ## Project Overview
 **OneStopSports** is a full-stack, Fotmob-style multi-sport app covering **football (soccer), the NBA, and the NFL**. It surfaces live scores (pushed over WebSocket), league standings, match detail + box scores + event timelines, full team rosters, player profiles with **bio, career stats, and headshots**, and global search. Users can register and save favourite teams and players.
@@ -25,7 +25,7 @@
 | DTOs | Java 21 records (MapStruct on the build path but DTO mapping is hand-written `toDto`) |
 | Frontend | React 18 + TypeScript 5.5 + Vite 5.4 (port 3000) + Tailwind 3.4 + React Query v5 + @stomp/stompjs + lucide-react |
 | Infra (dev) | Docker Compose (postgres:16-alpine + redis:7-alpine) |
-| Infra (prod) | Single-origin Docker image + `render.yaml` (Render) + Neon Postgres; SPA served by the backend |
+| Infra (prod) | Split-deploy: frontend on **Vercel** (`frontend/vercel.json` rewrites `/api/*` to Render, same-origin REST, no CORS for REST) + backend on **Render** (`render.yaml`, single-origin Docker still works as a fallback) + Neon Postgres. WS connects straight to Render (`wss://`) since Vercel can't proxy WS upgrades. `.github/workflows/keep-alive.yml` pings the Render health endpoint every 10 min to reduce free-tier cold starts. Frontend is an installable PWA (vite-plugin-pwa, app-shell precache; `/api` + `/ws` excluded from the service worker). |
 
 ---
 
@@ -76,7 +76,7 @@ service/                          12 services (see below)
 - `AuthenticationEntryPoint` returns a clean **401 JSON** envelope for unauthenticated hits on protected endpoints (instead of an empty 403).
 - DI cycle (`JwtAuthFilter → AuthService → PasswordEncoder → JwtAuthFilter`) broken by (1) `PasswordConfig` holding the `PasswordEncoder` and (2) `@Lazy AuthenticationManager` in `AuthService`'s manual constructor.
 - jjwt **0.12.x** API: `Jwts.parser()` / `.verifyWith(key)` / `.parseSignedClaims(token)`. JWT secret Base64-encoded.
-- CORS open in dev (`allowedOriginPatterns("*")` + credentials) — **tighten before public deploy**.
+- **CORS/WS origins locked down** (commit `5eefe79`, closes the old "tighten before public deploy" item): `SecurityConfig` (REST CORS) and `WebSocketConfig` (live-scores WS handshake) read a shared `app.cors.allowed-origin-patterns` property (default: localhost + `https://one-stop-sports*.vercel.app`), overridable via `APP_CORS_ALLOWED_ORIGIN_PATTERNS` on Render. The WS check is the one actually exercised cross-origin (browser → Render directly); REST stays same-origin in prod via the Vercel `/api/*` rewrite.
 
 ### GlobalExceptionHandler (`@RestControllerAdvice`)
 Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for every error. Handlers:
@@ -199,7 +199,7 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 
 **Tests:** `mvn test` (H2 in-memory; Redis disabled via `application-test.yml`).
 **Swagger:** `http://localhost:8081/swagger-ui/index.html`.
-**Production:** `render.yaml` + `application-prod.yml` + single-origin Docker (backend serves the built SPA via `SpaForwardingConfig`); Neon for Postgres.
+**Production:** Vercel (frontend, `frontend/vercel.json`) + Render (`render.yaml` + `application-prod.yml`, backend) + Neon Postgres. The single-origin Docker path (`SpaForwardingConfig` serving the built SPA from the backend) still works as a fallback deploy mode but the live deploy is the Vercel/Render split. `.github/workflows/keep-alive.yml` pings Render every 10 min to fight free-tier cold starts.
 
 ---
 
@@ -223,7 +223,7 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 ## Current Status
 
 ### ✅ Working
-Everything in the original build (entities, auth, Redis, WebSocket live push, search, Swagger, Docker) **plus**: player career stats (3 sports) + bio + headshots; live game clock; match box score + mirrored event timeline; the full sport-field/glass frontend redesign across all screens; shared `SectionLabel`/`RowCard` primitives; production deploy setup (Render + Neon, single-origin Docker); **full 5-persona QA remediation** — top blockers (auth bypass, 500s→4xx, a11y focus + reduced-motion, stale-data badge) plus all remaining issues: NBA conference-grouped standings, accent-insensitive + deduped search, server-side PCT/GB, NBA/NFL league logos + standings crests, winner emphasis, form labels + aria-live + ≥44px tap targets + glass contrast.
+Everything in the original build (entities, auth, Redis, WebSocket live push, search, Swagger, Docker) **plus**: player career stats (3 sports) + bio + headshots; live game clock; match box score + mirrored event timeline; the full sport-field/glass frontend redesign across all screens; shared `SectionLabel`/`RowCard` primitives; **public production deploy** (Vercel frontend + Render backend + Neon Postgres, CORS/WS origins locked down, installable PWA, keep-alive workflow); **full 5-persona QA remediation** — top blockers (auth bypass, 500s→4xx, a11y focus + reduced-motion, stale-data badge) plus all remaining issues: NBA conference-grouped standings, accent-insensitive + deduped search, server-side PCT/GB, NBA/NFL league logos + standings crests, winner emphasis, form labels + aria-live + ≥44px tap targets + glass contrast.
 
 ### 🔲 Stubbed (free-tier limits)
 - `getMatchStats()` / `getMatchLineups()` → `{}` (football-data.org free tier).

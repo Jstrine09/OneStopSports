@@ -149,7 +149,7 @@ docker-compose up --build
 
 ```bash
 mvn test
-# 57 tests across 7 test classes; uses H2 + spring.cache.type: none
+# 66 tests across 9 test classes; uses H2 + spring.cache.type: none
 ```
 
 ### Swagger UI
@@ -182,9 +182,7 @@ JWT Bearer scheme is wired in — paste a token from `POST /api/auth/login` into
 - NBA/NFL player headshots ARE wired (ESPN CDN, derived from `externalId`); **football** headshots are still not captured.
 - Football career stats: single season, capped at 2024 (api-sports.io free tier) — UI shows a "most recent available season" badge.
 - Match stats + lineups for football: stubbed `{}` (football-data.org free-tier limit).
-- **NBA standings don't group by conference** (flat win-sorted ladder — `conference` not populated). Highest-value open data fix.
-- Search is not accent-insensitive ("Dembele"↛"Dembélé").
-- No frontend tests (Vitest not configured); backend coverage gaps on `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `TeamService`.
-- Production deploy IS set up (Render + Neon, single-origin Docker via `SpaForwardingConfig`); no CI pipeline yet.
+- No frontend tests (Vitest not configured); backend coverage gaps on `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`.
+- Production deploy IS set up and public: Vercel (frontend) + Render (backend) + Neon (Postgres), with `.github/workflows/keep-alive.yml` pinging Render every 10 min; single-origin Docker via `SpaForwardingConfig` still works as a fallback deploy mode. No CI pipeline yet.
 
 See `ROADMAP.md` (top section is the current post-QA state) for the full backlog.
