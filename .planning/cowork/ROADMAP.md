@@ -14,9 +14,9 @@ A QA sweep with 5 user personas (football ultra, mobile casual, accessibility co
 - **Stale-data honesty** — `CareerStatsTable` shows a "most recent available season" badge for football so the lagging single-season feed isn't read as current.
 - **Team header** now resolves the team's real sport + league colour via `fetchLeague`/`fetchSports` on any nav path (not just from Leagues).
 
-**Still open (ranked):** (1) NBA standings render as a flat 1-30 win-sorted ladder — `conference` is never populated for NBA so East/West never group; (2) search is not accent-insensitive ("Dembele"↛"Dembélé") + some star footballers 204 on career-stats from name-match misses; (3) winner not emphasised on finished cards, NBA/NFL league logos null, standings crests null; (4) a11y: form-label associations, `aria-live` on live scores, glass-over-field contrast, some <44px tap targets; (5) duplicate clubs/players across competitions; (6) standings DTO missing PCT/GB server-side.
+**UPDATE 2 — all of the above are now fixed (commits `5409a3d`–`2399c3e`, plus the V9 structural dedupe in `4956c89`):** NBA standings group by conference with derived crests; search is accent-insensitive (`name_normalized` column); winner is emphasised on finished cards and NBA/NFL league logos + standings crests are populated; the a11y items (form labels, `aria-live`, glass contrast, tap targets) are done; duplicate clubs/players are now fixed structurally (team↔league many-to-many, not a presentation-layer dedupe); standings DTO has server-side PCT/GB. Remaining open items are tracked in CLAUDE.md's "Still open / nice-to-have" section (career-stats 204s for some footballers, push notifications, more test coverage, historical-data tracking).
 
-The detailed concerns below predate this update but remain accurate.
+The detailed concerns below predate this update but remain accurate except where superseded above.
 
 ---
 
@@ -45,7 +45,7 @@ Listed as nice-to-have. No infrastructure (no FCM/APN, no service worker).
 
 ## Testing gaps
 
-**57 backend tests currently pass.** Coverage is heavily skewed toward auth, `MatchService`, `NbaApiService`, and `LeagueService`.
+**66 backend tests currently pass.** Coverage is heavily skewed toward auth, `MatchService`, `NbaApiService`, and `LeagueService`.
 
 | Component | Tests | Notes |
 |---|---|---|
@@ -119,12 +119,11 @@ The app is a thin orchestration layer over five external APIs. **None are fully 
 
 ---
 
-## Security concerns (before any public deployment)
+## Security concerns
 
-These are fine for `localhost` dev but must be tightened before going public:
+**UPDATE — the app is now publicly deployed (Vercel + Render + Neon) and the CORS item below is fixed (commit `5eefe79`):** `SecurityConfig`/`WebSocketConfig` now read `app.cors.allowed-origin-patterns` (default: localhost + `https://one-stop-sports*.vercel.app`, overridable via `APP_CORS_ALLOWED_ORIGIN_PATTERNS` on Render) instead of allowing `"*"`. The other items below (JWT placeholder secret, Swagger exposure, no rate limiting, no CAPTCHA/email verification, WS auth, JWT expiry/revocation) are still open and worth another pass now that the app has a real public audience:
 
-- **JWT placeholder secret in `application.yml`** looks real (`bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u` = "mysupersecretkeyformjmatchdayapplication"). Anyone with the public repo can forge JWTs against any local deployment that didn't override it via `application-local.yml`. Docker deployments correctly use `JWT_SECRET` env var.
-- **CORS fully open:** `setAllowedOriginPatterns(List.of("*"))` with `setAllowCredentials(true)`. With credentials + wildcard, a malicious site loaded in a logged-in user's browser can call our API with their JWT.
+- **JWT placeholder secret in `application.yml`** looks real (`bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u` = "mysupersecretkeyformjmatchdayapplication"). Anyone with the public repo can forge JWTs against any deployment that didn't override it. Docker/Render deployments correctly use a `JWT_SECRET` env var.
 - **Swagger UI publicly accessible.** Intentional for dev; in production it's a self-service inventory of every endpoint + auth requirements — useful to attackers.
 - **No rate limiting on `/api/auth/login`.** Brute-force friendly. No account lockout.
 - **No request-size limits, no CAPTCHA on register, no email verification.**
@@ -163,7 +162,7 @@ These are fine for `localhost` dev but must be tightened before going public:
 3. **Add `RestClient` timeout config** on `NbaApiService`, `NflApiService`, `ExternalApiService` — prevents a hung external from freezing the scheduler.
 4. **Test `GlobalExceptionHandler` + `PlayerService.resolvePhotoUrl`** — small, high-value coverage gaps.
 5. **Banner on football stats card** explaining the 2024-25 season cap — eliminates silent-incorrect-data risk.
-6. **Restrict CORS + Swagger to `dev` profile** — required before any public deployment.
+6. **Restrict Swagger to `dev` profile, rotate the JWT secret** — CORS is already locked down (`5eefe79`); Swagger exposure + the placeholder JWT secret are the remaining public-facing risks.
 7. **Tighten `DataLoader` idempotency** — switch from `count >=` to "all expected competitions present".
 8. **Set up Vitest on the frontend** — currently zero test safety net.
 
@@ -177,6 +176,6 @@ OneStopSports is a healthy mid-sized side-project. The codebase reads like a tea
 2. The API-Football season cap silently serving stale data
 3. The unfinished football photo capture
 4. Test coverage gaps in five out of seven services
-5. Security tightening required before any public deployment
+5. Remaining security tightening (Swagger exposure, JWT secret rotation, rate limiting) now that the app is publicly deployed
 
 The rest is well-flagged technical debt of the kind that's natural to accumulate when exploring a domain across multiple sports APIs.
