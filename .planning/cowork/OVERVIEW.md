@@ -183,6 +183,6 @@ JWT Bearer scheme is wired in — paste a token from `POST /api/auth/login` into
 - Football career stats: single season, capped at 2024 (api-sports.io free tier) — UI shows a "most recent available season" badge.
 - Match stats + lineups for football: stubbed `{}` (football-data.org free-tier limit).
 - No frontend tests (Vitest not configured); backend coverage gaps on `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`.
-- Production deploy IS set up and public: Vercel (frontend) + Render (backend) + Neon (Postgres), with `.github/workflows/keep-alive.yml` pinging Render every 10 min; single-origin Docker via `SpaForwardingConfig` still works as a fallback deploy mode. No CI pipeline yet.
+- Production deploy IS set up and public: Vercel (frontend) + Render (backend) + Neon (Postgres). Free-tier cold starts mitigated by an external UptimeRobot monitor (5-min ping on `/api/sports`) — the `.github/workflows/keep-alive.yml` was removed (GitHub throttled it too infrequently, 90s curl timed out). Single-origin Docker via `SpaForwardingConfig` still works as a fallback deploy mode. No CI pipeline yet.
 
 See `ROADMAP.md` (top section is the current post-QA state) for the full backlog.
