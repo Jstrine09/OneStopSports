@@ -1,6 +1,6 @@
 # OneStopSports — Claude Code Context
 
-> **Last refreshed:** reflects commit `8364dad` — the app is now **publicly deployed** (Vercel frontend + Render backend) with CORS/WS origins locked down to the real deploy domains. Render's free-tier cold starts are mitigated by an external UptimeRobot monitor (the in-repo GitHub keep-alive workflow was removed — see Infra (prod)). If you're picking this up in a new chat, this file + `.planning/cowork/` are the authoritative current-state context.
+> **Last refreshed:** reflects commit `b977ac6` — the app is now **publicly deployed** (Vercel frontend + Render backend) with CORS/WS origins locked down to the real deploy domains. Render's free-tier cold starts are mitigated by an external UptimeRobot monitor (the in-repo GitHub keep-alive workflow was removed — see Infra (prod)). If you're picking this up in a new chat, this file + `.planning/cowork/` are the authoritative current-state context.
 
 ## Project Overview
 **OneStopSports** is a full-stack, Fotmob-style multi-sport app covering **football (soccer), the NBA, and the NFL**. It surfaces live scores (pushed over WebSocket), league standings, match detail + box scores + event timelines, full team rosters, player profiles with **bio, career stats, and headshots**, and global search. Users can register and save favourite teams and players.
