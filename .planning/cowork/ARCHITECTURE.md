@@ -38,7 +38,7 @@
          ▼                                 ▼
 ┌────────────────────────┐  ┌─────────────────────────────────┐
 │ PostgreSQL "onestopsports" │ Redis 7 (matches cache + push) │
-│ Flyway V1..V7              │ Key matches::SimpleKey[] TTL30s│
+│ Flyway V1..V9               │ Key matches::SimpleKey[] TTL30s│
 └────────────────────────────┘                                │
         ▲                                                     │
         │ startup seeders + on-demand fetches                 │
@@ -53,10 +53,9 @@
 
 **Classic layered Spring Boot** — `controller → service → repository → DB` — extended with **two architectural choices that shape every multi-sport feature**:
 
-1. **A strategy-by-sport-slug routing layer inside the service tier.** Whenever a request could go to a different upstream depending on the sport, the service `switch`es on `league.getSport().getSlug()`. Same shape in three places:
-   - `MatchService.getMatchesByLeagueAndDate`
-   - `LeagueService.getStandings`
-   - `PlayerService.getPlayerCareerStats`
+1. **A strategy-by-sport-slug routing layer inside the service tier.** Whenever a request could go to a different upstream depending on the sport, the service `switch`es on a sport slug. Same shape in three places:
+   - `MatchService.getMatchesByLeagueAndDate` / `LeagueService.getStandings` — via `league.getSport().getSlug()`
+   - `PlayerService.getPlayerCareerStats` / `PlayerService.resolvePhotoUrl` / `TeamService.getRosterForSeason` — via `team.getSport().getSlug()` (a direct `Team.sport` link added in the V9 team↔league many-to-many refactor, since a team can now belong to several leagues, so a league hop would be ambiguous)
 
 2. **One Spring bean per external API.** Each upstream gets its own `@Service` with a `RestClient` instance, its own inner records mirroring the upstream JSON, and its own mapper methods. Never mix providers in one class.
 

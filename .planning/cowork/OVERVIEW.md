@@ -22,7 +22,7 @@ Users can browse leagues, view standings, see match fixtures and results for any
 | Backend framework | **Spring Boot 3.4.4** |
 | HTTP client | Spring 6 **`RestClient`** (synchronous; not WebFlux) |
 | Database | **PostgreSQL 16** |
-| Schema migrations | **Flyway** (seven migrations, `V1`–`V7`) |
+| Schema migrations | **Flyway** (nine migrations, `V1`–`V9`) |
 | ORM | **Hibernate** via Spring Data JPA; `ddl-auto: validate` |
 | Cache | **Redis 7** (single `matches` cache, 30s TTL) |
 | Realtime | **Spring WebSocket / STOMP**, topic `/topic/matches/live` |

@@ -52,16 +52,18 @@ Listed as nice-to-have. No infrastructure (no FCM/APN, no service worker).
 | `AuthService` | ✅ 6 | |
 | `AuthController` | ✅ 7 (`@WebMvcTest`) | Needs `@Import(SecurityConfig.class)` + `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class` |
 | `MatchService` | ✅ 13 | |
-| `NbaApiService` | ✅ 12 | Uses `@Mock(answer = Answers.RETURNS_DEEP_STUBS)` for fluent RestClient chains + package-private test constructor |
+| `NbaApiService` | ✅ 13 | Uses `@Mock(answer = Answers.RETURNS_DEEP_STUBS)` for fluent RestClient chains + package-private test constructor; covers per-conference standings grouping + crest derivation |
 | `LeagueService` | ✅ 9 | |
 | `PlayerService` (career-stats routing) | ✅ 9 (`PlayerServiceCareerStatsTest`) | Covers routing; does NOT cover `resolvePhotoUrl` or `toDto` |
-| `OneStopSportsApplicationTests` | ✅ 1 | Context-load smoke; requires `@MockBean RedisConnectionFactory` |
+| `TeamService` | ✅ 3 | Covers the team↔league M:N `toDto` (primary `leagueId` + all `leagueIds`) and the join-table-backed `getTeamsByLeague` |
+| `TextNormalizer` | ✅ 5 (`TextNormalizerTest`) | Accent-folding used by accent-insensitive search |
+| `OneStopSportsApplicationTests` | ✅ 1 | Context-load smoke; requires `@MockBean RedisConnectionFactory`; also exercises the `team_league` join + `sport_id` mapping under H2 `create-drop` |
 | `NflApiService` | ❌ 0 | 650 LOC, complex 3-level standings parsing — uncovered |
 | `ExternalApiService` | ❌ 0 | 456 LOC, biggest single integration point — uncovered |
 | `ApiFootballService` | ❌ 0 | Diacritic stripping + multi-strategy name matching — worth covering |
 | `BallDontLieService` | ❌ 0 | First-name search + lastname filter has multiple branches |
 | `UserService` | ❌ 0 | Favourites CRUD — simple but uncovered |
-| `TeamService`, `SportService`, `PlayerService.toDto` | ❌ 0 | Including `resolvePhotoUrl`'s three-layer logic |
+| `SportService`, `PlayerService.toDto` | ❌ 0 | Including `resolvePhotoUrl`'s three-layer logic |
 | `JwtUtil`, `JwtAuthFilter` | ❌ 0 | Tested transitively via `AuthControllerTest` |
 | `GlobalExceptionHandler` | ❌ 0 | The handler-ordering gotcha (ResponseStatusException must come before catch-all) is exactly the kind of regression a focused test would catch |
 | `RedisConfig`, `WebSocketConfig` ObjectMapper override | ❌ 0 | The `LocalDateTime` serialisation fix has no regression test |
