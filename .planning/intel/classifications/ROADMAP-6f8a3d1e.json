@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/james/Projects/OneStopSports/.planning/cowork/ROADMAP.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "OneStopSports — Roadmap & Known Concerns",
+  "summary": "Catalog of incomplete features, stubs, external-API risks, testing/security/operational concerns, and suggested priority follow-ups for the OneStopSports app.",
+  "scope": ["roadmap", "known concerns", "testing gaps", "external API risks", "security concerns", "operational concerns", "data model concerns", "priority follow-ups"],
+  "cross_refs": ["CLAUDE.md", "PRODUCT.md", "README.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

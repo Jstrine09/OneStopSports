@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/james/Projects/OneStopSports/.planning/cowork/DECISIONS.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "OneStopSports — Decisions Log",
+  "summary": "A why-we-picked-X-over-Y record of settled architectural and technical decisions across the OneStopSports codebase, with rationale and tradeoffs.",
+  "scope": ["ESPN API", "API-Football", "balldontlie", "player headshots", "external_id lookup", "accent normalization", "multi-sport routing", "UserAccount entity", "secrets management", "Java records DTOs", "Lombok entities", "PasswordConfig", "RestClient", "ObjectMapper", "MatchDto timezone", "live status strings", "NFL division mapping", "React Query staleTime", "Tailwind class strings", "inline comments", "Spring Security matcher order", "exception handlers", "accessibility", "stale-season badge"],
+  "cross_refs": ["ROADMAP.md", "CONVENTIONS.md"],
+  "locked": false,
+  "precedence": 0,
+  "notes": "Manifest-declared ADR; treated as authoritative. Content is a multi-decision log (not a single Accepted-status ADR) so no per-decision Accepted marker exists; locked left false per rule (locked true only for Accepted-status ADRs)."
+}

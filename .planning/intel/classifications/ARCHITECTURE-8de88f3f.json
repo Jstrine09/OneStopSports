@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/james/Projects/OneStopSports/.planning/cowork/ARCHITECTURE.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "OneStopSports — Architecture",
+  "summary": "Internal architecture of OneStopSports: layered Spring Boot structure, multi-sport sport-slug routing, REST/WebSocket flows, caching, auth, and load-bearing constraints.",
+  "scope": ["Spring Boot service layers", "multi-sport routing", "external-API adapters", "WebSocket live-score push", "Redis caching", "JWT authentication", "GlobalExceptionHandler", "JPA persistence/OSIV"],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

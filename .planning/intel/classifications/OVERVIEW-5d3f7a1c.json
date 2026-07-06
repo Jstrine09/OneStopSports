@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/james/Projects/OneStopSports/.planning/cowork/OVERVIEW.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "OneStopSports — Overview",
+  "summary": "Orientation one-pager describing what OneStopSports does, its stack, package layout, REST surface, and how to run it locally.",
+  "scope": ["OneStopSports app", "Spring Boot backend", "React frontend", "REST API surface", "WebSocket live scores", "local dev setup", "sport-field design system"],
+  "cross_refs": ["ARCHITECTURE.md", "INTEGRATIONS.md", "CONVENTIONS.md", "ROADMAP.md", "DECISIONS.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

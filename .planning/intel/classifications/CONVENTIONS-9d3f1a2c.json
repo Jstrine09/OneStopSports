@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/james/Projects/OneStopSports/.planning/cowork/CONVENTIONS.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "OneStopSports — Conventions",
+  "summary": "Coding conventions and patterns followed across the OneStopSports codebase for both the Java/Spring Boot backend and React/TypeScript frontend.",
+  "scope": ["backend Java conventions", "package structure", "comment style", "DTO records", "frontend React/TypeScript conventions"],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/james/Projects/OneStopSports/.planning/cowork/HISTORICAL_DATA_RESEARCH.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "OneStopSports — Historical Data Research",
+  "summary": "Research assessment ranking API options for adding historical matchup and stats tracking across football, NBA, and NFL, grounded in the current stack.",
+  "scope": ["historical data", "API-Football", "football-data.org", "balldontlie", "ESPN API", "MySportsFeeds", "TheStatsAPI", "head-to-head records", "box scores", "player season stats", "match_result table", "player_season_stats table", "team_h2h_cache table"],
+  "cross_refs": ["INTEGRATIONS.md", "ROADMAP.md", "ARCHITECTURE.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

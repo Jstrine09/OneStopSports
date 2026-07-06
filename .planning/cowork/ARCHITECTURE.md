@@ -1,6 +1,6 @@
 # OneStopSports — Architecture
 
-> **What this doc is:** How OneStopSports is organised internally — the layered structure, the multi-sport routing pattern, how requests flow, how live scores get pushed, how the cache + WebSocket work together, and the few load-bearing constraints you must respect. Read after `OVERVIEW.md`.
+> **What this doc is:** How OneStopSports is organised internally — the layered structure, the multi-sport routing pattern, how requests flow, how live scores get pushed, how the cache + WebSocket work together, and the few load-bearing constraints you must respect. Read this once you're oriented on what the app does and its high-level shape.
 
 ---
 

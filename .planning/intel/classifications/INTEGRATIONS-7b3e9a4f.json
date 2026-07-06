@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/james/Projects/OneStopSports/.planning/cowork/INTEGRATIONS.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "OneStopSports — External Integrations",
+  "summary": "Technical reference for the five external sports APIs the app integrates, covering auth, free-tier limits, URL patterns, endpoints, quirks, and load-bearing constants.",
+  "scope": ["football-data.org", "ESPN NBA API", "ESPN NFL API", "balldontlie.io", "api-sports.io", "RestClient services", "CDN image URLs", "time zone handling", "JWT auth"],
+  "cross_refs": ["ROADMAP.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

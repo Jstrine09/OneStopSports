@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/james/Projects/OneStopSports/.planning/cowork/INSTRUCTIONS.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "OneStopSports — Custom instructions for Claude",
+  "summary": "Coding conventions, gotchas, external-API limits, and tooling guidance for contributing to the OneStopSports Spring Boot + React project.",
+  "scope": ["coding style", "entities", "DTOs", "SecurityConfig", "GlobalExceptionHandler", "external APIs", "frontend conventions", "tooling", "project memory"],
+  "cross_refs": ["CONVENTIONS.md", "INTEGRATIONS.md", "MEMORY.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/james/Projects/OneStopSports/.planning/cowork/PROJECT.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "OneStopSports — Project description",
+  "summary": "Product overview of OneStopSports, a Fotmob-style multi-sport web app (football, NBA, NFL) covering features, stack, and current deployed state.",
+  "scope": ["OneStopSports app", "football", "NBA", "NFL", "live scores", "standings", "player profiles", "favourites", "WebSocket push", "authentication", "production deploy"],
+  "cross_refs": ["CONVENTIONS.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}
