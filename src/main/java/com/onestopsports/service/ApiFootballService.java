@@ -60,6 +60,9 @@ public class ApiFootballService {
 
     private final RestClient restClient;
 
+    // @Autowired is required here because we also have a package-private test constructor below —
+    // Spring needs to know which constructor to use for production dependency injection.
+    @org.springframework.beans.factory.annotation.Autowired
     public ApiFootballService(
             @Value("${external-api.api-football.base-url}") String baseUrl,
             @Value("${external-api.api-football.api-key}") String apiKey) {
@@ -69,6 +72,13 @@ public class ApiFootballService {
                 .baseUrl(baseUrl)
                 .defaultHeader("x-apisports-key", apiKey)
                 .build();
+    }
+
+    // Package-private test constructor — accepts a pre-built RestClient instance.
+    // Used by ApiFootballServiceTest so we can inject a mock client without starting a real HTTP server.
+    // Never called by Spring — only by unit tests in the same package.
+    ApiFootballService(RestClient restClient) {
+        this.restClient = restClient;
     }
 
     /**

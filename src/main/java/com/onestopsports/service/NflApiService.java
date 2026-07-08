@@ -84,7 +84,10 @@ public class NflApiService {
             Map.entry("SF",  "NFC West"),  Map.entry("SEA", "NFC West")
     );
 
-    // Base URLs injected from application.yml — allows overriding in tests
+    // Base URLs injected from application.yml — allows overriding in tests.
+    // @Autowired is required here because we also have a package-private test constructor below —
+    // Spring needs to know which constructor to use for production dependency injection.
+    @org.springframework.beans.factory.annotation.Autowired
     public NflApiService(
             @Value("${external-api.nfl.base-url}") String baseUrl,
             @Value("${external-api.nfl.standings-url:https://site.api.espn.com/apis/v2/sports/football/nfl}") String standingsUrl,
@@ -101,6 +104,15 @@ public class NflApiService {
         this.statsClient = RestClient.builder()
                 .baseUrl(statsUrl)
                 .build();
+    }
+
+    // Package-private test constructor — accepts pre-built RestClient instances.
+    // Used by NflApiServiceTest so we can inject mock clients without starting a real HTTP server.
+    // Never called by Spring — only by unit tests in the same package.
+    NflApiService(RestClient restClient, RestClient standingsClient, RestClient statsClient) {
+        this.restClient      = restClient;
+        this.standingsClient = standingsClient;
+        this.statsClient     = statsClient;
     }
 
     // ── API Response Records ──────────────────────────────────────────────────

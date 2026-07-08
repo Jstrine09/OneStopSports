@@ -41,7 +41,10 @@ public class ExternalApiService {
     // Used to convert football-data.org competition IDs into our internal DB league IDs
     private final LeagueRepository leagueRepository;
 
-    // Values are injected from application-local.yml (the file that's gitignored for security)
+    // Values are injected from application-local.yml (the file that's gitignored for security).
+    // @Autowired is required here because we also have a package-private test constructor below —
+    // Spring needs to know which constructor to use for production dependency injection.
+    @org.springframework.beans.factory.annotation.Autowired
     public ExternalApiService(
             @Value("${external-api.football-data.base-url}") String baseUrl,
             @Value("${external-api.football-data.api-key}") String apiKey,
@@ -53,6 +56,14 @@ public class ExternalApiService {
                 .baseUrl(baseUrl)
                 .defaultHeader("X-Auth-Token", apiKey)
                 .build();
+        this.leagueRepository = leagueRepository;
+    }
+
+    // Package-private test constructor — accepts a pre-built RestClient instance.
+    // Used by ExternalApiServiceTest so we can inject a mock client without starting a real HTTP server.
+    // Never called by Spring — only by unit tests in the same package.
+    ExternalApiService(RestClient restClient, LeagueRepository leagueRepository) {
+        this.restClient       = restClient;
         this.leagueRepository = leagueRepository;
     }
 
