@@ -151,3 +151,11 @@ None - no external service configuration required.
 ---
 *Phase: 01-backend-service-test-coverage*
 *Completed: 2026-07-08*
+
+## Self-Check: PASSED
+
+- FOUND: src/test/java/com/onestopsports/service/NflApiServiceTest.java
+- FOUND: src/test/java/com/onestopsports/service/ExternalApiServiceTest.java
+- FOUND: .planning/phases/01-backend-service-test-coverage/01-02-SUMMARY.md
+- FOUND commit: fd2c5d4 (test(01-02): add NflApiServiceTest for scoreboard/standings/career-stats)
+- FOUND commit: a8740fc (test(01-02): add ExternalApiServiceTest for standings and box-score soft-fail)
