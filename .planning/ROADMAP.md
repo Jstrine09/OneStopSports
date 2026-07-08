@@ -17,7 +17,7 @@ OneStopSports is an existing, publicly-deployed multi-sport app (football + NBA 
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Backend Service Test Coverage** - Unit-test the currently-untested backend services with mocked providers
+- [x] **Phase 1: Backend Service Test Coverage** - Unit-test the currently-untested backend services with mocked providers (completed 2026-07-08)
 - [ ] **Phase 2: Postgres Migration Integration Tests** - Verify the V8 + V9 Flyway migrations against real Postgres
 - [ ] **Phase 3: Frontend Test Foundation** - Stand up Vitest and cover high-value frontend units
 - [ ] **Phase 4: Career-Stats Name-Match Hardening** - Fix football career-stats 204s from api-sports.io name-match misses
@@ -36,7 +36,7 @@ OneStopSports is an existing, publicly-deployed multi-sport app (football + NBA 
   3. PlayerService `resolvePhotoUrl` (persisted → ESPN-CDN-derived → null), `toDto`, and search are unit-tested.
   4. The full suite still passes (`mvn test`), the pre-existing 66 tests are not regressed, and new tests mock providers via RestClient deep-stubs / package-private test constructors following the existing NbaApiServiceTest pattern.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 **Wave 1**
 
 - [x] 01-01-PLAN.md — Add package-private test constructors to NflApiService/ExternalApiService/ApiFootballService/BallDontLieService (+ widen BallDontLie records) [Wave 1]
@@ -46,7 +46,7 @@ OneStopSports is an existing, publicly-deployed multi-sport app (football + NBA 
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 01-02-PLAN.md — NflApiServiceTest + ExternalApiServiceTest (mapping + soft-fail) [Wave 2]
-- [ ] 01-03-PLAN.md — ApiFootballServiceTest + BallDontLieServiceTest (mapping + soft-fail) [Wave 2]
+- [x] 01-03-PLAN.md — ApiFootballServiceTest + BallDontLieServiceTest (mapping + soft-fail) [Wave 2]
 
 **Cross-cutting constraints:**
 
@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Backend Service Test Coverage | 4/5 | In Progress|  |
+| 1. Backend Service Test Coverage | 5/5 | Complete   | 2026-07-08 |
 | 2. Postgres Migration Integration Tests | 0/TBD | Not started | - |
 | 3. Frontend Test Foundation | 0/TBD | Not started | - |
 | 4. Career-Stats Name-Match Hardening | 0/TBD | Not started | - |
