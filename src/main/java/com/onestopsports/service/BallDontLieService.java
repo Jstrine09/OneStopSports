@@ -28,6 +28,9 @@ public class BallDontLieService {
 
     // Spring wires these two values from application.yml / application-local.yml.
     // The API key is gitignored — stored only in application-local.yml.
+    // @Autowired is required here because we also have a package-private test constructor below —
+    // Spring needs to know which constructor to use for production dependency injection.
+    @org.springframework.beans.factory.annotation.Autowired
     public BallDontLieService(
             @Value("${external-api.balldontlie.base-url:https://api.balldontlie.io/v1}") String baseUrl,
             @Value("${external-api.balldontlie.api-key:}") String apiKey) {
@@ -38,6 +41,13 @@ public class BallDontLieService {
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", apiKey)
                 .build();
+    }
+
+    // Package-private test constructor — accepts a pre-built RestClient instance.
+    // Used by BallDontLieServiceTest so we can inject a mock client without starting a real HTTP server.
+    // Never called by Spring — only by unit tests in the same package.
+    BallDontLieService(RestClient restClient) {
+        this.restClient = restClient;
     }
 
     // Searches balldontlie for an NBA player matching the given full name.
@@ -113,16 +123,20 @@ public class BallDontLieService {
     }
 
     // ── Inner records that mirror balldontlie's JSON structure ────────────────
-    // These are private — no other class needs to know about the external API shape.
+    // These are package-private (not public) so same-package tests (BallDontLieServiceTest)
+    // can build fixture instances directly. Java 21 makes a *private* record's canonical
+    // constructor private too, which would block both same-package test construction and
+    // Jackson deserialization — so package-private is the correct visibility here, same as
+    // NbaApiService's response records.
 
     // Top-level response wrapper: { "data": [...], "meta": {...} }
-    private record BdlPlayersResponse(
+    record BdlPlayersResponse(
             List<BdlPlayer> data
     ) {}
 
     // One player entry from balldontlie.
     // Field names use @JsonProperty to map from balldontlie's snake_case JSON keys.
-    private record BdlPlayer(
+    record BdlPlayer(
             Long id,
 
             @JsonProperty("first_name")
