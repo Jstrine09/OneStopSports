@@ -36,10 +36,10 @@ OneStopSports is an existing, publicly-deployed multi-sport app (football + NBA 
   3. PlayerService `resolvePhotoUrl` (persisted → ESPN-CDN-derived → null), `toDto`, and search are unit-tested.
   4. The full suite still passes (`mvn test`), the pre-existing 66 tests are not regressed, and new tests mock providers via RestClient deep-stubs / package-private test constructors following the existing NbaApiServiceTest pattern.
 
-**Plans**: 5 plans (2 waves)
+**Plans**: 1/5 plans executed
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Add package-private test constructors to NflApiService/ExternalApiService/ApiFootballService/BallDontLieService (+ widen BallDontLie records) [Wave 1]
+- [x] 01-01-PLAN.md — Add package-private test constructors to NflApiService/ExternalApiService/ApiFootballService/BallDontLieService (+ widen BallDontLie records) [Wave 1]
 - [ ] 01-04-PLAN.md — UserServiceTest + SportServiceTest (CRUD guards + mapping) [Wave 1]
 - [ ] 01-05-PLAN.md — PlayerServiceTest (photo/toDto/search) + GlobalExceptionHandlerTest (dispatch order) [Wave 1]
 
@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Backend Service Test Coverage | 0/5 | Not started | - |
+| 1. Backend Service Test Coverage | 1/5 | In Progress|  |
 | 2. Postgres Migration Integration Tests | 0/TBD | Not started | - |
 | 3. Frontend Test Foundation | 0/TBD | Not started | - |
 | 4. Career-Stats Name-Match Hardening | 0/TBD | Not started | - |

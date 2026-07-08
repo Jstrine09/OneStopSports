@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
+current_phase: 01
 current_phase_name: Backend Service Test Coverage
 status: executing
-stopped_at: Wrote PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md from ingested-doc intel (reverse-engineered bootstrap)
-last_updated: "2026-07-08T22:27:39.170Z"
-last_activity: 2026-07-06
-last_activity_desc: Reverse-engineered GSD scaffolding from ingested docs (existing deployed app; Milestone 1 = Harden & Test)
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-07-08T22:48:59.173Z"
+last_activity: 2026-07-08
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 5
+  completed_plans: 1
   percent: 0
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-06)
 
 **Core value:** A user never needs to open a separate app per sport — football (soccer), NBA, and NFL in one place.
-**Current focus:** Phase 1 — Backend Service Test Coverage (milestone: v1 Harden & Test)
+**Current focus:** Phase 01 — Backend Service Test Coverage
 
 ## Current Position
 
-Phase: 1 of 4 (Backend Service Test Coverage)
-Plan: 0 of TBD in current phase
+Phase: 01 (Backend Service Test Coverage) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-06 — Reverse-engineered GSD scaffolding from ingested docs (existing deployed app; Milestone 1 = Harden & Test)
+Last activity: 2026-07-08 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01-backend-service-test-coverage P01 | 20 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,7 @@ Decisions are logged in PROJECT.md Key Decisions table (23 ADR decisions recorde
 - Flyway is OFF in H2 tests → V8/V9 need a real-Postgres integration harness (this is exactly HARD-02).
 - GlobalExceptionHandler: `ResponseStatusException` handler MUST precede the `Exception` catch-all (assert this in tests).
 - Mandatory junior-developer inline comments on every new Java file (teaching project — hard rule, not style).
+- [Phase 01-01]: Followed the plan exactly: replicated NbaApiService's existing test-constructor + @Autowired shape onto the four remaining external-API services, with no behavior changes.
 
 ### Pending Todos
 
@@ -89,6 +91,6 @@ Items acknowledged and carried forward (backlog — not scheduled into Milestone
 
 ## Session Continuity
 
-Last session: 2026-07-06
-Stopped at: Wrote PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md from ingested-doc intel (reverse-engineered bootstrap)
+Last session: 2026-07-08T22:48:59.169Z
+Stopped at: Completed 01-01-PLAN.md
 Resume file: None
