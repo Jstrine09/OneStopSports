@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: Backend Service Test Coverage
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-07-08T22:48:59.173Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-07-08T22:56:02.103Z"
 last_activity: 2026-07-08
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 ## Current Position
 
 Phase: 01 (Backend Service Test Coverage) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-08 — Phase 01 execution started
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01-backend-service-test-coverage P01 | 20 | 2 tasks | 4 files |
+| Phase 01 P04 | 15 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,7 @@ Decisions are logged in PROJECT.md Key Decisions table (23 ADR decisions recorde
 - GlobalExceptionHandler: `ResponseStatusException` handler MUST precede the `Exception` catch-all (assert this in tests).
 - Mandatory junior-developer inline comments on every new Java file (teaching project — hard rule, not style).
 - [Phase 01-01]: Followed the plan exactly: replicated NbaApiService's existing test-constructor + @Autowired shape onto the four remaining external-API services, with no behavior changes.
+- [Phase 01-04]: Followed the plan exactly: both UserServiceTest and SportServiceTest used the plain @InjectMocks/@Mock convention with no test constructor, confirming both services' constructors already accept pure Spring-bean types.
 
 ### Pending Todos
 
@@ -91,6 +93,6 @@ Items acknowledged and carried forward (backlog — not scheduled into Milestone
 
 ## Session Continuity
 
-Last session: 2026-07-08T22:48:59.169Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-07-08T22:56:02.099Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
