@@ -6,14 +6,14 @@ current_phase: 01
 current_phase_name: Backend Service Test Coverage
 status: executing
 stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-07-08T23:02:32.907Z"
+last_updated: "2026-07-08T23:19:04.222Z"
 last_activity: 2026-07-08
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 ## Current Position
 
 Phase: 01 (Backend Service Test Coverage) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-08 — Phase 01 execution started
 
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-backend-service-test-coverage P01 | 20 | 2 tasks | 4 files |
 | Phase 01 P04 | 15 | 2 tasks | 2 files |
 | Phase 01 P05 | 15 | 2 tasks | 2 files |
+| Phase 01 P02 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,7 @@ Decisions are logged in PROJECT.md Key Decisions table (23 ADR decisions recorde
 - [Phase 01-01]: Followed the plan exactly: replicated NbaApiService's existing test-constructor + @Autowired shape onto the four remaining external-API services, with no behavior changes.
 - [Phase 01-04]: Followed the plan exactly: both UserServiceTest and SportServiceTest used the plain @InjectMocks/@Mock convention with no test constructor, confirming both services' constructors already accept pure Spring-bean types.
 - [Phase 01-05]: Followed the plan exactly — new PlayerServiceTest covers resolvePhotoUrl/toDto/searchPlayers through the public getPlayerById entry point (no reflection), and GlobalExceptionHandlerTest proves the ResponseStatusException-before-catch-all dispatch via real MockMvc standaloneSetup rather than direct method calls.
+- [Phase 01-02]: Followed the plan exactly: mirrored NbaApiServiceTest's fixture-builder + RETURNS_DEEP_STUBS convention for NflApiServiceTest (3 RestClients) and ExternalApiServiceTest (RestClient + LeagueRepository), matching the .uri(String) vs .uri(String, Object...) matcher form to each production call site.
 
 ### Pending Todos
 
@@ -95,6 +97,6 @@ Items acknowledged and carried forward (backlog — not scheduled into Milestone
 
 ## Session Continuity
 
-Last session: 2026-07-08T23:02:18.502Z
+Last session: 2026-07-08T23:18:17.431Z
 Stopped at: Completed 01-05-PLAN.md
 Resume file: None
