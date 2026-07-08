@@ -37,12 +37,12 @@ A user never needs to open a separate app per sport — football (soccer), the N
 - ✓ **Sport over chrome** — data foregrounded, grouped density (REQ-sport-over-chrome)
 - ✓ **WCAG AA accessibility** — contrast + `prefers-reduced-motion` baseline (REQ-accessibility-wcag-aa)
 - ✓ **Production deploy** — Vercel + Render + Neon, CORS/WS locked, installable PWA (REQ-production-deploy)
+- ✓ **HARD-01** — Backend service test coverage: provider-mocked unit tests for NflApiService, ExternalApiService, ApiFootballService, BallDontLieService, UserService, SportService, PlayerService (`resolvePhotoUrl`/`toDto`/search) + GlobalExceptionHandler dispatch order (Validated in Phase 1; `mvn test` 66→120 tests, all green)
 
 ### Active
 
 <!-- Milestone 1: Harden & Test. De-risk the live app. Building toward these. -->
 
-- [ ] **HARD-01**: Close backend service test-coverage gaps (NflApiService, ExternalApiService, ApiFootballService, BallDontLieService, UserService, SportService, PlayerService search + `resolvePhotoUrl`/`toDto`, GlobalExceptionHandler)
 - [ ] **HARD-02**: Add a real Postgres integration test verifying the V8 (`name_normalized`) and V9 (team↔league M:N data merge) Flyway migrations (currently unverified — Flyway is off in H2 tests)
 - [ ] **HARD-03**: Establish frontend test coverage (currently zero — no Vitest)
 - [ ] **HARD-04**: Fix career-stats 204s for some footballers (api-sports.io name-match misses)
@@ -120,4 +120,4 @@ A user never needs to open a separate app per sport — football (soccer), the N
 | **Football stale-season badge** (DEC-football-stale-season-badge) | "Showing the {season} season — most recent available on the current data plan" note; resolves the 2024-cap honesty gap | ✓ Good (post-QA) |
 
 ---
-*Last updated: 2026-07-06 after reverse-engineered bootstrap from ingested docs (existing deployed app; Milestone 1 = Harden & Test).*
+*Last updated: 2026-07-08 — Phase 1 (Backend Service Test Coverage) complete: HARD-01 validated, backend suite grown 66→120 tests (all green). Next: Phase 2 (Postgres migration integration tests, HARD-02).*
