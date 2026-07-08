@@ -11,7 +11,7 @@ De-risk the live app. These are the v1 requirements the current roadmap covers.
 
 ### Hardening & Test Coverage
 
-- [ ] **HARD-01**: Close backend service test-coverage gaps — add unit tests for the currently-untested services: NflApiService, ExternalApiService, ApiFootballService, BallDontLieService, UserService, SportService, PlayerService search + `resolvePhotoUrl` + `toDto`, and GlobalExceptionHandler. Tests must mock external providers (RestClient deep-stubs / package-private test constructors), never call live APIs.
+- [x] **HARD-01**: Close backend service test-coverage gaps — add unit tests for the currently-untested services: NflApiService, ExternalApiService, ApiFootballService, BallDontLieService, UserService, SportService, PlayerService search + `resolvePhotoUrl` + `toDto`, and GlobalExceptionHandler. Tests must mock external providers (RestClient deep-stubs / package-private test constructors), never call live APIs.
 - [ ] **HARD-02**: Add a real-Postgres integration test that verifies the V8 (`name_normalized` backfill + indexes) and V9 (team↔league many-to-many data merge: duplicate-club/player merge, favourite/link re-pointing, `team.league_id` drop) Flyway migrations produce the expected schema and data. These migrations currently run only against real Postgres (Flyway is off in H2 tests) and are unverified by any integration test.
 - [ ] **HARD-03**: Establish frontend test coverage — stand up Vitest (currently zero frontend tests) and cover high-value units: the axios client Bearer interceptor, `useLiveScores` STOMP → `setQueryData` behaviour, `getMatchState`/status mapping, and `formatKickoff` timezone handling.
 - [ ] **HARD-04**: Fix career-stats 204s for some footballers — resolve the api-sports.io name-match misses (accent / first-name / lastname edge cases in `ApiFootballService.searchPlayerId`) so more football players return real career stats instead of an empty (204) card. Includes a regression test for the previously-missing names.
@@ -70,7 +70,7 @@ Milestone 1 (Harden & Test) requirement → phase mapping. Shipped product requi
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HARD-01 | Phase 1 | Pending |
+| HARD-01 | Phase 1 | Complete |
 | HARD-02 | Phase 2 | Pending |
 | HARD-03 | Phase 3 | Pending |
 | HARD-04 | Phase 4 | Pending |
@@ -90,6 +90,7 @@ Milestone 1 (Harden & Test) requirement → phase mapping. Shipped product requi
 | REQ-production-deploy | — (shipped) | Shipped |
 
 **Coverage:**
+
 - Milestone 1 (active) requirements: 4 total (HARD-01…HARD-04)
 - Mapped to phases: 4
 - Unmapped: 0 ✓
