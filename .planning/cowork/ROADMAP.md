@@ -58,24 +58,19 @@ Listed as nice-to-have. No infrastructure (no FCM/APN, no service worker).
 | `TeamService` | ✅ 3 | Covers the team↔league M:N `toDto` (primary `leagueId` + all `leagueIds`) and the join-table-backed `getTeamsByLeague` |
 | `TextNormalizer` | ✅ 5 (`TextNormalizerTest`) | Accent-folding used by accent-insensitive search |
 | `OneStopSportsApplicationTests` | ✅ 1 | Context-load smoke; requires `@MockBean RedisConnectionFactory`; also exercises the `team_league` join + `sport_id` mapping under H2 `create-drop` |
-| `NflApiService` | ❌ 0 | 650 LOC, complex 3-level standings parsing — uncovered |
-| `ExternalApiService` | ❌ 0 | 456 LOC, biggest single integration point — uncovered |
-| `ApiFootballService` | ❌ 0 | Diacritic stripping + multi-strategy name matching — worth covering |
-| `BallDontLieService` | ❌ 0 | First-name search + lastname filter has multiple branches |
-| `UserService` | ❌ 0 | Favourites CRUD — simple but uncovered |
-| `SportService`, `PlayerService.toDto` | ❌ 0 | Including `resolvePhotoUrl`'s three-layer logic |
+| `NflApiService` | ✅ 6 (`NflApiServiceTest`) | Phase 1 (01-02): scoreboard/standings/career-stats mapping + soft-fail, `RETURNS_DEEP_STUBS` across 3 RestClients |
+| `ExternalApiService` | ✅ 5 (`ExternalApiServiceTest`) | Phase 1 (01-02): standings + box-score mapping and soft-fail |
+| `ApiFootballService` | ✅ 7 (`ApiFootballServiceTest`) | Phase 1 (01-03): happy-path + soft-fail, diacritic/lambda-URI matching covered |
+| `BallDontLieService` | ✅ 5 (`BallDontLieServiceTest`) | Phase 1 (01-03): happy-path + soft-fail |
+| `UserService` | ✅ 11 (`UserServiceTest`) | Phase 1 (01-04): favourites CRUD guards |
+| `SportService` | ✅ 4 (`SportServiceTest`) | Phase 1 (01-04): listing + slug lookup |
+| `PlayerService.toDto`/`resolvePhotoUrl`/search | ✅ 8 (`PlayerServiceTest`) | Phase 1 (01-05): exercised through the public `getPlayerById` entry point, `resolvePhotoUrl`'s three-layer logic covered |
 | `JwtUtil`, `JwtAuthFilter` | ❌ 0 | Tested transitively via `AuthControllerTest` |
-| `GlobalExceptionHandler` | ❌ 0 | The handler-ordering gotcha (ResponseStatusException must come before catch-all) is exactly the kind of regression a focused test would catch |
+| `GlobalExceptionHandler` | ✅ 8 (`GlobalExceptionHandlerTest`) | Phase 1 (01-05): proves the `ResponseStatusException`-before-catch-all dispatch order via real MockMvc `standaloneSetup` |
 | `RedisConfig`, `WebSocketConfig` ObjectMapper override | ❌ 0 | The `LocalDateTime` serialisation fix has no regression test |
-| Frontend | ❌ 0 | No Vitest setup; TypeScript is the only static check |
+| Frontend | ❌ 0 | No Vitest setup; TypeScript is the only static check — tracked as HARD-03/Phase 3 in `.planning/` |
 
-**Highest-value tests to write next, ranked:**
-
-1. **`GlobalExceptionHandler`** — small, deterministic, prevents a known regression class (handler-ordering bug)
-2. **`PlayerService.resolvePhotoUrl`** — three branches, easy to assert, central to user-visible photo experience
-3. **`ApiFootballService.searchPlayerId`** — multiple match strategies + diacritic handling — the most likely silent-failure surface
-4. **`MatchService.refreshLiveMatchCache` snapshot-diff detection** — currently uncovered, controls every WebSocket push
-5. **`NflApiService` standings parsing** — 3-level nesting (Conference → Division → Group) is brittle
+All five services and both gaps flagged in the original ranked list below were closed in Phase 1 of the `.planning/` "v1 Harden & Test" milestone (2026-07-08, `mvn test` 66→120 tests across 9→16 classes). Remaining gaps: `JwtUtil`/`JwtAuthFilter` direct unit tests, `RedisConfig`/`WebSocketConfig` ObjectMapper regression test, and the frontend test suite (HARD-03/Phase 3, not yet started).
 
 ---
 
@@ -162,7 +157,7 @@ The app is a thin orchestration layer over five external APIs. **None are fully 
 1. **Wire football player photo capture** in `PlayerService.fetchFootballStats` — small change, finishes a half-shipped feature.
 2. **Add server-side `@Cacheable` on `ApiFootballService.fetchPlayerStats`** (1h TTL) — biggest win for the 100/day budget.
 3. **Add `RestClient` timeout config** on `NbaApiService`, `NflApiService`, `ExternalApiService` — prevents a hung external from freezing the scheduler.
-4. **Test `GlobalExceptionHandler` + `PlayerService.resolvePhotoUrl`** — small, high-value coverage gaps.
+4. ~~Test `GlobalExceptionHandler` + `PlayerService.resolvePhotoUrl`~~ — done (Phase 1, `GlobalExceptionHandlerTest` + `PlayerServiceTest`).
 5. **Banner on football stats card** explaining the 2024-25 season cap — eliminates silent-incorrect-data risk.
 6. **Restrict Swagger to `dev` profile, rotate the JWT secret** — CORS is already locked down (`5eefe79`); Swagger exposure + the placeholder JWT secret are the remaining public-facing risks.
 7. **Tighten `DataLoader` idempotency** — switch from `count >=` to "all expected competitions present".
@@ -177,7 +172,7 @@ OneStopSports is a healthy mid-sized side-project. The codebase reads like a tea
 1. External API fragility — five dependencies, three undocumented, three rate-limited
 2. The API-Football season cap silently serving stale data
 3. The unfinished football photo capture
-4. Test coverage gaps in five out of seven services
+4. ~~Test coverage gaps in five out of seven services~~ — closed in Phase 1 of `.planning/` "v1 Harden & Test" (2026-07-08); remaining gap is the frontend (zero Vitest tests, HARD-03/Phase 3)
 5. Remaining security tightening (Swagger exposure, JWT secret rotation, rate limiting) now that the app is publicly deployed
 
 The rest is well-flagged technical debt of the kind that's natural to accumulate when exploring a domain across multiple sports APIs.

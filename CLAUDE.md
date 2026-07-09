@@ -1,6 +1,6 @@
 # OneStopSports — Claude Code Context
 
-> **Last refreshed:** reflects commit `6714a50` — the app is now **publicly deployed** (Vercel frontend + Render backend) with CORS/WS origins locked down to the real deploy domains. Render's free-tier cold starts are mitigated by an external UptimeRobot monitor (the in-repo GitHub keep-alive workflow was removed — see Infra (prod)). No code has changed since `4445393`; all context files remain accurate (verified against V1–V9 migrations, 9 test classes/66 tests). `6714a50` ingested 10 planning docs into a new `.planning/` GSD setup (`PROJECT.md`, `ROADMAP.md`, `REQUIREMENTS.md`, `STATE.md`, `intel/`) — a "v1 Harden & Test" milestone with 4 planned phases (backend service test coverage, Postgres migration integration tests, frontend test foundation, career-stats name-match hardening); no phases have started yet (`status: planning`, 0/4 complete). If you're picking this up in a new chat, this file + `.planning/cowork/` + `.planning/ROADMAP.md`/`STATE.md` are the authoritative current-state context.
+> **Last refreshed:** reflects commit `d513e17` — the app remains **publicly deployed** (Vercel frontend + Render backend) with CORS/WS origins locked down to the real deploy domains. Render's free-tier cold starts are mitigated by an external UptimeRobot monitor (the in-repo GitHub keep-alive workflow was removed — see Infra (prod)). Since `6714a50` ingested the `.planning/` GSD setup, **Phase 1 of the "v1 Harden & Test" milestone (Backend Service Test Coverage) has completed** (5/5 plans, commits `9c1f230`…`6d9e390`/`d513e17`): the backend suite grew from 9 test classes/66 tests to **16 test classes/120 tests**, closing every previously-untested service (`NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `SportService`, `PlayerService` photo/toDto/search, `GlobalExceptionHandler`). The milestone is now on **Phase 2 — Postgres Migration Integration Tests** (`status: verifying` → transitioning, 1/4 phases complete, plans TBD). If you're picking this up in a new chat, this file + `.planning/cowork/` + `.planning/ROADMAP.md`/`STATE.md` are the authoritative current-state context.
 
 ## Project Overview
 **OneStopSports** is a full-stack, Fotmob-style multi-sport app covering **football (soccer), the NBA, and the NFL**. It surfaces live scores (pushed over WebSocket), league standings, match detail + box scores + event timelines, full team rosters, player profiles with **bio, career stats, and headshots**, and global search. Users can register and save favourite teams and players.
@@ -203,20 +203,28 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 
 ---
 
-## Testing — 66 tests, all green (`mvn test`)
+## Testing — 120 tests across 16 classes, all green (`mvn test`)
 | Class | Count | Notes |
 |---|---|---|
 | `AuthServiceTest` | 6 | pure unit |
 | `AuthControllerTest` | 7 | `@WebMvcTest` + `@Import(SecurityConfig.class)` + `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class`; needs `spring-security-test` |
 | `MatchServiceTest` | 13 | routing + guards; `anyInt()` gotcha for primitive `int` params |
 | `NbaApiServiceTest` | 13 | `RETURNS_DEEP_STUBS` RestClient mocks + package-private test constructor; covers per-conference standings grouping + crest derivation |
+| `NflApiServiceTest` | 6 | (Phase 01-02) scoreboard/standings/career-stats mapping + soft-fail, mirrors `NbaApiServiceTest`'s fixture-builder + `RETURNS_DEEP_STUBS` convention across 3 RestClients |
+| `ExternalApiServiceTest` | 5 | (Phase 01-02) standings + box-score mapping and soft-fail against a mocked RestClient + `LeagueRepository` |
+| `ApiFootballServiceTest` | 7 | (Phase 01-03) happy-path + soft-fail; stubs the lambda-based `.uri(Function<UriBuilder,URI>)` call with `any(Function.class)` |
+| `BallDontLieServiceTest` | 5 | (Phase 01-03) happy-path + soft-fail; constructs `BdlPlayersResponse`/`BdlPlayer` fixtures directly against the package-private record widening |
 | `LeagueServiceTest` | 9 | standings routing |
 | `PlayerServiceCareerStatsTest` | 9 | career-stats routing + lazy football ID resolution; helper builds the chain with `Team.sport` + `addLeague` (post-V9) |
+| `PlayerServiceTest` | 8 | (Phase 01-05) `resolvePhotoUrl`/`toDto`/`searchPlayers` exercised through the public `getPlayerById` entry point, no reflection |
 | `TeamServiceTest` | 3 | team↔league M:N: `toDto` exposes primary `leagueId` + all `leagueIds`, `getTeamsByLeague` uses the join-table query, search no longer collapses by name |
+| `UserServiceTest` | 11 | (Phase 01-04) favourites CRUD guards, plain `@InjectMocks`/`@Mock` |
+| `SportServiceTest` | 4 | (Phase 01-04) listing + slug lookup, plain `@InjectMocks`/`@Mock` |
+| `GlobalExceptionHandlerTest` | 8 | (Phase 01-05) proves `ResponseStatusException`-before-catch-all dispatch order via real MockMvc `standaloneSetup` |
 | `TextNormalizerTest` | 5 | accent-folding for accent-insensitive search |
 | `OneStopSportsApplicationTests` | 1 | context load; needs `@MockBean RedisConnectionFactory`. Runs the loaders against H2 — also exercises the new `team_league` join + `sport_id` mapping under Hibernate `create-drop`. |
 
-**Coverage gaps (no tests):** `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `PlayerService` search, `SportService`, `PlayerService.resolvePhotoUrl/toDto`, `GlobalExceptionHandler`, all frontend. The **V9 data-merge SQL** is unit-tested only by compile/entity-mapping — not by an integration run against Postgres (same caveat as V8).
+**Remaining coverage gap:** the frontend has zero tests (no Vitest yet — tracked as HARD-03/Phase 3). The **V9 data-merge SQL** is still unit-tested only by compile/entity-mapping — not by an integration run against Postgres (tracked as HARD-02/Phase 2, same caveat as V8).
 
 ---
 
@@ -241,7 +249,7 @@ Everything in the original build (entities, auth, Redis, WebSocket live push, se
 The tracked follow-up is complete. A club is now a single `team` row that belongs to many competitions via the `team_league` join table, with `Team.sport` as a direct link for routing. The football `DataLoader` find-or-creates each club by `(sport, football-data team id)` and links each competition (squad seeded once); the NBA/NFL loaders set `sport` + link their single league. V9 migrates existing data: it merges duplicate clubs + their duplicated players into canonical rows (re-pointing favourites/links) and drops `team.league_id`. `TeamDto` gained `leagueIds`; `searchTeams`/`searchPlayers` no longer de-duplicate.
 
 ### Still open / nice-to-have
-- Career-stats 204s for some star footballers (api-sports name-match misses) · push notifications for favourites · more test coverage (NflApiService, ExternalApiService, frontend) · historical-data tracking (see `.planning/cowork/HISTORICAL_DATA_RESEARCH.md`).
+- Career-stats 204s for some star footballers (api-sports name-match misses — tracked as HARD-04/Phase 4) · push notifications for favourites · frontend test coverage (zero Vitest tests — tracked as HARD-03/Phase 3) · Postgres integration test for the V8/V9 migrations (tracked as HARD-02/Phase 2) · historical-data tracking (see `.planning/cowork/HISTORICAL_DATA_RESEARCH.md`).
 - ⚠️ The V9 data-merge SQL runs only against real Postgres (Flyway off in H2 tests); validated by compile + entity-mapping + the H2 context-load seeding the new schema, **not** by an integration test that exercises the merge against duplicated Postgres data.
 - ⚠️ **Note:** V8 migration runs only against real Postgres (Flyway off in H2 tests); validated by compile + entity schema, not by an integration test against Postgres.
 
@@ -251,4 +259,4 @@ The tracked follow-up is complete. A club is now a single `team` row that belong
 - **This file** (auto-loaded by Claude Code).
 - **`.planning/cowork/`** — purpose-built bundle for starting a new Claude/Cowork chat: `PROJECT.md` + `INSTRUCTIONS.md` (paste-in fields), `OVERVIEW`, `ARCHITECTURE`, `INTEGRATIONS`, `CONVENTIONS`, `ROADMAP`, `DECISIONS`, `HISTORICAL_DATA_RESEARCH`.
 - **`.planning/codebase/`** — a dated codebase-map snapshot (from 2026-05-21; regenerate with `/gsd:map-codebase` for a fresh analysis).
-- **`.planning/` (GSD mode, added `6714a50`)** — `PROJECT.md`, `ROADMAP.md`, `REQUIREMENTS.md`, `STATE.md`, `config.json`, `intel/` (constraints/context/decisions/requirements) and `INGEST-CONFLICTS.md`, ingested from 10 prior planning docs. Tracks a "v1 Harden & Test" milestone (4 phases: backend service test coverage → Postgres migration integration tests → frontend test foundation → career-stats name-match hardening), currently `status: planning`, 0/4 phases complete. Use `/gsd-progress` or similar GSD skills to advance it.
+- **`.planning/` (GSD mode, added `6714a50`)** — `PROJECT.md`, `ROADMAP.md`, `REQUIREMENTS.md`, `STATE.md`, `config.json`, `intel/` (constraints/context/decisions/requirements) and `INGEST-CONFLICTS.md`, ingested from 10 prior planning docs. Tracks a "v1 Harden & Test" milestone (4 phases: backend service test coverage → Postgres migration integration tests → frontend test foundation → career-stats name-match hardening); **Phase 1 (Backend Service Test Coverage) is complete** (1/4 phases, 5/5 plans, HARD-01 validated), current work is **Phase 2 — Postgres Migration Integration Tests** (HARD-02). Use `/gsd-progress` or similar GSD skills to advance it.
