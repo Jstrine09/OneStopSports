@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 02
 current_phase_name: Postgres Migration Integration Tests
-status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-07-13T16:58:08.205Z"
+status: verifying
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-07-13T17:16:57.603Z"
 last_activity: 2026-07-13
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 7
-  completed_plans: 6
-  percent: 25
+  completed_plans: 7
+  percent: 50
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 
 Phase: 02 (Postgres Migration Integration Tests) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-13 — Phase 02 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | 15min | 2 tasks | 2 files |
 | Phase 01-backend-service-test-coverage P03 | 12min | 2 tasks | 2 files |
 | Phase 02 P01 | 32min | 2 tasks | 2 files |
+| Phase 02 P02 | 16min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ Decisions are logged in PROJECT.md Key Decisions table (23 ADR decisions recorde
 - [Phase 01-03]: Followed the plan exactly — stubbed ApiFootballService's lambda-based .uri(Function<UriBuilder,URI>) call with any(Function.class) instead of anyString(), and constructed BallDontLieService's BdlPlayersResponse/BdlPlayer fixtures directly to prove the 01-01 package-private record widening.
 - [Phase 02-01]: Plain JUnit5 + Testcontainers (no @SpringBootTest) for PostgresMigrationIT, avoiding DataLoader/NbaDataLoader/NflDataLoader live-API ApplicationRunners; two-stage Flyway target(8)->seedFixtures->target(9) proves the real V1-V9 chain against postgres:16-alpine.
 - [Phase 02-01]: Local Docker Desktop 4.81 (MinAPIVersion 1.40) rejects docker-java's default API 1.24 negotiation; workaround is -DargLine="-Dapi.version=1.41" on the mvn command line, no pom.xml config change (plan forbids <configuration> on failsafe plugin).
+- [Phase ?]: [Phase 02-02] Exhaustive V9 merge assertions proven behaviorally: favourites collision-skip asserted via SQLState 23505 unique violation (not a hardcoded constraint name), against a duplicate-club fixture (2 leagues/1 sport, 2 teams sharing external_id, duplicate players, 4 users covering re-point vs collision branches).
+- [Phase ?]: [Phase 02-02] Documented mvn verify -Pintegration + Docker prerequisite in CLAUDE.md/README.md, including the local Docker Desktop -DargLine="-Dapi.version=1.41" workaround as a troubleshooting note (not baked into pom.xml).
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ Items acknowledged and carried forward (backlog — not scheduled into Milestone
 
 ## Session Continuity
 
-Last session: 2026-07-13T16:58:08.202Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-07-13T17:16:57.599Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

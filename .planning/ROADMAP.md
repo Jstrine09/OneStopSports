@@ -18,7 +18,7 @@ OneStopSports is an existing, publicly-deployed multi-sport app (football + NBA 
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Backend Service Test Coverage** - Unit-test the currently-untested backend services with mocked providers (completed 2026-07-08)
-- [ ] **Phase 2: Postgres Migration Integration Tests** - Verify the V8 + V9 Flyway migrations against real Postgres
+- [x] **Phase 2: Postgres Migration Integration Tests** - Verify the V8 + V9 Flyway migrations against real Postgres (completed 2026-07-13)
 - [ ] **Phase 3: Frontend Test Foundation** - Stand up Vitest and cover high-value frontend units
 - [ ] **Phase 4: Career-Stats Name-Match Hardening** - Fix football career-stats 204s from api-sports.io name-match misses
 
@@ -65,7 +65,7 @@ OneStopSports is an existing, publicly-deployed multi-sport app (football + NBA 
   3. The test asserts V9 outcomes: duplicate clubs sharing `(sport_id, external_id)` are merged into one canonical row, the `team_league` join table is populated, players/league-links/favourites are re-pointed onto the canonical rows, and `team.league_id` is dropped.
   4. The migration integration test runs in `mvn test` (or a clearly-documented `mvn` profile) and is green, without breaking the existing H2-based suite.
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 **Wave 1**
 
@@ -73,7 +73,7 @@ OneStopSports is an existing, publicly-deployed multi-sport app (football + NBA 
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Duplicate-club fixtures + exhaustive V9 merge assertions (club merge, player de-dupe, favourite re-point + collision-skip) + `mvn verify -Pintegration` docs [Wave 2]
+- [x] 02-02-PLAN.md — Duplicate-club fixtures + exhaustive V9 merge assertions (club merge, player de-dupe, favourite re-point + collision-skip) + `mvn verify -Pintegration` docs [Wave 2]
 
 ### Phase 3: Frontend Test Foundation
 
@@ -112,7 +112,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Backend Service Test Coverage | 5/5 | Complete    | 2026-07-08 |
-| 2. Postgres Migration Integration Tests | 1/2 | In Progress|  |
+| 2. Postgres Migration Integration Tests | 2/2 | Complete   | 2026-07-13 |
 | 3. Frontend Test Foundation | 0/TBD | Not started | - |
 | 4. Career-Stats Name-Match Hardening | 0/TBD | Not started | - |
 
