@@ -65,11 +65,11 @@ OneStopSports is an existing, publicly-deployed multi-sport app (football + NBA 
   3. The test asserts V9 outcomes: duplicate clubs sharing `(sport_id, external_id)` are merged into one canonical row, the `team_league` join table is populated, players/league-links/favourites are re-pointed onto the canonical rows, and `team.league_id` is dropped.
   4. The migration integration test runs in `mvn test` (or a clearly-documented `mvn` profile) and is green, without breaking the existing H2-based suite.
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Testcontainers deps + opt-in `integration` Failsafe profile + PostgresMigrationIT skeleton (two-stage V1→V9 migrate, V8 columns/indexes/normalize + V9 schema-shape assertions) [Wave 1]
+- [x] 02-01-PLAN.md — Testcontainers deps + opt-in `integration` Failsafe profile + PostgresMigrationIT skeleton (two-stage V1→V9 migrate, V8 columns/indexes/normalize + V9 schema-shape assertions) [Wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -112,7 +112,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Backend Service Test Coverage | 5/5 | Complete    | 2026-07-08 |
-| 2. Postgres Migration Integration Tests | 0/2 | Not started | - |
+| 2. Postgres Migration Integration Tests | 1/2 | In Progress|  |
 | 3. Frontend Test Foundation | 0/TBD | Not started | - |
 | 4. Career-Stats Name-Match Hardening | 0/TBD | Not started | - |
 

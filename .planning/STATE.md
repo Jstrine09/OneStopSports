@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 2
+current_phase: 02
 current_phase_name: Postgres Migration Integration Tests
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-07-13T16:24:18.597Z"
-last_activity: 2026-07-08
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-07-13T16:58:08.205Z"
+last_activity: 2026-07-13
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 7
+  completed_plans: 6
   percent: 25
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-06)
 
 **Core value:** A user never needs to open a separate app per sport — football (soccer), NBA, and NFL in one place.
-**Current focus:** Phase 01 — Backend Service Test Coverage
+**Current focus:** Phase 02 — Postgres Migration Integration Tests
 
 ## Current Position
 
-Phase: 2 — Postgres Migration Integration Tests
-Plan: Not started
+Phase: 02 (Postgres Migration Integration Tests) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-08 — Phase 01 complete, transitioned to Phase 2
+Last activity: 2026-07-13 — Phase 02 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P05 | 15 | 2 tasks | 2 files |
 | Phase 01 P02 | 15min | 2 tasks | 2 files |
 | Phase 01-backend-service-test-coverage P03 | 12min | 2 tasks | 2 files |
+| Phase 02 P01 | 32min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ Decisions are logged in PROJECT.md Key Decisions table (23 ADR decisions recorde
 - [Phase 01-05]: Followed the plan exactly — new PlayerServiceTest covers resolvePhotoUrl/toDto/searchPlayers through the public getPlayerById entry point (no reflection), and GlobalExceptionHandlerTest proves the ResponseStatusException-before-catch-all dispatch via real MockMvc standaloneSetup rather than direct method calls.
 - [Phase 01-02]: Followed the plan exactly: mirrored NbaApiServiceTest's fixture-builder + RETURNS_DEEP_STUBS convention for NflApiServiceTest (3 RestClients) and ExternalApiServiceTest (RestClient + LeagueRepository), matching the .uri(String) vs .uri(String, Object...) matcher form to each production call site.
 - [Phase 01-03]: Followed the plan exactly — stubbed ApiFootballService's lambda-based .uri(Function<UriBuilder,URI>) call with any(Function.class) instead of anyString(), and constructed BallDontLieService's BdlPlayersResponse/BdlPlayer fixtures directly to prove the 01-01 package-private record widening.
+- [Phase 02-01]: Plain JUnit5 + Testcontainers (no @SpringBootTest) for PostgresMigrationIT, avoiding DataLoader/NbaDataLoader/NflDataLoader live-API ApplicationRunners; two-stage Flyway target(8)->seedFixtures->target(9) proves the real V1-V9 chain against postgres:16-alpine.
+- [Phase 02-01]: Local Docker Desktop 4.81 (MinAPIVersion 1.40) rejects docker-java's default API 1.24 negotiation; workaround is -DargLine="-Dapi.version=1.41" on the mvn command line, no pom.xml config change (plan forbids <configuration> on failsafe plugin).
 
 ### Pending Todos
 
@@ -99,6 +102,6 @@ Items acknowledged and carried forward (backlog — not scheduled into Milestone
 
 ## Session Continuity
 
-Last session: 2026-07-13T15:46:37.777Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-postgres-migration-integration-tests/02-CONTEXT.md
+Last session: 2026-07-13T16:58:08.202Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
