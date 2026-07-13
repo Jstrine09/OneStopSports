@@ -55,3 +55,13 @@ jwt:
   # Generate one with: openssl rand -base64 64
   secret: ${JWT_SECRET}
   expiration-ms: 86400000
+
+# API docs are a development aid, not a public surface. In production we turn
+# springdoc OFF so /v3/api-docs and /swagger-ui (which enumerate every endpoint
+# and DTO schema) are not served publicly. They remain available on the local /
+# dev profiles via application.yml. (QA finding S2.)
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
