@@ -197,7 +197,7 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 ```
 **Option B — Full Docker Compose:** `cp .env.example .env` (set `DB_PASSWORD`, `FOOTBALL_DATA_API_KEY`, `JWT_SECRET`), then `docker-compose up --build`. First boot seeds all three sports (~2 min).
 
-**Tests:** `mvn test` (H2 in-memory; Redis disabled via `application-test.yml`).
+**Tests:** `mvn test` (H2 in-memory; Redis disabled via `application-test.yml`). The Postgres migration integration test (`PostgresMigrationIT`, verifying the V8 + V9 Flyway migrations against real Postgres) is **opt-in** and does **not** run as part of `mvn test` — run it deliberately with `mvn verify -Pintegration` (or `mvn verify -Pintegration -Dit.test=PostgresMigrationIT` for just that class). It requires a running local Docker daemon (Testcontainers starts an ephemeral `postgres:16-alpine` container; the first run also needs network access to pull the image). If your Docker Desktop rejects Testcontainers' default API-version negotiation ("Could not find a valid Docker environment" despite `docker ps` working), append `-DargLine="-Dapi.version=1.41"` to the command — a known Testcontainers/docker-java gap with newer Docker Desktop `MinAPIVersion` settings, not a project bug.
 **Swagger:** `http://localhost:8081/swagger-ui/index.html`.
 **Production:** Vercel (frontend, `frontend/vercel.json`) + Render (`render.yaml` + `application-prod.yml`, backend) + Neon Postgres. The single-origin Docker path (`SpaForwardingConfig` serving the built SPA from the backend) still works as a fallback deploy mode but the live deploy is the Vercel/Render split. Free-tier cold starts are fought with an external UptimeRobot monitor (5-min ping on `/api/sports`); the GitHub keep-alive workflow was removed (GitHub throttled the schedule too aggressively to be useful, and false-failed on the slow cold start).
 
@@ -224,7 +224,7 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 | `TextNormalizerTest` | 5 | accent-folding for accent-insensitive search |
 | `OneStopSportsApplicationTests` | 1 | context load; needs `@MockBean RedisConnectionFactory`. Runs the loaders against H2 — also exercises the new `team_league` join + `sport_id` mapping under Hibernate `create-drop`. |
 
-**Remaining coverage gap:** the frontend has zero tests (no Vitest yet — tracked as HARD-03/Phase 3). The **V9 data-merge SQL** is still unit-tested only by compile/entity-mapping — not by an integration run against Postgres (tracked as HARD-02/Phase 2, same caveat as V8).
+**Remaining coverage gap:** the frontend has zero tests (no Vitest yet — tracked as HARD-03/Phase 3). The **V8/V9 migrations** are now also covered by a real-Postgres integration test — `PostgresMigrationIT` (13 tests: 6 for V8 schema-shape + V9 join/column/FK shape, 7 exhaustive V9 data-merge assertions incl. favourites collision-skip) — run via `mvn verify -Pintegration` (see Tests above); this closed the previous "compile/entity-mapping only" gap (HARD-02/Phase 2).
 
 ---
 
@@ -249,9 +249,8 @@ Everything in the original build (entities, auth, Redis, WebSocket live push, se
 The tracked follow-up is complete. A club is now a single `team` row that belongs to many competitions via the `team_league` join table, with `Team.sport` as a direct link for routing. The football `DataLoader` find-or-creates each club by `(sport, football-data team id)` and links each competition (squad seeded once); the NBA/NFL loaders set `sport` + link their single league. V9 migrates existing data: it merges duplicate clubs + their duplicated players into canonical rows (re-pointing favourites/links) and drops `team.league_id`. `TeamDto` gained `leagueIds`; `searchTeams`/`searchPlayers` no longer de-duplicate.
 
 ### Still open / nice-to-have
-- Career-stats 204s for some star footballers (api-sports name-match misses — tracked as HARD-04/Phase 4) · push notifications for favourites · frontend test coverage (zero Vitest tests — tracked as HARD-03/Phase 3) · Postgres integration test for the V8/V9 migrations (tracked as HARD-02/Phase 2) · historical-data tracking (see `.planning/cowork/HISTORICAL_DATA_RESEARCH.md`).
-- ⚠️ The V9 data-merge SQL runs only against real Postgres (Flyway off in H2 tests); validated by compile + entity-mapping + the H2 context-load seeding the new schema, **not** by an integration test that exercises the merge against duplicated Postgres data.
-- ⚠️ **Note:** V8 migration runs only against real Postgres (Flyway off in H2 tests); validated by compile + entity schema, not by an integration test against Postgres.
+- Career-stats 204s for some star footballers (api-sports name-match misses — tracked as HARD-04/Phase 4) · push notifications for favourites · frontend test coverage (zero Vitest tests — tracked as HARD-03/Phase 3) · historical-data tracking (see `.planning/cowork/HISTORICAL_DATA_RESEARCH.md`).
+- ✅ **V8/V9 migration coverage gap closed (HARD-02/Phase 2):** both migrations now run against real Postgres via `PostgresMigrationIT` (`mvn verify -Pintegration`) — V9's duplicate-club/player merge and favourites re-point + collision-skip are asserted behaviorally against a seeded duplicate-club fixture, not just validated by compile/entity-mapping.
 
 ---
 
