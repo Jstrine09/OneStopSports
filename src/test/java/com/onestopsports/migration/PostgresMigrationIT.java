@@ -64,6 +64,27 @@ class PostgresMigrationIT {
     private static Long seededTeamId;
     private static Long seededLeagueId;
 
+    // ── Duplicate-club fixture (plan 02-02) ─────────────────────────────────
+    // These constants/fields drive the exhaustive V9 MERGE assertions below. They
+    // simulate the REAL pre-V9 bug: the same football club seeded once PER
+    // competition it plays in, producing two `team` rows that share the same
+    // upstream (football-data.org) external_id. external_id is deliberately
+    // DIFFERENT from the plan-02-01 fixture team above (which is NULL) so this
+    // pair is the only group V9's merge groups together.
+    private static final String DUP_TEAM_EXTERNAL_ID = "86"; // fake but realistic football-data.org team id
+    private static final String DUP_TEAM_NAME = "Real Madrid";
+    private static final String DUP_PLAYER_NAME = "Jude Bellingham"; // seeded once per competition, pre-merge
+    private static Long domesticLeagueId;
+    private static Long continentalLeagueId;
+    private static Long canonicalTeamId;       // lower id of the duplicate pair -> V9's MIN(id) survivor
+    private static Long duplicateTeamId;       // higher id of the duplicate pair -> deleted by V9's merge
+    private static Long canonicalPlayerId;     // lower id of the duplicate player pair -> survives de-dup
+    private static Long duplicatePlayerId;     // higher id of the duplicate player pair -> deleted by de-dup
+    private static Long userTeamRepointId;     // favourited ONLY the duplicate team -> re-point branch
+    private static Long userTeamCollisionId;   // favourited BOTH teams -> collision/de-dupe branch
+    private static Long userPlayerRepointId;   // favourited ONLY the duplicate player -> re-point branch
+    private static Long userPlayerCollisionId; // favourited BOTH players -> collision/de-dupe branch
+
     @BeforeAll
     static void migrateAndSeed() {
         // Point JdbcTemplate at ONLY the Testcontainers-provided connection details.
@@ -101,12 +122,14 @@ class PostgresMigrationIT {
                 .migrate();
     }
 
-    // Inserts a minimal, non-duplicate fixture that survives V9's merge untouched. This
-    // plan (02-01) only needs a fixture for the V8 assertions and V9's *schema-shape*
-    // assertions (join table populated, league_id dropped, sport_id NOT NULL+FK). The
-    // exhaustive duplicate-club MERGE scenario (two teams sharing external_id, favourites
-    // re-pointing, player de-duplication) is deliberately deferred to plan 02-02, which
-    // extends this SAME method with that additional fixture data.
+    // Inserts BOTH fixture scenarios needed across the two migration IT plans:
+    //   1. (plan 02-01) A minimal, non-duplicate fixture that survives V9's merge
+    //      untouched — used for the V8 assertions and V9's *schema-shape* assertions
+    //      (join table populated, league_id dropped, sport_id NOT NULL+FK).
+    //   2. (plan 02-02) The exhaustive duplicate-club MERGE scenario — two team rows
+    //      sharing external_id, duplicate players, and favourites covering both the
+    //      re-point and collision/de-dupe branches — used for the seven v9_* merge
+    //      @Test methods below.
     private static void seedFixtures(JdbcTemplate jdbc) {
         // One sport row — mirrors the real app's seeded "Futbol"/"football" sport.
         jdbc.update("INSERT INTO sport (name, slug) VALUES (?, ?)", "Futbol", "football");
@@ -140,6 +163,108 @@ class PostgresMigrationIT {
         jdbc.update(
                 "INSERT INTO player (team_id, name, name_normalized) VALUES (?, ?, ?)",
                 seededTeamId, rawPlayerName, normalizedPlayerName);
+
+        // ── Duplicate-club scenario (plan 02-02) ─────────────────────────────
+        // Everything below is built at the SAME V8-era point in the schema as the
+        // fixture above (team.league_id still exists, team.sport_id does not exist
+        // yet) — that's exactly the "before" shape V9's merge step is written to
+        // find and collapse.
+
+        // Two leagues under the SAME sport (reuses sportId from above). This
+        // matters because V9 backfills team.sport_id from each team's single
+        // (pre-merge) league, and the merge only groups rows sharing sport_id — so
+        // both duplicate team rows below must end up with the same sport_id.
+        jdbc.update("INSERT INTO league (sport_id, name) VALUES (?, ?)", sportId, "Domestic League");
+        domesticLeagueId = jdbc.queryForObject(
+                "SELECT id FROM league WHERE name = ?", Long.class, "Domestic League");
+
+        jdbc.update("INSERT INTO league (sport_id, name) VALUES (?, ?)", sportId, "Continental Cup");
+        continentalLeagueId = jdbc.queryForObject(
+                "SELECT id FROM league WHERE name = ?", Long.class, "Continental Cup");
+
+        // The "duplicate club": two team rows with the SAME name and SAME
+        // external_id, but linked to DIFFERENT leagues — exactly what the old
+        // one-team-per-competition seeding produced in production. We insert the
+        // domestic-league row FIRST so it gets the smaller id: V9's merge picks
+        // MIN(id) per (sport_id, external_id) group as the canonical survivor, so
+        // this row is deliberately our canonical row and the second insert is
+        // deliberately the duplicate that V9 should delete.
+        jdbc.update(
+                "INSERT INTO team (league_id, name, external_id) VALUES (?, ?, ?)",
+                domesticLeagueId, DUP_TEAM_NAME, DUP_TEAM_EXTERNAL_ID);
+        canonicalTeamId = jdbc.queryForObject(
+                "SELECT id FROM team WHERE external_id = ? ORDER BY id ASC LIMIT 1",
+                Long.class, DUP_TEAM_EXTERNAL_ID);
+
+        jdbc.update(
+                "INSERT INTO team (league_id, name, external_id) VALUES (?, ?, ?)",
+                continentalLeagueId, DUP_TEAM_NAME, DUP_TEAM_EXTERNAL_ID);
+        duplicateTeamId = jdbc.queryForObject(
+                "SELECT id FROM team WHERE external_id = ? ORDER BY id DESC LIMIT 1",
+                Long.class, DUP_TEAM_EXTERNAL_ID);
+
+        // The SAME player, seeded once under EACH duplicate team row — mirrors the
+        // real DataLoader seeding a full squad per competition, pre-V9. V9 step 3b
+        // (player de-dupe) is what should collapse these to one row per
+        // (team_id, name) once step 3a re-points both onto the canonical team.
+        jdbc.update("INSERT INTO player (team_id, name) VALUES (?, ?)", canonicalTeamId, DUP_PLAYER_NAME);
+        canonicalPlayerId = jdbc.queryForObject(
+                "SELECT id FROM player WHERE team_id = ? AND name = ?",
+                Long.class, canonicalTeamId, DUP_PLAYER_NAME);
+
+        jdbc.update("INSERT INTO player (team_id, name) VALUES (?, ?)", duplicateTeamId, DUP_PLAYER_NAME);
+        duplicatePlayerId = jdbc.queryForObject(
+                "SELECT id FROM player WHERE team_id = ? AND name = ?",
+                Long.class, duplicateTeamId, DUP_PLAYER_NAME);
+
+        // Four users covering the two V9 favourite branches, at BOTH the team level
+        // and the player level:
+        //   - "repoint" users favourite ONLY the duplicate row -> V9's UPDATE should
+        //     re-point their favourite onto the canonical row (the NOT EXISTS guard
+        //     passes because they have no existing canonical favourite).
+        //   - "collision" users favourite BOTH the canonical row AND the duplicate
+        //     row -> V9's NOT EXISTS guard should SKIP the re-point (a canonical
+        //     favourite already exists for them), and the trailing DELETE removes
+        //     the leftover duplicate-pointing row instead — this is exactly what
+        //     keeps the (user_id, team_id) / (user_id, player_id) unique
+        //     constraints from being violated mid-migration.
+        userTeamRepointId = insertUser(jdbc, "user_team_repoint", "team.repoint@test.local");
+        jdbc.update(
+                "INSERT INTO favorite_team (user_id, team_id) VALUES (?, ?)",
+                userTeamRepointId, duplicateTeamId);
+
+        userTeamCollisionId = insertUser(jdbc, "user_team_collision", "team.collision@test.local");
+        jdbc.update(
+                "INSERT INTO favorite_team (user_id, team_id) VALUES (?, ?)",
+                userTeamCollisionId, canonicalTeamId);
+        jdbc.update(
+                "INSERT INTO favorite_team (user_id, team_id) VALUES (?, ?)",
+                userTeamCollisionId, duplicateTeamId);
+
+        userPlayerRepointId = insertUser(jdbc, "user_player_repoint", "player.repoint@test.local");
+        jdbc.update(
+                "INSERT INTO favorite_player (user_id, player_id) VALUES (?, ?)",
+                userPlayerRepointId, duplicatePlayerId);
+
+        userPlayerCollisionId = insertUser(jdbc, "user_player_collision", "player.collision@test.local");
+        jdbc.update(
+                "INSERT INTO favorite_player (user_id, player_id) VALUES (?, ?)",
+                userPlayerCollisionId, canonicalPlayerId);
+        jdbc.update(
+                "INSERT INTO favorite_player (user_id, player_id) VALUES (?, ?)",
+                userPlayerCollisionId, duplicatePlayerId);
+    }
+
+    // Small helper so the four favourite-branch users above don't repeat the same
+    // INSERT + id-lookup four times over. password_hash is a throwaway literal —
+    // this fixture never exercises auth, only the favourite tables the V9 merge
+    // touches.
+    private static Long insertUser(JdbcTemplate jdbc, String username, String email) {
+        jdbc.update(
+                "INSERT INTO user_account (username, email, password_hash) VALUES (?, ?, ?)",
+                username, email, "not-a-real-hash");
+        return jdbc.queryForObject(
+                "SELECT id FROM user_account WHERE username = ?", Long.class, username);
     }
 
     @Test
