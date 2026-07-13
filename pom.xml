@@ -125,6 +125,23 @@
             <artifactId>h2</artifactId>
             <scope>test</scope> <!-- In-memory database used instead of Postgres when running tests -->
         </dependency>
+        <!-- Testcontainers (Phase 2, HARD-02): boots a real, throwaway postgres:16-alpine
+             Docker container so the V8/V9 Flyway migrations can be tested against real
+             Postgres (Flyway is OFF in the H2 profile, so those two migrations otherwise
+             never run in any test). "postgresql" gives the container itself; "junit-jupiter"
+             gives the @Testcontainers/@Container JUnit 5 lifecycle glue. No <version> needed
+             on either — spring-boot-starter-parent:3.4.4 already manages the Testcontainers
+             BOM version, same convention as every other version-less dependency above. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -168,5 +185,33 @@
             </plugin>
         </plugins>
     </build>
+
+    <!-- Opt-in "integration" profile (D-02, Phase 2/HARD-02): the real-Postgres
+         Testcontainers IT (PostgresMigrationIT) needs a Docker daemon, so it must
+         NEVER run as part of the default `mvn test`. Maven Failsafe's default file
+         pattern only picks up classes named *IT.java (never *Test.java, which is what
+         Surefire's default `mvn test` matches), so simply naming the class correctly
+         already keeps it out of `mvn test`. Declaring the Failsafe plugin ONLY inside
+         this profile is a second, belt-and-suspenders layer: even a bare `mvn verify`
+         (no -Pintegration) never loads Failsafe at all, so it can never accidentally
+         require Docker. Run the IT deliberately with: mvn verify -Pintegration -->
+    <profiles>
+        <profile>
+            <id>integration</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <!-- No <version> needed — managed by spring-boot-starter-parent.
+                             No <configuration> needed — the default include pattern is
+                             **/*IT.java, which already matches PostgresMigrationIT.java,
+                             and its integration-test/verify goal executions are already
+                             pre-bound by the parent POM. -->
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
