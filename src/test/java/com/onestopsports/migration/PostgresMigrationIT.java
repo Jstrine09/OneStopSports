@@ -4,13 +4,18 @@ import com.onestopsports.util.TextNormalizer;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.sql.SQLException;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 // This class exists to test TWO Flyway migrations (V8 and V9) that, until this phase,
 // were never actually run by any test. Why? Because our normal test suite runs against
@@ -363,5 +368,160 @@ class PostgresMigrationIT {
         // seeded before V9 ran — proving the backfill from the old league_id column worked.
         assertThat(tableCount).isEqualTo(1);
         assertThat(linkCount).isEqualTo(1);
+    }
+
+    // ── V9 exhaustive merge assertions (plan 02-02, D-04) ───────────────────
+    // Everything below targets the duplicate-club fixture seeded in seedFixtures()
+    // above (canonicalTeamId/duplicateTeamId/canonicalPlayerId/duplicatePlayerId +
+    // the four favourite-branch users). Only PERMANENT tables are queried — never
+    // V9's own CREATE TEMP TABLE team_merge_map/player_merge_map, which are
+    // session-scoped and gone once Flyway's migration connection closes.
+
+    @Test
+    void v9_duplicateClubs_mergedIntoCanonicalRow() {
+        // GIVEN two team rows were seeded sharing (sport_id, external_id) = DUP_TEAM_EXTERNAL_ID
+        // WHEN V9's merge step (already applied in @BeforeAll) collapses that group
+        Integer survivingRowsForExternalId = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM team WHERE external_id = ?", Integer.class, DUP_TEAM_EXTERNAL_ID);
+        Integer canonicalStillExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM team WHERE id = ?", Integer.class, canonicalTeamId);
+        Integer duplicateStillExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM team WHERE id = ?", Integer.class, duplicateTeamId);
+        // THEN exactly one team row remains for that external_id, it IS the canonical
+        // MIN(id) row we captured while seeding, and the duplicate (higher-id) row is gone.
+        assertThat(survivingRowsForExternalId).isEqualTo(1);
+        assertThat(canonicalStillExists).isEqualTo(1);
+        assertThat(duplicateStillExists).isZero();
+    }
+
+    @Test
+    void v9_teamLeagueJoinTable_populatedForCanonical() {
+        // GIVEN the canonical team was originally linked (pre-V9, via team.league_id) to
+        // the domestic league, and the duplicate team to the continental cup league
+        // WHEN V9 re-points the duplicate's league link onto the canonical team before
+        // deleting the duplicate's own team_league rows
+        Integer canonicalLinkCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM team_league WHERE team_id = ?", Integer.class, canonicalTeamId);
+        Integer domesticLinkExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM team_league WHERE team_id = ? AND league_id = ?",
+                Integer.class, canonicalTeamId, domesticLeagueId);
+        Integer cupLinkExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM team_league WHERE team_id = ? AND league_id = ?",
+                Integer.class, canonicalTeamId, continentalLeagueId);
+        Integer linksStillOnDuplicate = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM team_league WHERE team_id = ?", Integer.class, duplicateTeamId);
+        // THEN the canonical team is linked to BOTH competitions (its original domestic
+        // link plus the re-pointed continental-cup link), and NO team_league row anywhere
+        // still references the now-deleted duplicate team id.
+        assertThat(canonicalLinkCount).isEqualTo(2);
+        assertThat(domesticLinkExists).isEqualTo(1);
+        assertThat(cupLinkExists).isEqualTo(1);
+        assertThat(linksStillOnDuplicate).isZero();
+    }
+
+    @Test
+    void v9_duplicatePlayers_repointedAndDeduplicated() {
+        // GIVEN the SAME player name was seeded once under EACH duplicate team row
+        // WHEN V9 first re-points both player rows onto the canonical team (3a), then
+        // collapses same-name rows on that team down to one, keeping the smallest id (3b)
+        Integer playerRowsForNameOnCanonical = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM player WHERE team_id = ? AND name = ?",
+                Integer.class, canonicalTeamId, DUP_PLAYER_NAME);
+        Long survivingPlayerId = jdbc.queryForObject(
+                "SELECT id FROM player WHERE team_id = ? AND name = ?",
+                Long.class, canonicalTeamId, DUP_PLAYER_NAME);
+        Integer duplicatePlayerStillExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM player WHERE id = ?", Integer.class, duplicatePlayerId);
+        // THEN exactly one player row survives on the canonical team for that name, it IS
+        // the originally-lower-id (canonical) player row, and the duplicate player id is gone.
+        assertThat(playerRowsForNameOnCanonical).isEqualTo(1);
+        assertThat(survivingPlayerId).isEqualTo(canonicalPlayerId);
+        assertThat(duplicatePlayerStillExists).isZero();
+    }
+
+    @Test
+    void v9_favoriteTeam_repointedToCanonical_whenNoCollision() {
+        // GIVEN userTeamRepointId favourited ONLY the duplicate (non-canonical) team,
+        // with no pre-existing favourite on the canonical team
+        // WHEN V9's UPDATE ... WHERE NOT EXISTS re-points that favourite (the guard
+        // passes because there was nothing to collide with)
+        Long repointedTeamId = jdbc.queryForObject(
+                "SELECT team_id FROM favorite_team WHERE user_id = ?", Long.class, userTeamRepointId);
+        Integer rowsStillPointingAtDuplicate = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM favorite_team WHERE team_id = ?", Integer.class, duplicateTeamId);
+        // THEN their favourite now points at the canonical team, and — combined with the
+        // collision-branch test below also resolving cleanly — no favorite_team row
+        // anywhere still points at the deleted duplicate team id.
+        assertThat(repointedTeamId).isEqualTo(canonicalTeamId);
+        assertThat(rowsStillPointingAtDuplicate).isZero();
+    }
+
+    @Test
+    void v9_favoriteTeam_dupDeleted_whenCanonicalAlreadyFavorited() {
+        // GIVEN userTeamCollisionId favourited BOTH the canonical team AND the duplicate
+        // team before V9 ran
+        // WHEN V9's NOT EXISTS guard skips re-pointing (a canonical favourite already
+        // exists for this user) and the trailing DELETE removes the leftover row that was
+        // still pointing at the (now-deleted) duplicate team
+        List<Long> survivingTeamIds = jdbc.queryForList(
+                "SELECT team_id FROM favorite_team WHERE user_id = ?", Long.class, userTeamCollisionId);
+        // THEN exactly ONE favorite_team row survives for this user, and it points at the
+        // canonical team — not duplicated, not lost.
+        assertThat(survivingTeamIds).containsExactly(canonicalTeamId);
+
+        // AND WHEN we attempt to insert a second row duplicating that surviving
+        // (user_id, team_id) pair, Postgres must reject it — proving the unique
+        // constraint from V3 (declared inline, with NO explicit CONSTRAINT name) still
+        // holds post-merge. We deliberately assert the SQLState (23505 = unique
+        // violation) rather than guessing Postgres's auto-generated constraint name.
+        assertThatThrownBy(() -> jdbc.update(
+                "INSERT INTO favorite_team (user_id, team_id) VALUES (?, ?)",
+                userTeamCollisionId, canonicalTeamId))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .extracting(Throwable::getCause)
+                .isInstanceOf(SQLException.class)
+                .extracting(cause -> ((SQLException) cause).getSQLState())
+                .isEqualTo("23505");
+    }
+
+    @Test
+    void v9_favoritePlayer_repointedToCanonical_whenNoCollision() {
+        // GIVEN userPlayerRepointId favourited ONLY the duplicate (non-canonical) player,
+        // with no pre-existing favourite on the canonical player
+        // WHEN V9's UPDATE ... WHERE NOT EXISTS re-points that favourite (mirrors the
+        // favorite_team re-point logic at the player level)
+        Long repointedPlayerId = jdbc.queryForObject(
+                "SELECT player_id FROM favorite_player WHERE user_id = ?", Long.class, userPlayerRepointId);
+        Integer rowsStillPointingAtDuplicate = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM favorite_player WHERE player_id = ?", Integer.class, duplicatePlayerId);
+        // THEN their favourite now points at the canonical player, and no favorite_player
+        // row anywhere still points at the deleted duplicate player id.
+        assertThat(repointedPlayerId).isEqualTo(canonicalPlayerId);
+        assertThat(rowsStillPointingAtDuplicate).isZero();
+    }
+
+    @Test
+    void v9_favoritePlayer_dupDeleted_whenCanonicalAlreadyFavorited() {
+        // GIVEN userPlayerCollisionId favourited BOTH the canonical player AND the
+        // duplicate player before V9 ran
+        // WHEN V9's NOT EXISTS guard skips re-pointing and the trailing DELETE removes
+        // the leftover row pointing at the (now-deleted) duplicate player — mirrors the
+        // favorite_team collision-skip test above at the player level
+        List<Long> survivingPlayerIds = jdbc.queryForList(
+                "SELECT player_id FROM favorite_player WHERE user_id = ?", Long.class, userPlayerCollisionId);
+        // THEN exactly ONE favorite_player row survives for this user, pointing at the
+        // canonical player.
+        assertThat(survivingPlayerIds).containsExactly(canonicalPlayerId);
+
+        // AND the (user_id, player_id) unique constraint still holds post-merge, proven
+        // the same behavioral way (SQLState 23505, no hardcoded constraint name).
+        assertThatThrownBy(() -> jdbc.update(
+                "INSERT INTO favorite_player (user_id, player_id) VALUES (?, ?)",
+                userPlayerCollisionId, canonicalPlayerId))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .extracting(Throwable::getCause)
+                .isInstanceOf(SQLException.class)
+                .extracting(cause -> ((SQLException) cause).getSQLState())
+                .isEqualTo("23505");
     }
 }
