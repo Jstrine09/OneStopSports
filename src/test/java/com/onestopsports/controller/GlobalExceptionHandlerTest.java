@@ -14,6 +14,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -124,6 +125,22 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().status()).isEqualTo(405);
         assertThat(response.getBody().message()).contains("POST");
+    }
+
+    @Test
+    void handleNoResourceFound_returns404ForUnknownBackendRoute() {
+        // An unknown backend route (e.g. GET /api/does-not-exist) surfaces as a
+        // NoResourceFoundException in Spring Boot 3.2+. It must map to 404, not the
+        // 500 catch-all — this is the regression guard for QA finding B1.
+        NoResourceFoundException ex =
+                new NoResourceFoundException(HttpMethod.GET, "/api/does-not-exist");
+
+        ResponseEntity<ErrorResponseDto> response = handler.handleNoResourceFound(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().status()).isEqualTo(404);
+        assertThat(response.getBody().message()).isEqualTo("The requested resource was not found");
     }
 
     @Test

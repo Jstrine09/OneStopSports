@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -134,6 +135,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(ErrorResponseDto.of(409, "Conflict", "A resource with that value already exists"));
+    }
+
+    // ── 404 Not Found — no route/resource matches the path ────────────────────
+    // Spring Boot 3.2+ throws NoResourceFoundException when a request matches no
+    // controller and no static file — e.g. GET /api/does-not-exist. In this app
+    // SpaForwardingConfig deliberately returns null (instead of the SPA shell) for
+    // api/, ws, swagger-ui and v3/api-docs paths, so those unknown BACKEND routes
+    // land here. Without this handler they would fall through to the 500 catch-all
+    // below and report a server error for what is really a missing route — a 404.
+    // (Genuine client-side SPA routes never reach here: they are served index.html.)
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponseDto> handleNoResourceFound(NoResourceFoundException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponseDto.of(404, "Not Found", "The requested resource was not found"));
     }
 
     // ── 500 Internal Server Error — unexpected failures ───────────────────────
