@@ -112,7 +112,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Backend Service Test Coverage | 5/5 | Complete    | 2026-07-08 |
-| 2. Postgres Migration Integration Tests | 2/2 | Complete   | 2026-07-13 |
+| 2. Postgres Migration Integration Tests | 2/2 | Complete    | 2026-07-13 |
 | 3. Frontend Test Foundation | 0/TBD | Not started | - |
 | 4. Career-Stats Name-Match Hardening | 0/TBD | Not started | - |
 
