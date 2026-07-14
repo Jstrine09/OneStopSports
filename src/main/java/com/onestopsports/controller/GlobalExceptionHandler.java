@@ -1,9 +1,11 @@
 package com.onestopsports.controller;
 
 import com.onestopsports.dto.ErrorResponseDto;
+import com.onestopsports.security.RateLimitExceededException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -150,6 +152,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponseDto.of(404, "Not Found", "The requested resource was not found"));
+    }
+
+    // ── 429 Too Many Requests — rate limit exceeded ──────────────────────────
+    // Thrown by AuthRateLimiter when a client sends too many login/register
+    // attempts inside the allowed window (brute-force / credential-stuffing guard).
+    // We add the standard "Retry-After" header (value in seconds) so well-behaved
+    // clients know exactly how long to wait before trying again.
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ErrorResponseDto> handleRateLimit(RateLimitExceededException ex) {
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(ErrorResponseDto.of(429, "Too Many Requests",
+                        "Too many attempts. Please try again later."));
     }
 
     // ── 500 Internal Server Error — unexpected failures ───────────────────────

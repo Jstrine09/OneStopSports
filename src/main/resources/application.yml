@@ -77,6 +77,17 @@ app:
     #   • https://one-stop-sports*.vercel.app — the Vercel site + its preview/alias URLs
     allowed-origin-patterns: http://localhost:*,https://one-stop-sports*.vercel.app
 
+  # Brute-force / credential-stuffing throttle for the public auth endpoints
+  # (POST /api/auth/login and /register). Enforced in-JVM by AuthRateLimiter, so
+  # it works on the single prod instance with no Redis. More than `max-attempts`
+  # requests from one client (per IP, and per username on login) inside
+  # `window-seconds` returns HTTP 429 with a Retry-After header. Override per
+  # environment via APP_RATE_LIMIT_AUTH_MAX_ATTEMPTS / _WINDOW_SECONDS.
+  rate-limit:
+    auth:
+      max-attempts: 10      # allowed attempts per key per window
+      window-seconds: 60    # length of the window in seconds
+
 server:
   port: 8081
 

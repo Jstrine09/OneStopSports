@@ -78,6 +78,7 @@ service/                          12 services (see below)
 - jjwt **0.12.x** API: `Jwts.parser()` / `.verifyWith(key)` / `.parseSignedClaims(token)`. JWT secret Base64-encoded.
 - **CORS/WS origins locked down** (commit `5eefe79`, closes the old "tighten before public deploy" item): `SecurityConfig` (REST CORS) and `WebSocketConfig` (live-scores WS handshake) read a shared `app.cors.allowed-origin-patterns` property (default: localhost + `https://one-stop-sports*.vercel.app`), overridable via `APP_CORS_ALLOWED_ORIGIN_PATTERNS` on Render. The WS check is the one actually exercised cross-origin (browser → Render directly); REST stays same-origin in prod via the Vercel `/api/*` rewrite.
 - **Swagger/OpenAPI disabled in prod** (commit `ff9fc60`, QA finding S2): `application-prod.yml` sets `springdoc.api-docs.enabled=false` and `springdoc.swagger-ui.enabled=false` so `/v3/api-docs` and `/swagger-ui` (which enumerate every endpoint + DTO schema) aren't publicly served. Docs remain available on `local`/dev profiles via `application.yml`.
+- **Auth rate limiting** (QA finding S1): the public `POST /api/auth/login` and `/register` are throttled by `AuthRateLimiter` (`security/AuthRateLimiter.java`) — a hand-rolled **in-memory fixed-window counter** (no library, no Redis, so it works on the single prod instance). `AuthController` calls it before delegating: login is keyed on **both** the client IP and the target username (per-IP stops one box hammering many accounts; per-user stops a distributed guess of one account); register is keyed on IP. Client IP is read from `X-Forwarded-For` (first hop) so it's the real user behind the Vercel→Render proxies, not the proxy. Over the limit throws `RateLimitExceededException`, which `GlobalExceptionHandler` maps to **HTTP 429** with the standard `ErrorResponseDto` envelope **and a `Retry-After` header** (seconds). Limits are config-driven: `app.rate-limit.auth.max-attempts` (default 10) / `.window-seconds` (default 60), overridable via `APP_RATE_LIMIT_AUTH_MAX_ATTEMPTS` / `_WINDOW_SECONDS`. Tests: `AuthRateLimiterTest` (5, pure unit with an injected mutable `Clock` — proves window reset without sleeping) + a 429 case in `AuthControllerTest`.
 
 ### GlobalExceptionHandler (`@RestControllerAdvice`)
 Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for every error. Handlers:
@@ -171,8 +172,8 @@ GET  /api/matches/{id}/boxscore?leagueId={id}   200 BoxScoreDto | 204 — sport-
 GET  /api/matches/{id}/stats             stub: {} (free-tier limit)
 GET  /api/matches/{id}/lineups           stub: {} (free-tier limit)
 GET  /api/search?q={query}              min 2 chars, up to 8 teams + 10 players
-POST /api/auth/register
-POST /api/auth/login
+POST /api/auth/register                 rate-limited per IP → 429 + Retry-After when exceeded
+POST /api/auth/login                    rate-limited per IP + per username → 429 + Retry-After
 ```
 ### Authenticated (Bearer JWT)
 ```
@@ -210,7 +211,8 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 | Class | Count | Notes |
 |---|---|---|
 | `AuthServiceTest` | 6 | pure unit |
-| `AuthControllerTest` | 7 | `@WebMvcTest` + `@Import(SecurityConfig.class)` + `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class`; needs `spring-security-test` |
+| `AuthControllerTest` | 8 | `@WebMvcTest` + `@Import(SecurityConfig.class)` + `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class`; needs `spring-security-test`; `AuthRateLimiter` `@MockBean`'d (429 path covered) |
+| `AuthRateLimiterTest` | 5 | pure unit; injected mutable `Clock` drives the window so it resets without `Thread.sleep` |
 | `MatchServiceTest` | 13 | routing + guards; `anyInt()` gotcha for primitive `int` params |
 | `NbaApiServiceTest` | 13 | `RETURNS_DEEP_STUBS` RestClient mocks + package-private test constructor; covers per-conference standings grouping + crest derivation |
 | `NflApiServiceTest` | 6 | (Phase 01-02) scoreboard/standings/career-stats mapping + soft-fail, mirrors `NbaApiServiceTest`'s fixture-builder + `RETURNS_DEEP_STUBS` convention across 3 RestClients |

@@ -5,7 +5,9 @@ import com.onestopsports.config.SecurityConfig;
 import com.onestopsports.dto.AuthRequest;
 import com.onestopsports.dto.AuthResponse;
 import com.onestopsports.dto.RegisterRequest;
+import com.onestopsports.security.AuthRateLimiter;
 import com.onestopsports.security.JwtUtil;
+import com.onestopsports.security.RateLimitExceededException;
 import com.onestopsports.service.AuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +20,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;               // Matches any argument of the right type
+import static org.mockito.ArgumentMatchers.anyString;         // Matches any String argument
+import static org.mockito.Mockito.doThrow;                    // Stub a void method to throw
 import static org.mockito.Mockito.when;                       // Stub a mock method's return value
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf; // Adds a CSRF token to POST requests
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post; // Build a POST request
@@ -60,6 +64,13 @@ class AuthControllerTest {
     // We mock it here so the filter doesn't crash on startup — it just won't do anything with tokens.
     @MockBean
     private JwtUtil jwtUtil;
+
+    // The controller now runs every auth request through AuthRateLimiter. We mock it so
+    // by default it does nothing (all requests allowed) — that keeps the existing tests
+    // focused on their own behaviour. The 429 test below stubs it to throw on demand.
+    // (The limiter's real counting/window logic is covered in AuthRateLimiterTest.)
+    @MockBean
+    private AuthRateLimiter rateLimiter;
 
     // ── POST /api/auth/register ───────────────────────────────────────────────
 
@@ -146,5 +157,24 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"james\",\"password\":\"\"}"))
                 .andExpect(status().isBadRequest()); // @NotBlank validation fires before the service is called
+    }
+
+    // ── 429 Too Many Requests — rate limiting ─────────────────────────────────
+
+    @Test
+    void login_overRateLimit_returns429WithRetryAfter() throws Exception {
+        // GIVEN: the rate limiter rejects this request (simulating too many prior attempts).
+        // checkRateLimit is a void method, so we use doThrow(...).when(mock) to stub it.
+        doThrow(new RateLimitExceededException(30))
+                .when(rateLimiter).checkRateLimit(anyString());
+
+        // WHEN + THEN: the request is blocked with 429, our error envelope, and a Retry-After header
+        mockMvc.perform(post("/api/auth/login").with(csrf()) // csrf() adds the token MockMvc needs for POST requests
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"james\",\"password\":\"password123\"}"))
+                .andExpect(status().isTooManyRequests())                                 // GlobalExceptionHandler → 429
+                .andExpect(header().string("Retry-After", "30"))                         // tells the client how long to wait
+                .andExpect(jsonPath("$.status").value(429))                              // our standard error envelope
+                .andExpect(jsonPath("$.message").value("Too many attempts. Please try again later."));
     }
 }
