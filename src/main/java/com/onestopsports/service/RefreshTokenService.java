@@ -61,7 +61,14 @@ public class RefreshTokenService {
     // Reuse detection: if a token that was ALREADY revoked is presented, that's a red flag
     // (a rotated-away token shouldn't be used again — it may have been stolen), so we revoke
     // every one of that user's tokens to force a fresh login everywhere.
-    @Transactional
+    //
+    // noRollbackFor = ResponseStatusException is LOAD-BEARING: the reuse branch below revokes the
+    // whole token family and THEN throws a 401. @Transactional rolls back on RuntimeException by
+    // default, which would undo the very revocation we just made — silently defeating reuse
+    // detection (verified: without this, a replayed token leaves the live session active). Every
+    // throw here is either after the write we want to keep (reuse) or before any write (missing /
+    // invalid / expired), so opting these exceptions out of rollback is safe.
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public Rotation rotate(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing refresh token");
