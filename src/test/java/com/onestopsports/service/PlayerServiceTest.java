@@ -138,9 +138,10 @@ class PlayerServiceTest {
 
     @Test
     void getPlayerById_unsupportedSportWithExternalId_returnsNullPhotoUrl() {
-        // Even WITH an externalId, a sport outside the NBA/NFL switch cases (e.g. football,
-        // which is handled by Layer 1 only) must fall through to null rather than guessing a URL.
-        Player oddball = playerWithPhoto(5L, "football", "12345", null, "Some Footballer", 104L);
+        // Even WITH an externalId, a sport outside the basketball/american-football/football
+        // switch cases (e.g. tennis) must fall through to null via the default branch rather
+        // than guessing a URL. (Football headshots ARE now derived — see PlayerServicePhotoUrlTest.)
+        Player oddball = playerWithPhoto(5L, "tennis", "12345", null, "Some Tennis Player", 104L);
         when(playerRepository.findById(5L)).thenReturn(Optional.of(oddball));
 
         PlayerDto dto = playerService.getPlayerById(5L);

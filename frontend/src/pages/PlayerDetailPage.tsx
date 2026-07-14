@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchPlayer, fetchPlayerBio, fetchPlayerCareerStats } from '../api/players'
@@ -14,6 +15,34 @@ function calculateAge(dob: string | null): { age: string; display: string } {
   const age = Math.floor((Date.now() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
   const formatted = birth.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' })
   return { age: `${age}`, display: `${formatted} (age ${age})` }
+}
+
+// Derives a player's initials for the fallback avatar tile: first + last name initial
+// (e.g. "Bukayo Saka" → "BS"), or the first two letters for a single-word name. Used
+// whenever there's no headshot to show, so the tile reads as *that player*, not a blank.
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+// Deterministic tint palette for the fallback avatar. We hash the player's name into a
+// fixed slot so a given player always gets the same colour across renders and revisits
+// (rather than flickering between colours). Each entry ships light + dark variants.
+const AVATAR_TINTS = [
+  'bg-amber-100  text-amber-800  dark:bg-amber-500/20  dark:text-amber-300',
+  'bg-blue-100   text-blue-800   dark:bg-blue-500/20   dark:text-blue-300',
+  'bg-green-100  text-green-800  dark:bg-green-500/20  dark:text-green-300',
+  'bg-rose-100   text-rose-800   dark:bg-rose-500/20   dark:text-rose-300',
+  'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300',
+  'bg-teal-100   text-teal-800   dark:bg-teal-500/20   dark:text-teal-300',
+]
+function tintFor(name: string): string {
+  // Simple deterministic string hash (same idea as Java's String.hashCode) → palette index.
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0
+  return AVATAR_TINTS[Math.abs(hash) % AVATAR_TINTS.length]
 }
 
 // Position tint — used on the position chip. Tints are kept low-chroma so the chip
@@ -55,6 +84,12 @@ export default function PlayerDetailPage() {
   })
 
   const player = statePlayer ?? fetchedPlayer
+
+  // Tracks whether the headshot <img> failed to load (CDN 404, bad derived URL, offline).
+  // When true we fall through to the initials tile instead of leaving a blank/broken image.
+  // Reset whenever the photo URL changes so navigating between players re-tries cleanly.
+  const [photoFailed, setPhotoFailed] = useState(false)
+  useEffect(() => { setPhotoFailed(false) }, [player?.photoUrl])
 
   // Bio enrichment from balldontlie.io — NBA players only.
   // We always fire this query; it returns null for non-NBA players (204 from backend).
@@ -128,37 +163,40 @@ export default function PlayerDetailPage() {
         <div className="pointer-events-none absolute -right-12 -top-16 h-56 w-56 rounded-full bg-amber-500/[0.04] blur-3xl" />
 
         <div className="relative flex items-center gap-5 sm:gap-7">
-          {/* Identity tile — photo when available, jersey-number tile as the fallback.
-              When both are present the jersey becomes a small badge anchored bottom-right
-              so the photo stays the dominant element (Fotmob-style). The tile dimensions
-              stay constant (h-24/w-24 → h-28/w-28) so the rest of the layout doesn't shift. */}
+          {/* Identity tile — headshot when we have one that loads, an initials tile as the
+              graceful fallback otherwise. The jersey number rides along as a small badge
+              anchored bottom-right in both cases, so the tile stays the dominant element
+              (Fotmob-style). Tile dimensions stay constant (h-24/w-24 → h-28/w-28) so the
+              rest of the layout never shifts between the two states.
+
+              showPhoto is false when the player has no photoUrl (many footballers, until
+              their api-sports ID is captured) OR when the derived CDN image 404s — either
+              way the user sees the player's initials on a coloured tile, never a blank box. */}
           <div className="relative h-24 w-24 shrink-0 sm:h-28 sm:w-28">
-            {player.photoUrl ? (
-              <>
-                <img
-                  src={player.photoUrl}
-                  alt={player.name}
-                  // ESPN headshots are PNGs with transparent backgrounds — the stone/zinc
-                  // tile underneath provides visual grounding so the head isn't floating.
-                  // object-cover crops to fill; object-top keeps faces high in the frame.
-                  className="h-full w-full rounded-2xl bg-stone-100 object-cover object-top dark:bg-zinc-800"
-                  // Gracefully degrade if the CDN URL ever 404s — swap to the jersey
-                  // fallback by clearing the src and surfacing a data-attr the next render
-                  // could pick up. Simplest fix: just hide the broken image.
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                />
-                {player.jerseyNumber != null && (
-                  <span className="absolute -bottom-1 -right-1 flex h-7 min-w-[28px] items-center justify-center rounded-full bg-stone-900 px-1.5 text-xs font-extrabold tabular-nums text-white ring-2 ring-white dark:bg-zinc-100 dark:text-zinc-900 dark:ring-zinc-900 sm:h-8 sm:min-w-[32px] sm:text-sm">
-                    {player.jerseyNumber}
-                  </span>
-                )}
-              </>
+            {player.photoUrl && !photoFailed ? (
+              <img
+                src={player.photoUrl}
+                alt={player.name}
+                // Headshots are PNGs with transparent backgrounds — the stone/zinc tile
+                // underneath provides visual grounding so the head isn't floating.
+                // object-cover crops to fill; object-top keeps faces high in the frame.
+                className="h-full w-full rounded-2xl bg-stone-100 object-cover object-top dark:bg-zinc-800"
+                // On load failure flip to the initials fallback (see photoFailed above)
+                // instead of leaving a broken/blank image behind.
+                onError={() => setPhotoFailed(true)}
+              />
             ) : (
-              <div className="flex h-full w-full items-center justify-center rounded-2xl bg-stone-100 dark:bg-zinc-800">
-                <span className="text-5xl font-black tabular-nums leading-none tracking-tight text-stone-900 dark:text-zinc-100 sm:text-6xl">
-                  {player.jerseyNumber ?? '–'}
+              // Fallback avatar: the player's initials on a deterministic coloured tile.
+              <div className={`flex h-full w-full items-center justify-center rounded-2xl ${tintFor(player.name)}`}>
+                <span className="text-3xl font-black uppercase leading-none tracking-tight sm:text-4xl">
+                  {initialsOf(player.name)}
                 </span>
               </div>
+            )}
+            {player.jerseyNumber != null && (
+              <span className="absolute -bottom-1 -right-1 flex h-7 min-w-[28px] items-center justify-center rounded-full bg-stone-900 px-1.5 text-xs font-extrabold tabular-nums text-white ring-2 ring-white dark:bg-zinc-100 dark:text-zinc-900 dark:ring-zinc-900 sm:h-8 sm:min-w-[32px] sm:text-sm">
+                {player.jerseyNumber}
+              </span>
             )}
           </div>
 

@@ -196,28 +196,34 @@ public class PlayerService {
 
     // Photo URL resolution — three layers, returning the first hit:
     //
-    //   1. A persisted Player.photoUrl on the row. This is how football players get a photo:
-    //      when their stats page is first opened we capture API-Football's player.photo URL
-    //      and save it (see PlayerService.fetchFootballStats — added in a follow-up).
+    //   1. A persisted Player.photoUrl on the row. If we ever explicitly store a headshot
+    //      URL on a player, it wins over any derived URL below.
     //
-    //   2. ESPN's deterministic headshot CDN URL, derived from the sport + externalId.
-    //      Pattern: https://a.espncdn.com/i/headshots/{sport}/players/full/{espnAthleteId}.png
-    //      This covers every NBA / NFL player without us storing or fetching anything —
-    //      the URL is reconstructable from data we already have.
+    //   2. A deterministic CDN headshot URL, derived from the sport + externalId. We never
+    //      store or fetch these — the URL is reconstructable from data we already have:
+    //        • NBA / NFL → ESPN CDN, keyed by the ESPN athlete ID captured at seed time.
+    //          Pattern: https://a.espncdn.com/i/headshots/{nba|nfl}/players/full/{espnAthleteId}.png
+    //        • football → API-SPORTS media CDN, keyed by the api-sports.io player ID.
+    //          Pattern: https://media.api-sports.io/football/players/{apiSportsId}.png
+    //          NOTE: a football player's externalId is only populated *after* their career
+    //          stats have been looked up once (that's when we search api-sports.io by name
+    //          and persist the ID — see fetchFootballStats). So footballers who've never had
+    //          their stats page opened still fall through to Layer 3. The upstream fix for
+    //          that gap is the name-match hardening (finding P1 / HARD-04).
     //
-    //   3. null — used for football players whose stats page hasn't been visited yet
-    //      (no photoUrl stored, no ESPN equivalent). The frontend falls back to initials.
+    //   3. null — no stored photo and no externalId to derive from. The frontend falls back
+    //      to rendering the player's initials on a coloured tile.
     //
-    // Reads .team.league.sport.slug — three lazy hops through the OSIV-managed Hibernate
-    // session. All callers of toDto() run inside a web request, so OSIV keeps the session
-    // alive long enough to resolve them.
+    // Reads .team.sport.slug — two lazy hops through the OSIV-managed Hibernate session. All
+    // callers of toDto() run inside a web request, so OSIV keeps the session alive long
+    // enough to resolve them.
     private static String resolvePhotoUrl(Player player) {
-        // Layer 1: stored value wins (football players post-first-stats-visit)
+        // Layer 1: stored value wins
         if (player.getPhotoUrl() != null && !player.getPhotoUrl().isBlank()) {
             return player.getPhotoUrl();
         }
 
-        // Layer 2: ESPN CDN — only meaningful when we have an ESPN athlete ID
+        // Layer 2: derived CDN URL — only meaningful when we have an external athlete/player ID
         String externalId = player.getExternalId();
         if (externalId == null || externalId.isBlank()) return null;
 
@@ -232,7 +238,9 @@ public class PlayerService {
         return switch (sportSlug) {
             case "basketball"        -> "https://a.espncdn.com/i/headshots/nba/players/full/" + externalId + ".png";
             case "american-football" -> "https://a.espncdn.com/i/headshots/nfl/players/full/" + externalId + ".png";
-            default                  -> null; // football handled by Layer 1 once stats visited; others unsupported
+            // football externalId = api-sports.io player ID (persisted on first stats lookup)
+            case "football"          -> "https://media.api-sports.io/football/players/" + externalId + ".png";
+            default                  -> null; // sports without a headshot source
         };
     }
 }
