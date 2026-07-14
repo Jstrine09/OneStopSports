@@ -1,6 +1,6 @@
 # OneStopSports — Claude Code Context
 
-> **Last refreshed:** reflects commit `d513e17` — the app remains **publicly deployed** (Vercel frontend + Render backend) with CORS/WS origins locked down to the real deploy domains. Render's free-tier cold starts are mitigated by an external UptimeRobot monitor (the in-repo GitHub keep-alive workflow was removed — see Infra (prod)). Since `6714a50` ingested the `.planning/` GSD setup, **Phase 1 of the "v1 Harden & Test" milestone (Backend Service Test Coverage) has completed** (5/5 plans, commits `9c1f230`…`6d9e390`/`d513e17`): the backend suite grew from 9 test classes/66 tests to **16 test classes/120 tests**, closing every previously-untested service (`NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `SportService`, `PlayerService` photo/toDto/search, `GlobalExceptionHandler`). The milestone is now on **Phase 2 — Postgres Migration Integration Tests** (`status: verifying` → transitioning, 1/4 phases complete, plans TBD). If you're picking this up in a new chat, this file + `.planning/cowork/` + `.planning/ROADMAP.md`/`STATE.md` are the authoritative current-state context.
+> **Last refreshed:** reflects commit `ff9fc60` — the app remains **publicly deployed** (Vercel frontend + Render backend) with CORS/WS origins locked down to the real deploy domains. Render's free-tier cold starts are mitigated by an external UptimeRobot monitor (the in-repo GitHub keep-alive workflow was removed — see Infra (prod)). Since `6714a50` ingested the `.planning/` GSD setup, **Phase 1 (Backend Service Test Coverage) and Phase 2 (Postgres Migration Integration Tests) of the "v1 Harden & Test" milestone are both complete** (7/7 plans total): Phase 1 grew the backend suite from 9 test classes/66 tests to 17 test classes/120 tests, closing every previously-untested service (`NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `SportService`, `PlayerService` photo/toDto/search, `GlobalExceptionHandler`); Phase 2 added `PostgresMigrationIT` (13 tests, opt-in via `mvn verify -Pintegration`) proving the V8/V9 Flyway migrations against a real Postgres. Two further QA hardening fixes have also landed (`0e0b5f5`, `ff9fc60`): unmapped backend routes now return a clean 404 instead of falling through to the 500 catch-all, and Swagger/OpenAPI (`/v3/api-docs`, `/swagger-ui`) is disabled in the prod profile so the API surface isn't publicly enumerable — the backend suite is now **17 test classes/121 tests**. The milestone is now on **Phase 3 — Frontend Test Foundation** (`status: verifying` → transitioning, 2/4 phases complete, plans TBD). If you're picking this up in a new chat, this file + `.planning/cowork/` + `.planning/ROADMAP.md`/`STATE.md` are the authoritative current-state context.
 
 ## Project Overview
 **OneStopSports** is a full-stack, Fotmob-style multi-sport app covering **football (soccer), the NBA, and the NFL**. It surfaces live scores (pushed over WebSocket), league standings, match detail + box scores + event timelines, full team rosters, player profiles with **bio, career stats, and headshots**, and global search. Users can register and save favourite teams and players.
@@ -77,6 +77,7 @@ service/                          12 services (see below)
 - DI cycle (`JwtAuthFilter → AuthService → PasswordEncoder → JwtAuthFilter`) broken by (1) `PasswordConfig` holding the `PasswordEncoder` and (2) `@Lazy AuthenticationManager` in `AuthService`'s manual constructor.
 - jjwt **0.12.x** API: `Jwts.parser()` / `.verifyWith(key)` / `.parseSignedClaims(token)`. JWT secret Base64-encoded.
 - **CORS/WS origins locked down** (commit `5eefe79`, closes the old "tighten before public deploy" item): `SecurityConfig` (REST CORS) and `WebSocketConfig` (live-scores WS handshake) read a shared `app.cors.allowed-origin-patterns` property (default: localhost + `https://one-stop-sports*.vercel.app`), overridable via `APP_CORS_ALLOWED_ORIGIN_PATTERNS` on Render. The WS check is the one actually exercised cross-origin (browser → Render directly); REST stays same-origin in prod via the Vercel `/api/*` rewrite.
+- **Swagger/OpenAPI disabled in prod** (commit `ff9fc60`, QA finding S2): `application-prod.yml` sets `springdoc.api-docs.enabled=false` and `springdoc.swagger-ui.enabled=false` so `/v3/api-docs` and `/swagger-ui` (which enumerate every endpoint + DTO schema) aren't publicly served. Docs remain available on `local`/dev profiles via `application.yml`.
 
 ### GlobalExceptionHandler (`@RestControllerAdvice`)
 Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for every error. Handlers:
@@ -87,7 +88,9 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 - `HttpRequestMethodNotSupportedException` → 405
 - `BadCredentialsException` → 401 · `AccessDeniedException` → 403
 - `ResponseStatusException` → passthrough (**must precede** the `Exception` catch-all)
-- `DataIntegrityViolationException` → 409 · `Exception` → 500
+- `DataIntegrityViolationException` → 409
+- `NoResourceFoundException` → 404 *(unmapped backend routes, e.g. `/api/does-not-exist`; Spring Boot 3.2+ throws this instead of falling through to the 500 catch-all — commit `0e0b5f5`)*
+- `Exception` → 500
 
 ### Multi-Sport Routing
 - DB schema is sport-agnostic: `sport → league → team → player`. Per-sport quirks live only in the adapter services.
@@ -203,7 +206,7 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 
 ---
 
-## Testing — 120 tests across 16 classes, all green (`mvn test`)
+## Testing — 121 tests across 17 classes, all green (`mvn test`)
 | Class | Count | Notes |
 |---|---|---|
 | `AuthServiceTest` | 6 | pure unit |
@@ -220,7 +223,7 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 | `TeamServiceTest` | 3 | team↔league M:N: `toDto` exposes primary `leagueId` + all `leagueIds`, `getTeamsByLeague` uses the join-table query, search no longer collapses by name |
 | `UserServiceTest` | 11 | (Phase 01-04) favourites CRUD guards, plain `@InjectMocks`/`@Mock` |
 | `SportServiceTest` | 4 | (Phase 01-04) listing + slug lookup, plain `@InjectMocks`/`@Mock` |
-| `GlobalExceptionHandlerTest` | 8 | (Phase 01-05) proves `ResponseStatusException`-before-catch-all dispatch order via real MockMvc `standaloneSetup` |
+| `GlobalExceptionHandlerTest` | 9 | (Phase 01-05) proves `ResponseStatusException`-before-catch-all dispatch order via real MockMvc `standaloneSetup`; also covers the `NoResourceFoundException` → 404 mapping (commit `0e0b5f5`) |
 | `TextNormalizerTest` | 5 | accent-folding for accent-insensitive search |
 | `OneStopSportsApplicationTests` | 1 | context load; needs `@MockBean RedisConnectionFactory`. Runs the loaders against H2 — also exercises the new `team_league` join + `sport_id` mapping under Hibernate `create-drop`. |
 
@@ -245,6 +248,10 @@ Everything in the original build (entities, auth, Redis, WebSocket live push, se
 - ✅ **Duplicate clubs/players** — now fixed **structurally** (see below), superseding the old presentation-layer search dedupe (which has been removed).
 - ✅ **PCT/GB columns** added server-side to `StandingsEntryDto` (NBA per-conference, NFL per-division); GB column shown on NBA tables.
 
+**Two further hardening fixes landed after that sweep:**
+- ✅ **404 for unmapped backend routes** (commit `0e0b5f5`) — `GlobalExceptionHandler` now maps `NoResourceFoundException` to a clean 404 instead of the 500 catch-all.
+- ✅ **Swagger/OpenAPI disabled in prod** (commit `ff9fc60`, QA finding S2) — `/v3/api-docs` and `/swagger-ui` no longer publicly enumerate the API surface in production.
+
 ### ✅ Structural dedupe — DONE (team↔league many-to-many, V9)
 The tracked follow-up is complete. A club is now a single `team` row that belongs to many competitions via the `team_league` join table, with `Team.sport` as a direct link for routing. The football `DataLoader` find-or-creates each club by `(sport, football-data team id)` and links each competition (squad seeded once); the NBA/NFL loaders set `sport` + link their single league. V9 migrates existing data: it merges duplicate clubs + their duplicated players into canonical rows (re-pointing favourites/links) and drops `team.league_id`. `TeamDto` gained `leagueIds`; `searchTeams`/`searchPlayers` no longer de-duplicate.
 
@@ -258,4 +265,4 @@ The tracked follow-up is complete. A club is now a single `team` row that belong
 - **This file** (auto-loaded by Claude Code).
 - **`.planning/cowork/`** — purpose-built bundle for starting a new Claude/Cowork chat: `PROJECT.md` + `INSTRUCTIONS.md` (paste-in fields), `OVERVIEW`, `ARCHITECTURE`, `INTEGRATIONS`, `CONVENTIONS`, `ROADMAP`, `DECISIONS`, `HISTORICAL_DATA_RESEARCH`.
 - **`.planning/codebase/`** — a dated codebase-map snapshot (from 2026-05-21; regenerate with `/gsd:map-codebase` for a fresh analysis).
-- **`.planning/` (GSD mode, added `6714a50`)** — `PROJECT.md`, `ROADMAP.md`, `REQUIREMENTS.md`, `STATE.md`, `config.json`, `intel/` (constraints/context/decisions/requirements) and `INGEST-CONFLICTS.md`, ingested from 10 prior planning docs. Tracks a "v1 Harden & Test" milestone (4 phases: backend service test coverage → Postgres migration integration tests → frontend test foundation → career-stats name-match hardening); **Phase 1 (Backend Service Test Coverage) is complete** (1/4 phases, 5/5 plans, HARD-01 validated), current work is **Phase 2 — Postgres Migration Integration Tests** (HARD-02). Use `/gsd-progress` or similar GSD skills to advance it.
+- **`.planning/` (GSD mode, added `6714a50`)** — `PROJECT.md`, `ROADMAP.md`, `REQUIREMENTS.md`, `STATE.md`, `config.json`, `intel/` (constraints/context/decisions/requirements) and `INGEST-CONFLICTS.md`, ingested from 10 prior planning docs. Tracks a "v1 Harden & Test" milestone (4 phases: backend service test coverage → Postgres migration integration tests → frontend test foundation → career-stats name-match hardening); **Phases 1 and 2 are complete** (2/4 phases, 7/7 plans, HARD-01 + HARD-02 validated), current work is **Phase 3 — Frontend Test Foundation** (HARD-03, not started). Use `/gsd-progress` or similar GSD skills to advance it.

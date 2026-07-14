@@ -156,6 +156,7 @@ The home/live page never polls. The path:
 | `BadCredentialsException` | 401 | Deliberately vague — doesn't reveal whether the username exists |
 | `AccessDeniedException` | 403 | |
 | `DataIntegrityViolationException` | 409 | Used for duplicate username/email |
+| `NoResourceFoundException` | 404 | Unmapped backend routes (e.g. `/api/does-not-exist`) — Spring Boot 3.2+ throws this instead of falling through to the catch-all; added post-Phase-1 (commit `0e0b5f5`) |
 | `Exception` | 500 | Full stack logged server-side; vague message to client |
 
 **The ordering rule is real and easy to break.** If `@ExceptionHandler(Exception.class)` is declared before `@ExceptionHandler(ResponseStatusException.class)`, Spring matches the most generic handler first and your 404s come back as 500s.

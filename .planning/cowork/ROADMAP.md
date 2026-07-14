@@ -45,7 +45,7 @@ Listed as nice-to-have. No infrastructure (no FCM/APN, no service worker).
 
 ## Testing gaps
 
-**66 backend tests currently pass.** Coverage is heavily skewed toward auth, `MatchService`, `NbaApiService`, and `LeagueService`.
+**121 backend tests currently pass** via `mvn test` (up from an original 66, across Phase 1 + Phase 2 of the `.planning/` "v1 Harden & Test" milestone), plus a further 13 opt-in `PostgresMigrationIT` tests (`mvn verify -Pintegration`, requires Docker). Coverage is heavily skewed toward auth, `MatchService`, `NbaApiService`, and `LeagueService`.
 
 | Component | Tests | Notes |
 |---|---|---|
@@ -66,11 +66,12 @@ Listed as nice-to-have. No infrastructure (no FCM/APN, no service worker).
 | `SportService` | ✅ 4 (`SportServiceTest`) | Phase 1 (01-04): listing + slug lookup |
 | `PlayerService.toDto`/`resolvePhotoUrl`/search | ✅ 8 (`PlayerServiceTest`) | Phase 1 (01-05): exercised through the public `getPlayerById` entry point, `resolvePhotoUrl`'s three-layer logic covered |
 | `JwtUtil`, `JwtAuthFilter` | ❌ 0 | Tested transitively via `AuthControllerTest` |
-| `GlobalExceptionHandler` | ✅ 8 (`GlobalExceptionHandlerTest`) | Phase 1 (01-05): proves the `ResponseStatusException`-before-catch-all dispatch order via real MockMvc `standaloneSetup` |
+| `GlobalExceptionHandler` | ✅ 9 (`GlobalExceptionHandlerTest`) | Phase 1 (01-05): proves the `ResponseStatusException`-before-catch-all dispatch order via real MockMvc `standaloneSetup`; also covers the `NoResourceFoundException` → 404 mapping added post-Phase-1 (commit `0e0b5f5`) |
 | `RedisConfig`, `WebSocketConfig` ObjectMapper override | ❌ 0 | The `LocalDateTime` serialisation fix has no regression test |
+| `PostgresMigrationIT` (V8/V9 Flyway migrations) | ✅ 13, opt-in (`mvn verify -Pintegration`) | Phase 2 (02-01/02-02): Testcontainers `postgres:16-alpine`, proves the full V1→V9 chain, V8 name-normalization backfill, and V9's duplicate-club/player merge + favourites re-point/collision-skip against real Postgres (Flyway is off in the H2 unit-test profile, so this was previously compile/entity-mapping-only) |
 | Frontend | ❌ 0 | No Vitest setup; TypeScript is the only static check — tracked as HARD-03/Phase 3 in `.planning/` |
 
-All five services and both gaps flagged in the original ranked list below were closed in Phase 1 of the `.planning/` "v1 Harden & Test" milestone (2026-07-08, `mvn test` 66→120 tests across 9→16 classes). Remaining gaps: `JwtUtil`/`JwtAuthFilter` direct unit tests, `RedisConfig`/`WebSocketConfig` ObjectMapper regression test, and the frontend test suite (HARD-03/Phase 3, not yet started).
+All five services and both gaps flagged in the original ranked list below were closed in Phase 1 of the `.planning/` "v1 Harden & Test" milestone (2026-07-08, `mvn test` 66→120 tests across 9→16 classes). Phase 2 (2026-07-13) added the real-Postgres `PostgresMigrationIT` for the V8/V9 migrations, and a post-Phase-1 fix added the `NoResourceFoundException` → 404 test, bringing the `mvn test` suite to 121 tests across 17 classes. Remaining gaps: `JwtUtil`/`JwtAuthFilter` direct unit tests, `RedisConfig`/`WebSocketConfig` ObjectMapper regression test, and the frontend test suite (HARD-03/Phase 3, not yet started).
 
 ---
 

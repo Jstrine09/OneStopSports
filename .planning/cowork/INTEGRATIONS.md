@@ -280,5 +280,5 @@ Follow the existing shape — never mix providers:
 
 - **Logging:** SLF4J via `LoggerFactory.getLogger(MatchService.class)`; bracketed prefix on log lines (`log.warn("[NbaApiService] fetchStandings failed for season={}: {}", season, e.getMessage())`)
 - **Metrics / tracing:** None
-- **API docs:** Swagger UI at `/swagger-ui/index.html`; raw spec at `/v3/api-docs`
+- **API docs:** Swagger UI at `/swagger-ui/index.html`; raw spec at `/v3/api-docs` — **dev/local only**; disabled in the `prod` profile (`springdoc.api-docs.enabled=false` / `swagger-ui.enabled=false`, commit `ff9fc60`, QA finding S2) so the API surface isn't publicly enumerable
 - **Error responses:** `GlobalExceptionHandler` returns consistent `ErrorResponseDto(status, error, message, timestamp)` for every exception type
