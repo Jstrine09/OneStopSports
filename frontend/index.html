@@ -21,13 +21,9 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
 
     <!-- Apply saved theme before first render to prevent a light-mode flash.
-         Defaults to dark if no preference has been saved yet. -->
-    <script>
-      (function () {
-        var theme = localStorage.getItem('theme') || 'dark';
-        if (theme === 'dark') document.documentElement.classList.add('dark');
-      })();
-    </script>
+         Loaded from an external file (not inline) so our Content-Security-Policy can keep a
+         strict script-src 'self'. Synchronous + in <head>, so it still runs before paint. -->
+    <script src="/theme-init.js"></script>
 
     <title>OneStopSports</title>
   </head>

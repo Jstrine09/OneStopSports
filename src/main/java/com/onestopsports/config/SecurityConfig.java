@@ -37,6 +37,39 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origin-patterns:*}")
     private List<String> allowedOriginPatterns;
 
+    // The Content-Security-Policy sent on every response. CSP tells the browser which sources
+    // it may load scripts/styles/images/etc. from, and — crucially for XSS defence — it blocks
+    // inline and injected <script> from executing. The default below suits the single-origin
+    // deploy (the backend serves the SPA, so the API, the app and its same-origin WebSocket are
+    // all 'self'). It's a property so an environment can override it via the
+    // APP_SECURITY_CONTENT_SECURITY_POLICY env var — e.g. to widen connect-src if the WebSocket
+    // ever moves to a different host. (On the Vercel split deploy the SPA is served by Vercel,
+    // which sets its own CSP in frontend/vercel.json; this header still guards API responses and
+    // the single-origin fallback.)
+    //
+    // Directive notes:
+    //   • script-src 'self'      — only our own hashed bundles run; no inline scripts (the theme
+    //                              init + the PWA service-worker registration are external files
+    //                              on purpose, so we don't need 'unsafe-inline' here).
+    //   • style-src 'unsafe-inline' — allowed because React/component libraries set inline style
+    //                              attributes; styles can't execute code, so this is low-risk.
+    //   • img-src https:         — crests/headshots come from several external CDNs (ESPN,
+    //                              football-data, balldontlie); images are not an execution vector.
+    //   • connect-src 'self'     — same-origin API + same-origin WebSocket in this deploy.
+    //   • frame-ancestors 'none' + object-src 'none' — no embedding us in a frame, no plugins.
+    @Value("${app.security.content-security-policy:"
+            + "default-src 'self'; "
+            + "script-src 'self'; "
+            + "style-src 'self' 'unsafe-inline'; "
+            + "img-src 'self' data: https:; "
+            + "font-src 'self' data:; "
+            + "connect-src 'self'; "
+            + "frame-ancestors 'none'; "
+            + "base-uri 'self'; "
+            + "form-action 'self'; "
+            + "object-src 'none'}")
+    private String contentSecurityPolicy;
+
     public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
     }
@@ -49,6 +82,14 @@ public class SecurityConfig {
 
                 // Apply our CORS config so the React frontend (on a different port) can make requests
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
+                // Send a Content-Security-Policy header on every response. This is the primary
+                // in-browser defence against XSS: even if a script were injected, the policy
+                // stops it running (script-src 'self') and stops it exfiltrating data to another
+                // host (connect-src 'self'). Spring already adds the other standard hardening
+                // headers by default (X-Content-Type-Options: nosniff, X-Frame-Options: DENY).
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(contentSecurityPolicy)))
 
                 // Don't store sessions — every request must include a JWT token instead
                 .sessionManagement(session ->

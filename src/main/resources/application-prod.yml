@@ -54,7 +54,10 @@ jwt:
   # Base64-encoded HMAC secret — set JWT_SECRET in the host env.
   # Generate one with: openssl rand -base64 64
   secret: ${JWT_SECRET}
-  expiration-ms: 86400000
+  # Short-lived access token (15 min) — see the note in application.yml. The frontend
+  # refreshes silently via the httpOnly refresh cookie, so a leaked access token is only
+  # useful for a few minutes.
+  expiration-ms: 900000   # 15 minutes
 
 # API docs are a development aid, not a public surface. In production we turn
 # springdoc OFF so /v3/api-docs and /swagger-ui (which enumerate every endpoint
@@ -65,3 +68,16 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
+
+app:
+  auth:
+    cookie:
+      # In production the app is served over HTTPS, so the refresh cookie MUST be Secure
+      # (browsers then only ever send it over TLS). This overrides the dev default (false).
+      secure: true
+  # security:
+  #   # The default Content-Security-Policy (defined in SecurityConfig) already fits this
+  #   # single-origin backend. If the live-scores WebSocket is ever moved to a different host,
+  #   # widen connect-src by setting APP_SECURITY_CONTENT_SECURITY_POLICY in the host env.
+  #   # NOTE: on the Vercel split deploy, the SPA's CSP is set in frontend/vercel.json instead.
+  #   content-security-policy: "default-src 'self'; ..."

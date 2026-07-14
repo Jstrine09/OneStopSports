@@ -63,10 +63,28 @@ external-api:
 
 jwt:
   secret: bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u
-  expiration-ms: 86400000
+  # ACCESS token lifetime. Deliberately SHORT (15 minutes) now that we have refresh tokens:
+  # the access token is the XSS-reachable one (held in the browser's memory), so a small
+  # window limits the damage of a leak. The frontend silently calls /api/auth/refresh to get
+  # a new one when this expires, so users don't notice.
+  expiration-ms: 900000   # 15 minutes
 
 # Application-specific settings (our own, not Spring's).
 app:
+  auth:
+    refresh:
+      # REFRESH token lifetime — how long a user stays signed in without re-entering their
+      # password. 30 days. This token lives in an httpOnly cookie, not in JavaScript storage.
+      expiration-ms: 2592000000   # 30 days
+    cookie:
+      # Name of the httpOnly refresh cookie.
+      name: refreshToken
+      # Only send the cookie over HTTPS. false here so it works on http://localhost in dev;
+      # overridden to true in application-prod.yml.
+      secure: false
+      # SameSite=Strict blocks the browser from sending the cookie on cross-site requests,
+      # which gives the cookie-authorised endpoints (/refresh, /logout) CSRF protection.
+      same-site: Strict
   cors:
     # Website origins allowed to call the API / open the live-scores WebSocket from a browser.
     # Comma-separated Spring "origin patterns" (so "*" wildcards are allowed). Used by both

@@ -19,7 +19,7 @@
 | Database | PostgreSQL 16 (`onestopsports` DB) |
 | Migrations | Flyway (**9 migrations**, V1–V9) |
 | Cache | Redis 7 (30s TTL on the live-matches cache) |
-| Auth | Spring Security 6 + JWT (jjwt 0.12.x) |
+| Auth | Spring Security 6 + JWT (jjwt 0.12.x) — **short-lived access token (15 min, in-memory on the client) + httpOnly refresh cookie with rotation + DB-backed revocation + logout** (S3 hardening) |
 | Real-time | Spring WebSocket (STOMP) — server pushes score changes to `/topic/matches/live` |
 | External APIs | football-data.org v4 (football) · ESPN unofficial (NBA + NFL) · balldontlie.io (NBA bios) · api-sports.io v3 (football player stats) — all via `RestClient` |
 | DTOs | Java 21 records (MapStruct on the build path but DTO mapping is hand-written `toDto`) |
@@ -76,6 +76,9 @@ service/                          12 services (see below)
 - `AuthenticationEntryPoint` returns a clean **401 JSON** envelope for unauthenticated hits on protected endpoints (instead of an empty 403).
 - DI cycle (`JwtAuthFilter → AuthService → PasswordEncoder → JwtAuthFilter`) broken by (1) `PasswordConfig` holding the `PasswordEncoder` and (2) `@Lazy AuthenticationManager` in `AuthService`'s manual constructor.
 - jjwt **0.12.x** API: `Jwts.parser()` / `.verifyWith(key)` / `.parseSignedClaims(token)`. JWT secret Base64-encoded.
+- **Token model (S3 hardening).** Two tokens: (1) a **short-lived access token** — a 15-min JWT returned in the JSON body, kept **only in the browser's memory** (`api/client.ts`, never localStorage) and sent as `Authorization: Bearer`; and (2) a **long-lived refresh token** — a random opaque value set in an **httpOnly + Secure(prod) + SameSite=Strict cookie** scoped to `/api/auth`, tracked server-side in the `refresh_token` table (only its SHA-256 hash is stored). `POST /api/auth/refresh` rotates the cookie (old revoked, new issued) and mints a fresh access token; `POST /api/auth/logout` revokes it + clears the cookie. `RefreshTokenService` handles issue/rotate/revoke incl. **reuse detection** (replaying an already-revoked token revokes all of that user's tokens). Register/login set the cookie in `AuthController`. **Why this shape:** the durable credential (refresh) is unreachable from JavaScript (httpOnly), so XSS can't steal a lasting session; the access token is XSS-reachable but expires in minutes. The frontend refreshes silently on 401 and on page load (`AuthContext` calls `/refresh` from the cookie). Config: `jwt.expiration-ms` (access), `app.auth.refresh.expiration-ms` (30d), `app.auth.cookie.{name,secure,same-site}` (`secure: true` in prod yml).
+- **CSRF stays disabled** and that's deliberate: the mutating API is authorised by the Bearer header (a cross-site page can't read/set it), and the only cookie-authorised endpoints (`/refresh`, `/logout`) are protected by the cookie's `SameSite=Strict` (a cross-site request can't get the browser to send it).
+- **Content-Security-Policy** (S3 hardening). `SecurityConfig`'s headers DSL sends a CSP on every response — default `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'` (full policy is a single overridable property `app.security.content-security-policy` / `APP_SECURITY_CONTENT_SECURITY_POLICY`). `script-src 'self'` is clean (no `unsafe-inline`) because the two former inline scripts were externalised: the theme-flash init → `frontend/public/theme-init.js`, and the PWA SW registration → an external `registerSW.js` (`vite-plugin-pwa injectRegister: 'script-defer'`). On the **Vercel** split deploy the SPA is served by Vercel, so its CSP lives in **`frontend/vercel.json`** `headers` (same policy, plus `wss://onestopsports.onrender.com` in connect-src for the cross-origin live-scores WS); the Spring CSP still guards API responses + the single-origin fallback.
 - **CORS/WS origins locked down** (commit `5eefe79`, closes the old "tighten before public deploy" item): `SecurityConfig` (REST CORS) and `WebSocketConfig` (live-scores WS handshake) read a shared `app.cors.allowed-origin-patterns` property (default: localhost + `https://one-stop-sports*.vercel.app`), overridable via `APP_CORS_ALLOWED_ORIGIN_PATTERNS` on Render. The WS check is the one actually exercised cross-origin (browser → Render directly); REST stays same-origin in prod via the Vercel `/api/*` rewrite.
 - **Swagger/OpenAPI disabled in prod** (commit `ff9fc60`, QA finding S2): `application-prod.yml` sets `springdoc.api-docs.enabled=false` and `springdoc.swagger-ui.enabled=false` so `/v3/api-docs` and `/swagger-ui` (which enumerate every endpoint + DTO schema) aren't publicly served. Docs remain available on `local`/dev profiles via `application.yml`.
 - **Auth rate limiting** (QA finding S1): the public `POST /api/auth/login` and `/register` are throttled by `AuthRateLimiter` (`security/AuthRateLimiter.java`) — a hand-rolled **in-memory fixed-window counter** (no library, no Redis, so it works on the single prod instance). `AuthController` calls it before delegating: login is keyed on **both** the client IP and the target username (per-IP stops one box hammering many accounts; per-user stops a distributed guess of one account); register is keyed on IP. Client IP is read from `X-Forwarded-For` (first hop) so it's the real user behind the Vercel→Render proxies, not the proxy. Over the limit throws `RateLimitExceededException`, which `GlobalExceptionHandler` maps to **HTTP 429** with the standard `ErrorResponseDto` envelope **and a `Retry-After` header** (seconds). Limits are config-driven: `app.rate-limit.auth.max-attempts` (default 10) / `.window-seconds` (default 60), overridable via `APP_RATE_LIMIT_AUTH_MAX_ATTEMPTS` / `_WINDOW_SECONDS`. Tests: `AuthRateLimiterTest` (5, pure unit with an injected mutable `Clock` — proves window reset without sleeping) + a 429 case in `AuthControllerTest`.
@@ -147,6 +150,7 @@ Returns a consistent `ErrorResponseDto(status, error, message, timestamp)` for e
 | V7 `add_team_external_id` | `team.external_id` VARCHAR(50) — ESPN team ID (NBA/NFL) / football-data team ID (football); enables historical-roster fetches |
 | V8 `add_name_normalized` | `team.name_normalized` + `player.name_normalized` (+ indexes) — accent-stripped, lower-cased names for accent-insensitive search; kept in sync by `@PrePersist/@PreUpdate`, backfilled at boot |
 | V9 `team_league_many_to_many` | Creates the `team_league` join table (+ reverse index) and backfills it from `team.league_id`; adds `team.sport_id` (NOT NULL + FK, backfilled from the league's sport); **merges duplicate clubs** sharing `(sport_id, external_id)` into one canonical row (re-pointing players, league links and favourites, then deleting dupes) and de-duplicates the players that the merge brings onto a shared club; finally drops `team.league_id`. Postgres-only (Flyway off in H2 tests). |
+| V10 `create_refresh_token` | `refresh_token` table (S3 hardening): `token_hash` (SHA-256 hex, UNIQUE), `user_id` FK (`ON DELETE CASCADE`), `expires_at`, `revoked`, `created_at` (+ index on `user_id`). Backs the httpOnly refresh-cookie flow — stores only the token's hash, never the raw value. Postgres-only (H2 tests build it from the `RefreshToken` entity via create-drop). |
 
 ---
 
@@ -172,8 +176,10 @@ GET  /api/matches/{id}/boxscore?leagueId={id}   200 BoxScoreDto | 204 — sport-
 GET  /api/matches/{id}/stats             stub: {} (free-tier limit)
 GET  /api/matches/{id}/lineups           stub: {} (free-tier limit)
 GET  /api/search?q={query}              min 2 chars, up to 8 teams + 10 players
-POST /api/auth/register                 rate-limited per IP → 429 + Retry-After when exceeded
-POST /api/auth/login                    rate-limited per IP + per username → 429 + Retry-After
+POST /api/auth/register           201 + access token in body + httpOnly refresh cookie; rate-limited per IP → 429 + Retry-After
+POST /api/auth/login              200 + access token in body + httpOnly refresh cookie; rate-limited per IP + per username → 429 + Retry-After
+POST /api/auth/refresh            200 + new access token; rotates the refresh cookie (401 if cookie missing/invalid)
+POST /api/auth/logout             204; revokes the refresh token server-side + clears the cookie
 ```
 ### Authenticated (Bearer JWT)
 ```
@@ -207,12 +213,14 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 
 ---
 
-## Testing — 121 tests across 17 classes, all green (`mvn test`)
+## Testing — 148 tests across 20 classes, all green (`mvn test`)
 | Class | Count | Notes |
 |---|---|---|
 | `AuthServiceTest` | 6 | pure unit |
-| `AuthControllerTest` | 8 | `@WebMvcTest` + `@Import(SecurityConfig.class)` + `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class`; needs `spring-security-test`; `AuthRateLimiter` `@MockBean`'d (429 path covered) |
-| `AuthRateLimiterTest` | 5 | pure unit; injected mutable `Clock` drives the window so it resets without `Thread.sleep` |
+| `AuthControllerTest` | 14 | `@WebMvcTest` + `@Import(SecurityConfig.class)` + `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class`; needs `spring-security-test`; mocks `AuthRateLimiter` (429 path) + `RefreshTokenService`; covers register/login (rate-limited, sets refresh cookie), `/refresh` (rotate + 401s), `/logout` (204 + clears cookie), and the **CSP header** through the real security filter chain |
+| `AuthRateLimiterTest` | 5 | pure unit; injected mutable `Clock` drives the window so it resets without `Thread.sleep` (QA S1) |
+| `RefreshTokenServiceTest` | 9 | pure unit (Mockito) — issue / rotate (rotation, reuse detection, expired, unknown, missing) / revoke; `ReflectionTestUtils` sets the `@Value` TTL (QA S3) |
+| `PlayerServicePhotoUrlTest` | 6 | headshot derivation per sport (NBA/NFL ESPN CDN, football api-sports media CDN, persisted-wins, unsupported→null) (QA U1) |
 | `MatchServiceTest` | 13 | routing + guards; `anyInt()` gotcha for primitive `int` params |
 | `NbaApiServiceTest` | 13 | `RETURNS_DEEP_STUBS` RestClient mocks + package-private test constructor; covers per-conference standings grouping + crest derivation |
 | `NflApiServiceTest` | 6 | (Phase 01-02) scoreboard/standings/career-stats mapping + soft-fail, mirrors `NbaApiServiceTest`'s fixture-builder + `RETURNS_DEEP_STUBS` convention across 3 RestClients |
@@ -236,7 +244,7 @@ cd frontend && npm run dev                                # frontend :3000 (prox
 ## Current Status
 
 ### ✅ Working
-Everything in the original build (entities, auth, Redis, WebSocket live push, search, Swagger, Docker) **plus**: player career stats (3 sports) + bio + headshots; live game clock; match box score + mirrored event timeline; the full sport-field/glass frontend redesign across all screens; shared `SectionLabel`/`RowCard` primitives; **public production deploy** (Vercel frontend + Render backend + Neon Postgres, CORS/WS origins locked down, installable PWA, external uptime monitor for cold starts); **full 5-persona QA remediation** — top blockers (auth bypass, 500s→4xx, a11y focus + reduced-motion, stale-data badge) plus all remaining issues: NBA conference-grouped standings, accent-insensitive + deduped search, server-side PCT/GB, NBA/NFL league logos + standings crests, winner emphasis, form labels + aria-live + ≥44px tap targets + glass contrast.
+Everything in the original build (entities, auth, Redis, WebSocket live push, search, Swagger, Docker) **plus**: player career stats (3 sports) + bio + headshots; live game clock; match box score + mirrored event timeline; the full sport-field/glass frontend redesign across all screens; shared `SectionLabel`/`RowCard` primitives; **public production deploy** (Vercel frontend + Render backend + Neon Postgres, CORS/WS origins locked down, installable PWA, external uptime monitor for cold starts); **full 5-persona QA remediation** — top blockers (auth bypass, 500s→4xx, a11y focus + reduced-motion, stale-data badge) plus all remaining issues: NBA conference-grouped standings, accent-insensitive + deduped search, server-side PCT/GB, NBA/NFL league logos + standings crests, winner emphasis, form labels + aria-live + ≥44px tap targets + glass contrast; **S3 token-security hardening** — CSP header (backend + Vercel), access token moved out of localStorage into memory, httpOnly refresh cookie with rotation + DB-backed revocation + reuse detection, and a real logout (see Security → Token model).
 
 ### 🔲 Stubbed (free-tier limits)
 - `getMatchStats()` / `getMatchLineups()` → `{}` (football-data.org free tier).
@@ -260,6 +268,7 @@ The tracked follow-up is complete. A club is now a single `team` row that belong
 ### Still open / nice-to-have
 - Career-stats 204s for some star footballers (api-sports name-match misses — tracked as HARD-04/Phase 4) · push notifications for favourites · frontend test coverage (zero Vitest tests — tracked as HARD-03/Phase 3) · historical-data tracking (see `.planning/cowork/HISTORICAL_DATA_RESEARCH.md`).
 - ✅ **V8/V9 migration coverage gap closed (HARD-02/Phase 2):** both migrations now run against real Postgres via `PostgresMigrationIT` (`mvn verify -Pintegration`) — V9's duplicate-club/player merge and favourites re-point + collision-skip are asserted behaviorally against a seeded duplicate-club fixture, not just validated by compile/entity-mapping.
+- ⚠️ **V10** (`refresh_token`, QA S3) runs only against real Postgres; the `RefreshToken` entity mapping is exercised by the H2 context-load test (create-drop), but the raw `V10` SQL isn't covered by `PostgresMigrationIT` yet. **S3 hardening not yet smoke-tested end-to-end** against a live deploy in this environment: worth a manual pass (login → reload restores session via cookie → 15-min access-token silently refreshes → live-scores WS connects under the CSP → logout revokes).
 
 ---
 

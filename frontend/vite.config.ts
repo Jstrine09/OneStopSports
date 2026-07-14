@@ -10,7 +10,11 @@ export default defineConfig({
     // (manifest: false) and just let Workbox precache the built assets + auto-register the SW.
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // 'script-defer' emits an external registerSW.js and references it with a
+      // <script src> — instead of injecting an INLINE registration script. That keeps our
+      // Content-Security-Policy's script-src at a strict 'self' (an inline script would
+      // otherwise be blocked, silently breaking service-worker registration in production).
+      injectRegister: 'script-defer',
       manifest: false, // use the existing public/manifest.json + its <link> in index.html
       workbox: {
         // Precache the app shell. Never let the SW intercept API or WebSocket traffic —
