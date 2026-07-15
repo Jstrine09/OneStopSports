@@ -149,7 +149,7 @@ docker-compose up --build
 
 ```bash
 mvn test
-# 121 tests across 17 test classes; uses H2 + spring.cache.type: none
+# 148 tests across 20 test classes; uses H2 + spring.cache.type: none
 # Plus 13 opt-in PostgresMigrationIT tests via: mvn verify -Pintegration (requires Docker)
 ```
 
@@ -180,10 +180,10 @@ JWT Bearer scheme is wired in — paste a token from `POST /api/auth/login` into
 - A11y baseline: global `:focus-visible` ring + `prefers-reduced-motion` gating; decorative backdrops `aria-hidden`. Field hidden on phones.
 
 ## What's not done / known issues
-- NBA/NFL player headshots ARE wired (ESPN CDN, derived from `externalId`); **football** headshots are still not captured.
+- NBA/NFL and **football** player headshots are all wired now (ESPN CDN for NBA/NFL, API-SPORTS media CDN for football, derived from `externalId`; commit `71e74b7`, QA U1). Football's headshot only appears after a player's stats page has been opened once (lazy `externalId` capture) — players never stats-viewed still show the frontend's initials-tile fallback.
 - Football career stats: single season, capped at 2024 (api-sports.io free tier) — UI shows a "most recent available season" badge.
 - Match stats + lineups for football: stubbed `{}` (football-data.org free-tier limit).
-- No frontend tests (Vitest not configured — `.planning/` HARD-03/Phase 3). Backend coverage gaps on `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `SportService`, `GlobalExceptionHandler` are now closed (Phase 1, `mvn test` 66→120 tests), and the V8/V9 Flyway migrations are now proven against real Postgres too (Phase 2, `PostgresMigrationIT`, `mvn verify -Pintegration`).
+- No frontend tests (Vitest not configured — `.planning/` HARD-03/Phase 3). Backend coverage gaps on `NflApiService`, `ExternalApiService`, `ApiFootballService`, `BallDontLieService`, `UserService`, `SportService`, `GlobalExceptionHandler` are now closed (Phase 1, `mvn test` 66→120 tests), and the V8/V9 Flyway migrations are now proven against real Postgres too (Phase 2, `PostgresMigrationIT`, `mvn verify -Pintegration`). Post-Phase-2 QA hardening (S1 rate limiting, S3 CSP + refresh-token revocation, U1 football headshots) brought the suite to 148 tests/20 classes.
 - Production deploy IS set up and public: Vercel (frontend) + Render (backend) + Neon (Postgres). Free-tier cold starts mitigated by an external UptimeRobot monitor (5-min ping on `/api/sports`) — the `.github/workflows/keep-alive.yml` was removed (GitHub throttled it too infrequently, 90s curl timed out). Single-origin Docker via `SpaForwardingConfig` still works as a fallback deploy mode. No CI pipeline yet.
 
 See `ROADMAP.md` (top section is the current post-QA state) for the full backlog.

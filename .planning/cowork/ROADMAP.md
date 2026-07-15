@@ -22,10 +22,8 @@ The detailed concerns below predate this update but remain accurate except where
 
 ## Known incomplete features
 
-### Football player headshots — **gap**
-`PlayerService.resolvePhotoUrl` has three layers: persisted `Player.photoUrl` → ESPN CDN URL from `externalId` → `null`. For NBA / NFL, layer 2 fires and works. For football, the design is "lazy capture from API-Football's `player.photo` field during the first stats visit" — but the write is **not yet wired in `fetchFootballStats`**. Only `external_id` is saved. As a result, football players currently show no photo.
-
-Fix: in `PlayerService.fetchFootballStats`, after a successful `fetchPlayerStats(...)` returns, capture the player's photo URL from the API response and call `playerRepository.save(player)` with `player.setPhotoUrl(...)`. Requires plumbing the photo URL out of `ApiFootballService` (currently the DTO mapper discards it).
+### Football player headshots — ✅ fixed (commit `71e74b7`, QA finding U1)
+`PlayerService.resolvePhotoUrl` has three layers: persisted `Player.photoUrl` → a derived CDN URL from `externalId` → `null`. NBA/NFL derive from the ESPN CDN; **football now also derives** from the API-SPORTS media CDN (`media.api-sports.io/football/players/{id}.png`) once `externalId` has been populated by a first career-stats lookup (that lookup still only happens lazily, on the player's stats page — see `fetchFootballStats`). Footballers who've never had their stats viewed still fall through to layer 3 (tracked as HARD-04, a name-match hardening gap, not a missing-wiring gap). The frontend now also renders a graceful initials-tile fallback instead of a broken image icon when no photo resolves.
 
 ### Match stats — **stubbed (free-tier-blocked)**
 `MatchService.getMatchStats()` returns `Map.of()`. football-data.org's free tier doesn't include match stats. The controller surface exists so the frontend doesn't 404; the UI renders a "coming soon" state.
@@ -45,12 +43,15 @@ Listed as nice-to-have. No infrastructure (no FCM/APN, no service worker).
 
 ## Testing gaps
 
-**121 backend tests currently pass** via `mvn test` (up from an original 66, across Phase 1 + Phase 2 of the `.planning/` "v1 Harden & Test" milestone), plus a further 13 opt-in `PostgresMigrationIT` tests (`mvn verify -Pintegration`, requires Docker). Coverage is heavily skewed toward auth, `MatchService`, `NbaApiService`, and `LeagueService`.
+**148 backend tests currently pass** via `mvn test` (up from an original 66, across Phase 1 + Phase 2 of the `.planning/` "v1 Harden & Test" milestone plus the post-Phase-2 S1/S3/U1 QA hardening fixes), plus a further 13 opt-in `PostgresMigrationIT` tests (`mvn verify -Pintegration`, requires Docker). Coverage is heavily skewed toward auth, `MatchService`, `NbaApiService`, and `LeagueService`.
 
 | Component | Tests | Notes |
 |---|---|---|
 | `AuthService` | ✅ 6 | |
-| `AuthController` | ✅ 7 (`@WebMvcTest`) | Needs `@Import(SecurityConfig.class)` + `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class` |
+| `AuthController` | ✅ 14 (`@WebMvcTest`) | Needs `@Import(SecurityConfig.class)` + `excludeAutoConfiguration = UserDetailsServiceAutoConfiguration.class`; covers register/login rate-limiting + refresh cookie, `/refresh`, `/logout`, and the CSP header (QA S1/S3) |
+| `AuthRateLimiter` | ✅ 5 (`AuthRateLimiterTest`) | QA S1: pure unit, injected mutable `Clock` proves window reset without sleeping |
+| `RefreshTokenService` | ✅ 9 (`RefreshTokenServiceTest`) | QA S3: issue/rotate/revoke incl. reuse detection |
+| `PlayerService.resolvePhotoUrl` (dedicated) | ✅ 6 (`PlayerServicePhotoUrlTest`) | QA U1: headshot derivation per sport incl. the new football API-SPORTS CDN layer |
 | `MatchService` | ✅ 13 | |
 | `NbaApiService` | ✅ 13 | Uses `@Mock(answer = Answers.RETURNS_DEEP_STUBS)` for fluent RestClient chains + package-private test constructor; covers per-conference standings grouping + crest derivation |
 | `LeagueService` | ✅ 9 | |
@@ -71,7 +72,7 @@ Listed as nice-to-have. No infrastructure (no FCM/APN, no service worker).
 | `PostgresMigrationIT` (V8/V9 Flyway migrations) | ✅ 13, opt-in (`mvn verify -Pintegration`) | Phase 2 (02-01/02-02): Testcontainers `postgres:16-alpine`, proves the full V1→V9 chain, V8 name-normalization backfill, and V9's duplicate-club/player merge + favourites re-point/collision-skip against real Postgres (Flyway is off in the H2 unit-test profile, so this was previously compile/entity-mapping-only) |
 | Frontend | ❌ 0 | No Vitest setup; TypeScript is the only static check — tracked as HARD-03/Phase 3 in `.planning/` |
 
-All five services and both gaps flagged in the original ranked list below were closed in Phase 1 of the `.planning/` "v1 Harden & Test" milestone (2026-07-08, `mvn test` 66→120 tests across 9→16 classes). Phase 2 (2026-07-13) added the real-Postgres `PostgresMigrationIT` for the V8/V9 migrations, and a post-Phase-1 fix added the `NoResourceFoundException` → 404 test, bringing the `mvn test` suite to 121 tests across 17 classes. Remaining gaps: `JwtUtil`/`JwtAuthFilter` direct unit tests, `RedisConfig`/`WebSocketConfig` ObjectMapper regression test, and the frontend test suite (HARD-03/Phase 3, not yet started).
+All five services and both gaps flagged in the original ranked list below were closed in Phase 1 of the `.planning/` "v1 Harden & Test" milestone (2026-07-08, `mvn test` 66→120 tests across 9→16 classes). Phase 2 (2026-07-13) added the real-Postgres `PostgresMigrationIT` for the V8/V9 migrations, and a post-Phase-1 fix added the `NoResourceFoundException` → 404 test, bringing the suite to 121 tests across 17 classes. Since then, the S1 (rate limiting), S3 (CSP + refresh-token revocation), and U1 (football headshots) QA hardening fixes each landed with their own tests, bringing `mvn test` to **148 tests across 20 classes** (commit `7bcb629`). Remaining gaps: `JwtUtil`/`JwtAuthFilter` direct unit tests, `RedisConfig`/`WebSocketConfig` ObjectMapper regression test, and the frontend test suite (HARD-03/Phase 3, not yet started).
 
 ---
 
@@ -119,14 +120,16 @@ The app is a thin orchestration layer over five external APIs. **None are fully 
 
 ## Security concerns
 
-**UPDATE — the app is now publicly deployed (Vercel + Render + Neon) and the CORS item below is fixed (commit `5eefe79`):** `SecurityConfig`/`WebSocketConfig` now read `app.cors.allowed-origin-patterns` (default: localhost + `https://one-stop-sports*.vercel.app`, overridable via `APP_CORS_ALLOWED_ORIGIN_PATTERNS` on Render) instead of allowing `"*"`. The other items below (JWT placeholder secret, Swagger exposure, no rate limiting, no CAPTCHA/email verification, WS auth, JWT expiry/revocation) are still open and worth another pass now that the app has a real public audience:
+**UPDATE — the app is now publicly deployed (Vercel + Render + Neon) and most items below are now fixed:** CORS is locked down (commit `5eefe79`) — `SecurityConfig`/`WebSocketConfig` read `app.cors.allowed-origin-patterns` (default: localhost + `https://one-stop-sports*.vercel.app`, overridable via `APP_CORS_ALLOWED_ORIGIN_PATTERNS` on Render) instead of allowing `"*"`. Swagger is now `dev`/`local`-only (commit `ff9fc60`, QA S2). Auth is now rate-limited (commit `9a38f89`, QA S1). JWT expiry/revocation is now hardened (commit `7bcb629`, QA S3) — see CLAUDE.md's "Security (Spring Security 6) → Token model" for the full shape. What's **still open**:
 
-- **JWT placeholder secret in `application.yml`** looks real (`bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u` = "mysupersecretkeyformjmatchdayapplication"). Anyone with the public repo can forge JWTs against any deployment that didn't override it. Docker/Render deployments correctly use a `JWT_SECRET` env var.
-- **Swagger UI publicly accessible.** Intentional for dev; in production it's a self-service inventory of every endpoint + auth requirements — useful to attackers.
-- **No rate limiting on `/api/auth/login`.** Brute-force friendly. No account lockout.
-- **No request-size limits, no CAPTCHA on register, no email verification.**
-- **WebSocket `/ws/**` is `permitAll`** with no token verification. Anyone can subscribe to `/topic/matches/live`. Fine today (data is public) — but if user-specific topics are added (`/user/{id}/notifications`), the model needs revisiting.
-- **24h JWT expiry, no refresh token, no revocation.** Stolen tokens are valid until expiry. Acceptable for a side-project.
+- **JWT placeholder secret in `application.yml`** looks real (`bXlzdXBlcnNlY3JldGtleWZvcmptYXRjaGRheWFwcGxpY2F0aW9u` = "mysupersecretkeyformjmatchdayapplication"). Anyone with the public repo can forge JWTs against any deployment that didn't override it. Docker/Render deployments correctly use a `JWT_SECRET` env var. **Still open** — worth rotating/removing the placeholder now that S1–S3 have closed the other public-facing gaps.
+- **No request-size limits, no CAPTCHA on register, no email verification.** Still open.
+- **WebSocket `/ws/**` is `permitAll`** with no token verification. Anyone can subscribe to `/topic/matches/live`. Fine today (data is public) — but if user-specific topics are added (`/user/{id}/notifications`), the model needs revisiting. Still open.
+
+**Now fixed (see above):**
+- ~~Swagger UI publicly accessible~~ — disabled in prod (`ff9fc60`, QA S2).
+- ~~No rate limiting on `/api/auth/login`~~ — per-IP + per-username 429/`Retry-After` (`9a38f89`, QA S1).
+- ~~24h JWT expiry, no refresh token, no revocation~~ — replaced with a 15-min access token + httpOnly rotating refresh cookie, DB-backed revocation, and reuse detection (`7bcb629`, QA S3).
 
 ---
 
@@ -155,14 +158,14 @@ The app is a thin orchestration layer over five external APIs. **None are fully 
 
 ## Priority follow-ups (suggested order)
 
-1. **Wire football player photo capture** in `PlayerService.fetchFootballStats` — small change, finishes a half-shipped feature.
+1. ~~Wire football player photo capture~~ — done (`71e74b7`, QA U1): football headshots now derive from the API-SPORTS media CDN, with a frontend fallback tile.
 2. **Add server-side `@Cacheable` on `ApiFootballService.fetchPlayerStats`** (1h TTL) — biggest win for the 100/day budget.
 3. **Add `RestClient` timeout config** on `NbaApiService`, `NflApiService`, `ExternalApiService` — prevents a hung external from freezing the scheduler.
 4. ~~Test `GlobalExceptionHandler` + `PlayerService.resolvePhotoUrl`~~ — done (Phase 1, `GlobalExceptionHandlerTest` + `PlayerServiceTest`).
 5. **Banner on football stats card** explaining the 2024-25 season cap — eliminates silent-incorrect-data risk.
-6. **Restrict Swagger to `dev` profile, rotate the JWT secret** — CORS is already locked down (`5eefe79`); Swagger exposure + the placeholder JWT secret are the remaining public-facing risks.
+6. ~~Restrict Swagger to `dev` profile~~ — done (`ff9fc60`, QA S2). **Rotate the JWT secret** is the remaining item here — the placeholder in `application.yml` is still committed (Docker/Render deployments override it correctly via `JWT_SECRET`, but the repo default should still be replaced or removed).
 7. **Tighten `DataLoader` idempotency** — switch from `count >=` to "all expected competitions present".
-8. **Set up Vitest on the frontend** — currently zero test safety net.
+8. **Set up Vitest on the frontend** — currently zero test safety net (tracked as HARD-03/Phase 3).
 
 ---
 
@@ -172,8 +175,8 @@ OneStopSports is a healthy mid-sized side-project. The codebase reads like a tea
 
 1. External API fragility — five dependencies, three undocumented, three rate-limited
 2. The API-Football season cap silently serving stale data
-3. The unfinished football photo capture
+3. ~~The unfinished football photo capture~~ — closed (`71e74b7`, QA U1)
 4. ~~Test coverage gaps in five out of seven services~~ — closed in Phase 1 of `.planning/` "v1 Harden & Test" (2026-07-08); remaining gap is the frontend (zero Vitest tests, HARD-03/Phase 3)
-5. Remaining security tightening (Swagger exposure, JWT secret rotation, rate limiting) now that the app is publicly deployed
+5. ~~Remaining security tightening (Swagger exposure, rate limiting, JWT expiry/revocation)~~ — closed (QA S1/S2/S3, commits `9a38f89`/`ff9fc60`/`7bcb629`); the JWT placeholder secret in `application.yml` is the one item still open
 
 The rest is well-flagged technical debt of the kind that's natural to accumulate when exploring a domain across multiple sports APIs.

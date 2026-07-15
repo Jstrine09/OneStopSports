@@ -246,9 +246,9 @@ Football times stay UTC (football-data.org gives them that way; no conversion).
 | NBA player headshot | `https://a.espncdn.com/i/headshots/nba/players/full/{espnId}.png` | **Reconstructed on the fly** by `PlayerService.resolvePhotoUrl` from `player.external_id` + sport slug — no DB column needed for NBA/NFL |
 | NFL player headshot | `https://a.espncdn.com/i/headshots/nfl/players/full/{espnId}.png` | Same — reconstructed from `external_id` |
 | Football crest | football-data.org's `crestUrl` field | Persisted to `team.crest_url` at seed time |
-| Football player photo | API-Football's `player.photo` URL | **Currently not wired** — `fetchFootballStats` does not yet write `photoUrl`. Football players show no photo. |
+| Football player photo | `https://media.api-sports.io/football/players/{apiSportsId}.png` | **Reconstructed on the fly** (commit `71e74b7`, QA U1), same as NBA/NFL — keyed off `player.external_id`, which is the api-sports.io player ID, populated lazily on first career-stats lookup. Players never stats-viewed have no `external_id` yet and fall through to the frontend's initials-tile fallback. |
 
-`PlayerService.resolvePhotoUrl` has three layers: persisted `photoUrl` → ESPN CDN constructed URL → null. Football headshot capture is a known TODO (see `ROADMAP.md`).
+`PlayerService.resolvePhotoUrl` has three layers: persisted `photoUrl` → derived CDN URL (ESPN for NBA/NFL, API-SPORTS media CDN for football) → null. The remaining gap is footballers whose `external_id` was never lazily populated — tracked as HARD-04 (career-stats name-match hardening), not a missing-wiring gap.
 
 ---
 
